@@ -34,13 +34,23 @@ bot.start((ctx) => {
   ]));
 });
 
-bot.action('farm', (ctx) => {
-  const db = loadDB();
-  const user = getUser(ctx.from.id);
+bot.hears('👨‍🌾 Фарм', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const now = Date.now();
+
+  if (user.lastFarm && now - user.lastFarm < 60000) {
+    const secondsLeft = Math.ceil((60000 - (now - user.lastFarm)) / 1000);
+    await ctx.answerCbQuery(`⏳ Подожди ${secondsLeft} сек.`, { show_alert: true });
+    return;
+  }
+
   user.stars += 1;
-  saveDB(db);
-  ctx.answerCbQuery('Вы получили +1 звезду 🌟');
+  user.lastFarm = now;
+
+  await saveUser(ctx.from.id, user);
+  await ctx.answerCbQuery(`⭐️ +1 звезда`, { show_alert: true });
 });
+
 
 bot.action('bonus', (ctx) => {
   const db = loadDB();
