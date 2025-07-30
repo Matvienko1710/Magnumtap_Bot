@@ -40,7 +40,7 @@ bot.hears('👨‍🌾 Фарм', async (ctx) => {
 
   if (user.lastFarm && now - user.lastFarm < 60000) {
     const secondsLeft = Math.ceil((60000 - (now - user.lastFarm)) / 1000);
-    await ctx.answerCbQuery(`⏳ Подожди ${secondsLeft} сек.`, { show_alert: true });
+    await ctx.reply(`⏳ Подожди ${secondsLeft} сек.`);
     return;
   }
 
@@ -48,9 +48,8 @@ bot.hears('👨‍🌾 Фарм', async (ctx) => {
   user.lastFarm = now;
 
   await saveUser(ctx.from.id, user);
-  await ctx.answerCbQuery(`⭐️ +1 звезда`, { show_alert: true });
+  await ctx.reply(`⭐️ +1 звезда`);
 });
-
 
 bot.action('bonus', (ctx) => {
   const db = loadDB();
