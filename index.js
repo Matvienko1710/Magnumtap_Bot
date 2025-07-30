@@ -1,7 +1,7 @@
 const { Telegraf, Markup } = require('telegraf');
 const fs = require('fs');
 
-const bot = new Telegraf(process.env.BOT_TOKEN || 'ТВОЙ_ТОКЕН');
+const bot = new Telegraf(process.env.BOT_TOKEN || '7668979667:AAFrTOKH0nz0pS_XumlAa3xhYKffDm4Sjnk');
 
 const dbPath = './db.json';
 
