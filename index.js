@@ -3,12 +3,12 @@ const fs = require('fs');
 
 const bot = new Telegraf(process.env.BOT_TOKEN || '7668979667:AAFrTOKH0nz0pS_XumlAa3xhYKffDm4Sjnk');
 
-const dbPath = './db.json';
+const dbfile = './db.json';
 
 // Загрузка базы данных
 function loadDB() {
   try {
-    const data = fs.readFileSync(dbPath, 'utf8');
+    const data = fs.readFileSync(dbfile, 'utf8');
     return JSON.parse(data);
   } catch (err) {
     return {};
@@ -17,7 +17,7 @@ function loadDB() {
 
 // Сохранение базы данных
 function saveDB(data) {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+  fs.writeFileSync(dbfile, JSON.stringify(data, null, 2));
 }
 
 // Получить пользователя
