@@ -1,82 +1,121 @@
-require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const fs = require('fs');
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const dbFile = 'db.js';
+const bot = new Telegraf(process.env.BOT_TOKEN || 'ТВОЙ_ТОКЕН');
 
-// Загрузка базы
+const dbPath = './db.json';
+
+// Загрузка базы данных
 function loadDB() {
-  if (!fs.existsSync(dbFile)) fs.writeFileSync(dbFile, JSON.stringify({}));
-  return JSON.parse(fs.readFileSync(dbFile));
+  try {
+    const data = fs.readFileSync(dbPath, 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    return {};
+  }
 }
 
-// Сохранение базы
-function saveDB(db) {
-  fs.writeFileSync(dbFile, JSON.stringify(db, null, 2));
+// Сохранение базы данных
+function saveDB(data) {
+  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
 }
 
+// Получить пользователя
 function getUser(id) {
   const db = loadDB();
-  if (!db[id]) db[id] = { stars: 0, bonusTime: 0, referrals: [], balance: 0 };
-  saveDB(db);
+  if (!db[id]) {
+    db[id] = {
+      stars: 0,
+      lastFarm: 0,
+      lastBonus: 0,
+      invitedBy: null,
+    };
+    saveDB(db);
+  }
   return db[id];
 }
 
-bot.start((ctx) => {
-  const user = getUser(ctx.from.id);
-  ctx.reply('Добро пожаловать!', Markup.inlineKeyboard([
-    [Markup.button.callback('🚀 Фарм звёзд', 'farm')],
-    [Markup.button.callback('🎁 Бонус', 'bonus')],
-    [Markup.button.callback('🎯 Задания', 'tasks')],
-    [Markup.button.callback('👥 Рефералы', 'ref')],
-    [Markup.button.callback('💸 Вывод', 'withdraw')],
-  ]));
-});
-
-bot.hears('👨‍🌾 Фарм', async (ctx) => {
-  const user = await getUser(ctx.from.id);
-  const now = Date.now();
-
-  if (user.lastFarm && now - user.lastFarm < 60000) {
-    const secondsLeft = Math.ceil((60000 - (now - user.lastFarm)) / 1000);
-    await ctx.reply(`⏳ Подожди ${secondsLeft} сек.`);
-    return;
-  }
-
-  user.stars += 1;
-  user.lastFarm = now;
-
-  await saveUser(ctx.from.id, user);
-  await ctx.reply(`⭐️ +1 звезда`);
-});
-
-bot.action('bonus', (ctx) => {
+// Сохранить пользователя
+function saveUser(id, userData) {
   const db = loadDB();
-  const user = getUser(ctx.from.id);
-  const now = Date.now();
-  if (now - user.bonusTime >= 86400000) {
-    user.stars += 10;
-    user.bonusTime = now;
+  db[id] = userData;
+  saveDB(db);
+}
+
+// 👤 /start с поддержкой рефералов
+bot.start((ctx) => {
+  const userId = ctx.from.id.toString();
+  const db = loadDB();
+
+  const args = ctx.message.text.split(' ');
+  const referrerId = args[1];
+
+  if (!db[userId]) {
+    db[userId] = {
+      stars: 0,
+      lastFarm: 0,
+      lastBonus: 0,
+      invitedBy: null,
+    };
+
+    // Если запущено по реферальной ссылке
+    if (referrerId && referrerId !== userId && db[referrerId]) {
+      db[userId].invitedBy = referrerId;
+      db[referrerId].stars += 5;
+      ctx.telegram.sendMessage(referrerId, `🎉 Вы пригласили нового игрока! +5 звёзд`);
+    }
+
     saveDB(db);
-    ctx.answerCbQuery('🎉 Бонус +10 звёзд!');
-  } else {
-    const timeLeft = 86400000 - (now - user.bonusTime);
-    const hours = Math.floor(timeLeft / 3600000);
-    ctx.answerCbQuery(`Ещё ${hours} ч до следующего бонуса`);
   }
+
+  ctx.reply(
+    `Добро пожаловать, ${ctx.from.first_name}!\n\n⭐️ У тебя ${db[userId].stars} звёзд.\n\nИспользуй кнопки ниже:`,
+    Markup.keyboard([['👨‍🌾 Фарм', '🎁 Бонус'], ['📊 Баланс']]).resize()
+  );
 });
 
-bot.action('tasks', (ctx) => {
-  ctx.answerCbQuery('Задания скоро появятся!');
+// 👨‍🌾 Фарм
+bot.hears('👨‍🌾 Фарм', async (ctx) => {
+  const userId = ctx.from.id.toString();
+  const user = getUser(userId);
+  const now = Date.now();
+
+  if (now - user.lastFarm < 60 * 1000) {
+    const secondsLeft = Math.ceil((60 * 1000 - (now - user.lastFarm)) / 1000);
+    return ctx.reply(`⏳ Подожди ${secondsLeft} сек. до следующего фарма.`);
+  }
+
+  user.lastFarm = now;
+  user.stars += 1;
+  saveUser(userId, user);
+
+  ctx.reply('⭐️ +1 звезда за фарм!');
 });
 
-bot.action('ref', (ctx) => {
-  ctx.answerCbQuery(`Ваша ссылка: t.me/${ctx.botInfo.username}?start=${ctx.from.id}`);
+// 🎁 Бонус (раз в 24 часа)
+bot.hears('🎁 Бонус', async (ctx) => {
+  const userId = ctx.from.id.toString();
+  const user = getUser(userId);
+  const now = Date.now();
+
+  if (now - user.lastBonus < 24 * 60 * 60 * 1000) {
+    const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - (now - user.lastBonus)) / (60 * 60 * 1000));
+    return ctx.reply(`🎁 Бонус уже получен. Подожди ещё ${hoursLeft} ч.`);
+  }
+
+  user.lastBonus = now;
+  user.stars += 10;
+  saveUser(userId, user);
+
+  ctx.reply('🎉 Ты получил +10 звёзд за ежедневный бонус!');
 });
 
-bot.action('withdraw', (ctx) => {
-  ctx.answerCbQuery('Минимум для вывода: 100 звёзд');
+// 📊 Баланс
+bot.hears('📊 Баланс', (ctx) => {
+  const userId = ctx.from.id.toString();
+  const user = getUser(userId);
+  ctx.reply(`⭐️ У тебя сейчас: ${user.stars} звёзд`);
 });
 
 bot.launch();
+console.log('🤖 Бот запущен');
