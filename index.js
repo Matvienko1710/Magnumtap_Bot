@@ -4,7 +4,6 @@ const fs = require('fs');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const dbFile = 'db.js';
-const { getUser, saveUser } = require('./db');
 
 // Загрузка базы
 function loadDB() {
