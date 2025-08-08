@@ -2,6 +2,13 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const { MongoClient } = require('mongodb');
 
+if (!process.env.BOT_TOKEN) {
+  throw new Error('Не задан BOT_TOKEN в переменных окружения!');
+}
+if (!process.env.MONGODB_URI) {
+  throw new Error('Не задан MONGODB_URI в переменных окружения!');
+}
+
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const mongo = new MongoClient(process.env.MONGODB_URI);
 
