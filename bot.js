@@ -33,7 +33,29 @@ async function getUser(id) {
   return user;
 }
 
+bot.action('invite', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
+  ctx.answerCbQuery();
+  ctx.editMessageText(
+    `🤝 Пригласить друзей\n\n` +
+    `Отправь эту ссылку друзьям и получай звёзды за каждого, кто присоединится!\n\n` +
+    `🔗 Твоя ссылка: ${refLink}\n\n` +
+    `👥 Приглашено друзей: ${user.invited || 0}`,
+    mainMenuKeyboard()
+  );
+});
+
+// Учёт приглашённых друзей при старте по реферальной ссылке
 bot.start(async (ctx) => {
+  let ref = null;
+  if (ctx.startPayload && ctx.startPayload !== String(ctx.from.id)) {
+    ref = ctx.startPayload;
+    const refUser = await getUser(ref);
+    if (refUser && ref !== String(ctx.from.id)) {
+      await users.updateOne({ id: ref }, { $inc: { invited: 1, stars: 5 } }); // 5 звёзд за приглашение
+    }
+  }
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
@@ -44,12 +66,26 @@ bot.start(async (ctx) => {
     `👥 Приглашено друзей: ${invited}\n\n` +
     `Выбери действие и стань звездой MagnumTapBot! 🌟\n` +
     `Подсказка: используй /help для справки по боту!`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🌟 Фармить звёзды', 'farm')],
-      [Markup.button.callback('🎁 Получить бонус', 'bonus')]
-    ])
+    mainMenuKeyboard()
   );
 });
+
+function mainMenuKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('🌟 Фармить звёзды', 'farm'),
+      Markup.button.callback('🎁 Бонус', 'bonus')
+    ],
+    [
+      Markup.button.callback('👤 Профиль', 'profile'),
+      Markup.button.callback('🏆 Топ', 'top')
+    ],
+    [
+      Markup.button.callback('🤝 Пригласить друзей', 'invite'),
+      Markup.button.callback('🎫 Ввести промокод', 'promo')
+    ]
+  ]);
+}
 
 bot.action('farm', async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -86,6 +122,62 @@ bot.action('bonus', async (ctx) => {
       [Markup.button.callback('🌟 Фармить звёзды', 'farm')],
       [Markup.button.callback('🎁 Получить бонус', 'bonus')]
     ]));
+});
+
+bot.action('profile', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const balance = user.stars || 0;
+  const invited = user.invited || 0;
+  ctx.answerCbQuery();
+  ctx.editMessageText(
+    `👤 Профиль
+\n💫 Баланс: ${balance} звёзд\n👥 Приглашено друзей: ${invited}\n\n` +
+    `Фармите звёзды, приглашайте друзей и получайте бонусы!`,
+    mainMenuKeyboard()
+  );
+});
+
+bot.action('top', async (ctx) => {
+  const top = await users.find().sort({ stars: -1 }).limit(10).toArray();
+  let msg = '🏆 Топ-10 игроков по звёздам:\n\n';
+  top.forEach((u, i) => {
+    const name = u.username || u.id;
+    msg += `${i + 1}. ${name} — ${u.stars || 0} звёзд\n`;
+  });
+  ctx.answerCbQuery();
+  ctx.editMessageText(msg, mainMenuKeyboard());
+});
+
+const promoCodes = {
+  'MAGNUM10': 10,
+  'STAR50': 50
+};
+
+const userPromoUsed = {};
+
+bot.action('promo', async (ctx) => {
+  ctx.answerCbQuery();
+  ctx.editMessageText(
+    '🎫 Введите промокод одним сообщением:',
+    Markup.forceReply()
+  );
+});
+
+bot.on('text', async (ctx) => {
+  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('Введите промокод')) {
+    const code = ctx.message.text.trim().toUpperCase();
+    const userId = ctx.from.id;
+    if (userPromoUsed[userId + ':' + code]) {
+      return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuKeyboard());
+    }
+    if (promoCodes[code]) {
+      await users.updateOne({ id: userId }, { $inc: { stars: promoCodes[code] } });
+      userPromoUsed[userId + ':' + code] = true;
+      return ctx.reply(`✅ Промокод активирован! Вы получили ${promoCodes[code]} звёзд.`, mainMenuKeyboard());
+    } else {
+      return ctx.reply('❌ Неверный промокод.', mainMenuKeyboard());
+    }
+  }
 });
 
 connectDB().then(() => {
