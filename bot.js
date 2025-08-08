@@ -172,27 +172,9 @@ const promoCodes = {
 // Активация промокода с учётом количества активаций
 const userPromoUsed = {};
 
-// Хелпер для гашения старых панелей
-async function tryDisableOldPanel(ctx) {
-  try {
-    await ctx.editMessageText('Панель устарела, используйте /start для новой панели.');
-  } catch (e) {}
-}
-
-// Обёртка для action: если не удалось обновить сообщение, гасим панель
-function withPanelGuard(handler) {
-  return async (ctx, ...args) => {
-    try {
-      await handler(ctx, ...args);
-    } catch (e) {
-      await tryDisableOldPanel(ctx);
-    }
-  };
-}
-
-// Применить withSubscription ко всем action и start
-// Удаляем ошибочную перезапись методов bot.start, bot.action, bot.command
-// Вместо этого оборачиваем каждый handler вручную:
+// Удаляю withPanelGuard и tryDisableOldPanel, оставляю только withSubscription
+// Все bot.action(..., ...) оборачиваю только в withSubscription
+// /start всегда отправляет новое сообщение с панелью
 
 bot.start(withSubscription(async (ctx) => {
   // Реферал: только если пользователь впервые запускает бота по чужой ссылке
@@ -219,7 +201,7 @@ bot.start(withSubscription(async (ctx) => {
   );
 }));
 
-bot.action('invite', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('invite', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
   ctx.editMessageText(
@@ -231,7 +213,7 @@ bot.action('invite', withPanelGuard(withSubscription(async (ctx) => {
   );
 })));
 
-bot.action('main_menu', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('main_menu', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
@@ -245,7 +227,7 @@ bot.action('main_menu', withPanelGuard(withSubscription(async (ctx) => {
   );
 })));
 
-bot.action('farm', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('farm', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const t = now();
   if (t - user.lastFarm < 60) {
@@ -256,7 +238,7 @@ bot.action('farm', withPanelGuard(withSubscription(async (ctx) => {
   ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${user.stars + 1}. Следующий фарм через 60 сек.`, { show_alert: true });
 })));
 
-bot.action('bonus', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('bonus', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const t = now();
   if (t - user.lastBonus < 86400) {
@@ -268,7 +250,7 @@ bot.action('bonus', withPanelGuard(withSubscription(async (ctx) => {
   ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${user.stars + 50}. Следующий бонус через 24ч.`, { show_alert: true });
 })));
 
-bot.action('profile', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('profile', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
@@ -282,7 +264,7 @@ bot.action('profile', withPanelGuard(withSubscription(async (ctx) => {
   );
 })));
 
-bot.action('top', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('top', withSubscription(async (ctx) => {
   const top = await users.find().sort({ stars: -1 }).limit(10).toArray();
   let msg = '🏆 Топ-10 игроков по звёздам:\n\n';
   top.forEach((u, i) => {
@@ -292,7 +274,7 @@ bot.action('top', withPanelGuard(withSubscription(async (ctx) => {
   ctx.editMessageText(msg, mainMenuButton(ctx.from.id));
 })));
 
-bot.action('admin', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('admin', withSubscription(async (ctx) => {
   if (!isAdmin(ctx.from.id)) {
     return ctx.answerCbQuery('Нет доступа', { show_alert: true });
   }
@@ -307,22 +289,22 @@ bot.action('admin', withPanelGuard(withSubscription(async (ctx) => {
   );
 })));
 
-bot.action('admin_addpromo', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('admin_addpromo', withSubscription(async (ctx) => {
   await ctx.reply('➕ Введите промокод, количество звёзд и активаций через пробел (например: NEWCODE 25 10):', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал создание промокода`);
 })));
 
-bot.action('promo', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('promo', withSubscription(async (ctx) => {
   await ctx.reply('🎫 Введите промокод одним сообщением:', { reply_markup: { force_reply: true } });
   console.log(`[USER] ${ctx.from.id} начал ввод промокода`);
 })));
 
-bot.action('admin_broadcast', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('admin_broadcast', withSubscription(async (ctx) => {
   await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал рассылку`);
 })));
 
-bot.action('admin_stats', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('admin_stats', withSubscription(async (ctx) => {
   const totalUsers = await users.countDocuments();
   const totalStars = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$stars" } } }]).toArray();
   const totalInvited = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$invited" } } }]).toArray();
@@ -346,7 +328,7 @@ connectDB().then(() => {
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-bot.action('faq', withPanelGuard(withSubscription(async (ctx) => {
+bot.action('faq', withSubscription(async (ctx) => {
   ctx.editMessageText(
     `❓ <b>FAQ MagnumTapBot</b>\n\n` +
     `• Фармите звёзды раз в минуту\n` +
