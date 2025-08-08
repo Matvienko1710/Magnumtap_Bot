@@ -70,29 +70,14 @@ async function updateTicketStatus(ticketId, status, adminResponse = null, messag
     updateData.adminResponse = adminResponse;
   }
   
+  if (messageId) {
+    updateData.channelMessageId = messageId;
+  }
+  
   await supportTickets.updateOne(
     { _id: ticketId },
     { $set: updateData }
   );
-
-  if (messageId) {
-    await bot.telegram.editMessageReplyMarkup(
-      `@${SUPPORT_CHANNEL}`,
-      messageId,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: TICKET_STATUSES[status].emoji + ' ' + TICKET_STATUSES[status].name, callback_data: `ticket_status_${ticketId}` }
-            ],
-            [
-              { text: '💬 Ответить', callback_data: `ticket_reply_${ticketId}` }
-            ]
-          ]
-        }
-      }
-    );
-  }
 }
 
 async function notifyUserStatusChange(ticketId, statusText) {
@@ -119,36 +104,99 @@ async function sendTicketToChannel(ticket) {
   const statusInfo = TICKET_STATUSES[ticket.status];
   
   try {
-    const message = await bot.telegram.sendMessage(`@${supportChannelId}`, 
-      `🎫 *Новая заявка техподдержки #${ticket._id.toString().slice(-6)}*\n\n` +
-      `👤 Пользователь: ${ticket.username || 'Неизвестно'} (ID: ${ticket.userId})\n` +
-      `📝 Сообщение: ${ticket.message}\n` +
-      `📅 Создана: ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
-      `📊 Статус: ${statusInfo.emoji} ${statusInfo.name}`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '✅ Одобрить', callback_data: `ticket_accept_${ticket._id}` },
-              { text: '❌ Отклонить', callback_data: `ticket_reject_${ticket._id}` }
-            ],
-            [
-              { text: '🔧 В работе', callback_data: `ticket_progress_${ticket._id}` },
-              { text: '✅ Решено', callback_data: `ticket_resolve_${ticket._id}` }
-            ],
-            [
-              { text: '🗑️ Закрыть', callback_data: `ticket_close_${ticket._id}` },
-              { text: '💬 Ответить', callback_data: `ticket_reply_${ticket._id}` }
-            ]
-          ]
-        }
-      }
-    );
+    const messageText = formatTicketMessage(ticket);
+    const message = await bot.telegram.sendMessage(`@${supportChannelId}`, messageText, {
+      parse_mode: 'Markdown',
+      reply_markup: getTicketKeyboard(ticket._id, ticket.status)
+    });
     
     await updateTicketStatus(ticket._id, ticket.status, null, message.message_id);
   } catch (error) {
     console.error('Ошибка отправки в канал поддержки:', error);
+  }
+}
+
+function formatTicketMessage(ticket) {
+  const statusInfo = TICKET_STATUSES[ticket.status];
+  let message = `🎫 *Заявка техподдержки #${ticket._id.toString().slice(-6)}*\n\n` +
+    `👤 *Пользователь:* ${ticket.username || 'Неизвестно'} (ID: \`${ticket.userId}\`)\n` +
+    `📝 *Сообщение:* ${ticket.message}\n` +
+    `📅 *Создана:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+    `📊 *Статус:* ${statusInfo.emoji} ${statusInfo.name}`;
+  
+  if (ticket.adminResponse) {
+    message += `\n\n💬 *Ответ администратора:*\n${ticket.adminResponse}`;
+  }
+  
+  if (ticket.updatedAt && ticket.updatedAt.getTime() !== ticket.createdAt.getTime()) {
+    message += `\n🔄 *Обновлено:* ${ticket.updatedAt.toLocaleString('ru-RU')}`;
+  }
+  
+  return message;
+}
+
+function getTicketKeyboard(ticketId, status) {
+  const keyboards = {
+    'new': [
+      [
+        { text: '✅ Принять', callback_data: `ticket_accept_${ticketId}` },
+        { text: '❌ Отклонить', callback_data: `ticket_reject_${ticketId}` }
+      ],
+      [
+        { text: '💬 Ответить', callback_data: `ticket_reply_${ticketId}` }
+      ]
+    ],
+    'in_progress': [
+      [
+        { text: '✅ Решено', callback_data: `ticket_resolve_${ticketId}` },
+        { text: '❌ Отклонить', callback_data: `ticket_reject_${ticketId}` }
+      ],
+      [
+        { text: '💬 Ответить', callback_data: `ticket_reply_${ticketId}` },
+        { text: '🔒 Закрыть', callback_data: `ticket_close_${ticketId}` }
+      ]
+    ],
+    'resolved': [
+      [
+        { text: '🔒 Закрыть', callback_data: `ticket_close_${ticketId}` },
+        { text: '💬 Ответить', callback_data: `ticket_reply_${ticketId}` }
+      ]
+    ],
+    'rejected': [
+      [
+        { text: '🔄 Переоткрыть', callback_data: `ticket_accept_${ticketId}` }
+      ]
+    ],
+    'closed': [
+      [
+        { text: '🔄 Переоткрыть', callback_data: `ticket_accept_${ticketId}` }
+      ]
+    ]
+  };
+  
+  return { inline_keyboard: keyboards[status] || keyboards['new'] };
+}
+
+async function updateTicketInChannel(ticketId) {
+  try {
+    const ticket = await supportTickets.findOne({ _id: ticketId });
+    if (!ticket || !ticket.channelMessageId) return;
+    
+    const messageText = formatTicketMessage(ticket);
+    const keyboard = getTicketKeyboard(ticket._id, ticket.status);
+    
+    await bot.telegram.editMessageText(
+      `@${SUPPORT_CHANNEL}`,
+      ticket.channelMessageId,
+      null,
+      messageText,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      }
+    );
+  } catch (error) {
+    console.error('Ошибка обновления сообщения в канале:', error);
   }
 }
 
@@ -510,8 +558,44 @@ bot.on('text', async (ctx) => {
     // Админские команды
     if (isAdmin(ctx.from.id)) {
       if (replyText.includes('Ответ пользователю по заявке')) {
-        // Функция ответа временно отключена для отладки
-        return ctx.reply('❌ Функция ответа на заявки временно недоступна. Используйте кнопки в канале поддержки.');
+        const ticketIdMatch = replyText.match(/#([a-f0-9]{6})/);
+        if (!ticketIdMatch) {
+          return ctx.reply('❌ Не удалось найти ID заявки!');
+        }
+        
+        const shortTicketId = ticketIdMatch[1];
+        
+        // Ищем заявку по короткому ID (последние 6 символов ObjectId)
+        const tickets = await supportTickets.find({}).toArray();
+        const ticket = tickets.find(t => t._id.toString().slice(-6) === shortTicketId);
+        
+        if (!ticket) {
+          return ctx.reply('❌ Заявка не найдена!');
+        }
+
+        // Обновляем заявку с ответом админа
+        await updateTicketStatus(ticket._id, 'in_progress', text);
+
+        // Отправляем ответ пользователю
+        try {
+          await bot.telegram.sendMessage(ticket.userId,
+            `💬 *Ответ от техподдержки*\n\n` +
+            `🎫 *По заявке #${shortTicketId}:*\n` +
+            `${text}\n\n` +
+            `📝 *Ваша исходная заявка:* ${ticket.message}\n\n` +
+            `⚡ При необходимости создайте новую заявку через профиль.`,
+            { parse_mode: 'Markdown' }
+          );
+          
+          // Обновляем сообщение в канале
+          await updateTicketInChannel(ticket._id);
+          
+          ctx.reply(`✅ Ответ отправлен пользователю ${ticket.username || ticket.userId}`);
+        } catch (error) {
+          console.error('Ошибка отправки ответа:', error);
+          ctx.reply('❌ Ошибка отправки ответа пользователю');
+        }
+        return;
       }
 
       if (replyText.includes('Поиск заявки')) {
@@ -974,26 +1058,28 @@ bot.action('support_create', async (ctx) => {
 
 // Мои заявки в поддержку
 bot.action('my_tickets', async (ctx) => {
-  const userTickets = await supportTickets.find({ userId: ctx.from.id }).sort({ created: -1 }).limit(10).toArray();
+  const userTickets = await supportTickets.find({ userId: ctx.from.id }).sort({ createdAt: -1 }).limit(10).toArray();
   
-  let ticketsText = `
-🎫 **МОИ ЗАЯВКИ В ПОДДЕРЖКУ** 🎫
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-`;
+  let ticketsText = `🎫 *МОИ ЗАЯВКИ В ПОДДЕРЖКУ* 🎫\n\n`;
 
   if (userTickets.length === 0) {
     ticketsText += '📭 У вас пока нет заявок в техподдержку.';
   } else {
     userTickets.forEach(ticket => {
       const statusInfo = TICKET_STATUSES[ticket.status];
-      const date = new Date(ticket.created * 1000).toLocaleDateString('ru-RU');
-      ticketsText += `${statusInfo.color} **#${ticket.id}** — ${statusInfo.name}\n`;
-      ticketsText += `📅 ${date} | ${ticket.message.substring(0, 50)}...\n\n`;
+      const date = ticket.createdAt.toLocaleDateString('ru-RU');
+      const shortId = ticket._id.toString().slice(-6);
+      
+      ticketsText += `${statusInfo.emoji} *#${shortId}* — ${statusInfo.name}\n`;
+      ticketsText += `📅 ${date} | 💬 ${ticket.message.substring(0, 50)}${ticket.message.length > 50 ? '...' : ''}\n`;
+      
+      if (ticket.adminResponse) {
+        ticketsText += `💬 *Ответ:* ${ticket.adminResponse.substring(0, 50)}${ticket.adminResponse.length > 50 ? '...' : ''}\n`;
+      }
+      
+      ticketsText += `\n`;
     });
   }
-
-  ticketsText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
   ctx.editMessageText(ticketsText, {
     parse_mode: 'Markdown',
@@ -1117,29 +1203,9 @@ bot.action(/^ticket_accept_(.+)$/, async (ctx) => {
   const objectId = require('mongodb').ObjectId(ticketId);
   await updateTicketStatus(objectId, 'in_progress');
   await notifyUserStatusChange(objectId, 'принята в работу ⚙️');
+  await updateTicketInChannel(objectId);
   
   ctx.answerCbQuery('✅ Заявка принята в работу');
-  
-  // Обновляем сообщение в канале
-  const ticket = await supportTickets.findOne({ _id: require('mongodb').ObjectId(ticketId) });
-  if (ticket) {
-    const statusInfo = TICKET_STATUSES[ticket.status];
-    const newText = ctx.callbackQuery.message.text.replace(
-      /🔵 \*\*Статус:\*\* 🆕 Новая/g,
-      `${statusInfo.color} **Статус:** ${statusInfo.name}`
-    );
-    
-    ctx.editMessageText(newText, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '✅ Решена', callback_data: `ticket_resolve_${ticketId}` }],
-          [{ text: '🔒 Закрыть', callback_data: `ticket_close_${ticketId}` }],
-          [{ text: '📝 Ответить', callback_data: `ticket_reply_${ticketId}` }]
-        ]
-      }
-    });
-  }
 });
 
 bot.action(/^ticket_reject_(.+)$/, async (ctx) => {
@@ -1149,16 +1215,9 @@ bot.action(/^ticket_reject_(.+)$/, async (ctx) => {
   const objectId = require('mongodb').ObjectId(ticketId);
   await updateTicketStatus(objectId, 'rejected');
   await notifyUserStatusChange(objectId, 'отклонена ❌');
+  await updateTicketInChannel(objectId);
   
   ctx.answerCbQuery('❌ Заявка отклонена');
-  
-  // Удаляем кнопки из сообщения в канале
-  const newText = ctx.callbackQuery.message.text.replace(
-    /🔵 \*\*Статус:\*\* 🆕 Новая/g,
-    '🔴 **Статус:** ❌ Отклонена'
-  );
-  
-  ctx.editMessageText(newText, { parse_mode: 'Markdown' });
 });
 
 bot.action(/^ticket_resolve_(.+)$/, async (ctx) => {
@@ -1168,15 +1227,9 @@ bot.action(/^ticket_resolve_(.+)$/, async (ctx) => {
   const objectId = require('mongodb').ObjectId(ticketId);
   await updateTicketStatus(objectId, 'resolved');
   await notifyUserStatusChange(objectId, 'решена ✅');
+  await updateTicketInChannel(objectId);
   
   ctx.answerCbQuery('✅ Заявка решена');
-  
-  const newText = ctx.callbackQuery.message.text.replace(
-    /🟡 \*\*Статус:\*\* ⚙️ В работе/g,
-    '🟢 **Статус:** ✅ Решена'
-  );
-  
-  ctx.editMessageText(newText, { parse_mode: 'Markdown' });
 });
 
 bot.action(/^ticket_close_(.+)$/, async (ctx) => {
@@ -1186,28 +1239,27 @@ bot.action(/^ticket_close_(.+)$/, async (ctx) => {
   const objectId = require('mongodb').ObjectId(ticketId);
   await updateTicketStatus(objectId, 'closed');
   await notifyUserStatusChange(objectId, 'закрыта 🔒');
+  await updateTicketInChannel(objectId);
   
   ctx.answerCbQuery('🔒 Заявка закрыта');
-  
-  const newText = ctx.callbackQuery.message.text.replace(
-    /(🟡|🟢) \*\*Статус:\*\* (⚙️ В работе|✅ Решена)/g,
-    '⚫ **Статус:** 🔒 Закрыта'
-  );
-  
-  ctx.editMessageText(newText, { parse_mode: 'Markdown' });
 });
 
 bot.action(/^ticket_reply_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  ctx.reply(
-    `💬 **Ответ пользователю по заявке #${ticketId}**\n\nВведите ваш ответ:`,
+  
+  // Сохраняем контекст для ответа
+  await ctx.reply(
+    `💬 *Ответ пользователю по заявке #${ticketId.slice(-6)}*\n\nВведите ваш ответ:`,
     {
       parse_mode: 'Markdown',
       reply_markup: {
-        force_reply: true
+        force_reply: true,
+        input_field_placeholder: 'Введите ваш ответ пользователю...'
       }
     }
   );
+  
+  ctx.answerCbQuery('💬 Ожидаю ваш ответ');
 });
