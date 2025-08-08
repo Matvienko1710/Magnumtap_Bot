@@ -89,6 +89,7 @@ bot.action('main_menu', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   ctx.editMessageText(
     `👋 Добро пожаловать в MagnumTapBot! 🌟\n\n` +
     `Ты в игре, где можно зарабатывать звёзды ✨, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n` +
@@ -98,7 +99,8 @@ bot.action('main_menu', async (ctx) => {
     Markup.inlineKeyboard([
       [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
       [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')]
+      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+      ...adminRow
     ])
   );
 });
@@ -221,6 +223,9 @@ bot.action('admin_refs', async (ctx) => {
 bot.on('text', async (ctx) => {
   if (!isAdmin(ctx.from.id) || !ctx.message.reply_to_message) return;
   const replyText = ctx.message.reply_to_message.text;
+  const adminButtons = Markup.inlineKeyboard([
+    [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
+  ]);
   // Рассылка
   if (replyText.includes('текст для рассылки')) {
     const text = ctx.message.text;
@@ -229,44 +234,30 @@ bot.on('text', async (ctx) => {
     for (const u of allUsers) {
       try { await ctx.telegram.sendMessage(u.id, `📢 Сообщение от администрации:\n\n${text}`); sent++; } catch {}
     }
-    return ctx.reply(`✅ Рассылка завершена. Доставлено: ${sent} пользователям.`, Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
-    ]));
+    return ctx.reply(`✅ Рассылка завершена. Доставлено: ${sent} пользователям.`, adminButtons);
   }
   // Промокод
   if (replyText.includes('Введите промокод и количество звёзд')) {
     const [code, stars] = ctx.message.text.trim().split(/\s+/);
-    if (!code || isNaN(Number(stars))) return ctx.reply('❌ Формат: КОД 10', Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
-    ]));
+    if (!code || isNaN(Number(stars))) return ctx.reply('❌ Формат: КОД 10', adminButtons);
     promoCodes[code.toUpperCase()] = Number(stars);
-    return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд добавлен.`, Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
-    ]));
+    return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд добавлен.`, adminButtons);
   }
   // Выдать/забрать звёзды
   if (replyText.includes('ID пользователя и количество звёзд')) {
     const [id, stars] = ctx.message.text.trim().split(/\s+/);
-    if (!id || isNaN(Number(stars))) return ctx.reply('❌ Формат: ID 10', Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
-    ]));
+    if (!id || isNaN(Number(stars))) return ctx.reply('❌ Формат: ID 10', adminButtons);
     await users.updateOne({ id: Number(id) }, { $inc: { stars: Number(stars) } });
-    return ctx.reply(`✅ Пользователю ${id} выдано/забрано ${stars} звёзд.`, Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
-    ]));
+    return ctx.reply(`✅ Пользователю ${id} выдано/забрано ${stars} звёзд.`, adminButtons);
   }
   // Рефералы пользователя
   if (replyText.includes('для просмотра его рефералов')) {
     const id = ctx.message.text.trim();
     const refs = await users.find({ invitedBy: id }).toArray();
-    if (!refs.length) return ctx.reply('У пользователя нет рефералов.', Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
-    ]));
+    if (!refs.length) return ctx.reply('У пользователя нет рефералов.', adminButtons);
     let msg = `👥 Рефералы пользователя ${id}:\n\n`;
     refs.forEach((u, i) => { msg += `${i + 1}. ${u.id}\n`; });
-    return ctx.reply(msg, Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Главное меню', 'main_menu'), Markup.button.callback('❌ Отмена', 'admin_panel')]
-    ]));
+    return ctx.reply(msg, adminButtons);
   }
 });
 
