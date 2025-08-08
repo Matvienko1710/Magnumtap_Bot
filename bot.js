@@ -33,33 +33,36 @@ function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
 
 function getWelcomeText(balance, invited) {
   return `
-🏆 *ДОБРО ПОЖАЛОВАТЬ В MAGNUM TAP* 🏆
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ *ДОБРО ПОЖАЛОВАТЬ В MAGNUM TAP* ✨
+╔══════════════════════════════════╗
+║                                  ║
+║    🌟 ЭЛИТНАЯ ИГРОВАЯ ЗОНА 🌟    ║
+║                                  ║
+╚══════════════════════════════════╝
 
-💎 *ЭКСКЛЮЗИВНАЯ ПЛАТФОРМА* 💎
-🌟 Зарабатывайте звёзды премиум-класса
-🎯 Выполняйте VIP-задания  
-👑 Становитесь элитой MagnumTap
+💫 Зарабатывайте звёзды, выполняя задания
+🎯 Приглашайте друзей и получайте бонусы
+🏆 Становитесь лидером в рейтинге
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 *Ваш баланс:* \`${balance} ⭐\` звёзд
-👥 *Приглашено:* \`${invited}\` VIP-друзей
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────┐
+│ 💰 Баланс: *${balance}* ⭐ звёзд        │
+│ 👥 Приглашено: *${invited}* друзей      │
+└─────────────────────────────────┘
 
-🔥 *Выберите действие и станьте легендой!* 🔥`;
+🚀 *Выберите действие и начните зарабатывать!*`;
 }
 
-// Ежедневные задания с VIP дизайном
+// Ежедневные задания
 const dailyTasks = [
-  { id: 'login', name: '👑 VIP Визит', reward: 5, description: '🌟 Зайдите в элитный бот!' },
-  { id: 'bonus', name: '💎 Премиум Бонус', reward: 10, description: '🎁 Получите эксклюзивный бонус' },
-  { id: 'invite', name: '🔥 Элитное Приглашение', reward: 20, description: '👥 Пригласите VIP-друга' }
+  { id: 'login', name: '✨ Ежедневный визит', reward: 5, description: '🎯 Зайдите в бота каждый день' },
+  { id: 'bonus', name: '🎁 Получить бонус', reward: 10, description: '💫 Нажмите кнопку "Бонус"' },
+  { id: 'invite', name: '👥 Пригласить друга', reward: 20, description: '🌟 Пригласите одного друга' }
 ];
 
-// Задания от спонсора с VIP дизайном
+// Задания от спонсора
 const sponsorTasks = [
-  { id: 'channel1', name: '💎 Эксклюзивная Подписка', reward: 15, description: '📢 Подпишитесь на партнёрский канал', url: 'https://t.me/example' },
-  { id: 'website', name: '🌟 Премиум Визит', reward: 25, description: '🔗 Посетите VIP-сайт партнёра', url: 'https://example.com' }
+  { id: 'channel1', name: '📢 Подписка на канал', reward: 15, description: '🔔 Подпишитесь на партнёрский канал', url: 'https://t.me/example' },
+  { id: 'website', name: '🌐 Посещение сайта', reward: 25, description: '🔗 Перейдите на сайт партнёра', url: 'https://example.com' }
 ];
 
 async function getUserTasks(userId, isDaily = true) {
@@ -89,16 +92,16 @@ async function getUserTasks(userId, isDaily = true) {
 }
 
 function getMainMenu(ctx, balance, invited) {
-  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ АДМИН-ЦЕНТР', 'admin_panel')]] : [];
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   return {
     text: getWelcomeText(balance, invited),
     extra: {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('⭐ ФАРМ ЗВЁЗД', 'farm'), Markup.button.callback('🎁 VIP БОНУС', 'bonus')],
-        [Markup.button.callback('👑 МОЙ ПРОФИЛЬ', 'profile'), Markup.button.callback('🏆 ЭЛИТНЫЙ ТОП', 'top')],
-        [Markup.button.callback('💎 ПРИГЛАСИТЬ VIP', 'invite'), Markup.button.callback('🎫 ПРОМОКОД', 'promo')],
-        [Markup.button.callback('📋 ЕЖЕДНЕВНЫЕ КВЕСТЫ', 'daily_tasks'), Markup.button.callback('🎯 СПОНСОР ЗАДАНИЯ', 'sponsor_tasks')],
+        [Markup.button.callback('⭐ Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
+        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
+        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -118,16 +121,16 @@ bot.action('main_menu', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
-  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ АДМИН-ЦЕНТР', 'admin_panel')]] : [];
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   ctx.reply(
     getWelcomeText(balance, invited),
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('⭐ ФАРМ ЗВЁЗД', 'farm'), Markup.button.callback('🎁 VIP БОНУС', 'bonus')],
-        [Markup.button.callback('👑 МОЙ ПРОФИЛЬ', 'profile'), Markup.button.callback('🏆 ЭЛИТНЫЙ ТОП', 'top')],
-        [Markup.button.callback('💎 ПРИГЛАСИТЬ VIP', 'invite'), Markup.button.callback('🎫 ПРОМОКОД', 'promo')],
-        [Markup.button.callback('📋 ЕЖЕДНЕВНЫЕ КВЕСТЫ', 'daily_tasks'), Markup.button.callback('🎯 СПОНСОР ЗАДАНИЯ', 'sponsor_tasks')],
+        [Markup.button.callback('⭐ Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
+        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
+        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -137,22 +140,22 @@ bot.action('main_menu', async (ctx) => {
 bot.action('profile', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const profileText = `
-👑 *ВАШ VIP ПРОФИЛЬ* 👑
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌─────── 👤 *ВАШ ПРОФИЛЬ* ─────────┐
 
-💎 *Статус:* Элитный пользователь
-⭐ *Баланс:* \`${user.stars || 0}\` звёзд
-👥 *Приглашено VIP:* \`${user.invited || 0}\` друзей
-📅 *Дата регистрации:* ${new Date(user.created * 1000).toLocaleDateString()}
+✨ *Статус:* Активный игрок
+⭐ *Баланс:* ${user.stars || 0} звёзд
+👥 *Приглашено:* ${user.invited || 0} друзей
+📅 *Регистрация:* ${new Date(user.created * 1000).toLocaleDateString()}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔥 *Продолжайте зарабатывать и становитесь легендой!*`;
+└────────────────────────────────┘
+
+🌟 *Продолжайте играть и зарабатывать!*`;
 
   ctx.editMessageText(profileText, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('❓ FAQ & ПОМОЩЬ', 'faq')],
-      [Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]
+      [Markup.button.callback('❓ FAQ', 'faq')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   });
 });
@@ -160,24 +163,24 @@ bot.action('profile', async (ctx) => {
 bot.action('top', async (ctx) => {
   const topUsers = await users.find({}).sort({ stars: -1 }).limit(10).toArray();
   let topText = `
-🏆 *ЭЛИТНЫЙ РЕЙТИНГ* 🏆
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💎 *ТОП-10 VIP ИГРОКОВ* 💎
+🏆 *РЕЙТИНГ ЛИДЕРОВ* 🏆
+╔══════════════════════════════════╗
+║         ТОП-10 ИГРОКОВ           ║
+╚══════════════════════════════════╝
 
 `;
 
   topUsers.forEach((user, index) => {
     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔸';
     const username = user.username ? `@${user.username}` : `ID${user.id}`;
-    topText += `${medal} \`${index + 1}.\` ${username} — \`${user.stars || 0}\` ⭐\n`;
+    topText += `${medal} *${index + 1}.* ${username} — *${user.stars || 0}* ⭐\n`;
   });
 
-  topText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔥 *Станьте частью элиты!*`;
+  topText += `\n✨ *Станьте частью элиты!*`;
 
   ctx.editMessageText(topText, {
     parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]])
+    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
   });
 });
 
@@ -185,23 +188,27 @@ bot.action('invite', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
   const inviteText = `
-💎 *VIP ПРИГЛАШЕНИЯ* 💎
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤝 *ПРИГЛАСИТЬ ДРУЗЕЙ* 🤝
+╔══════════════════════════════════╗
+║       РЕФЕРАЛЬНАЯ ПРОГРАММА      ║
+╚══════════════════════════════════╝
 
-🔥 *Приглашайте друзей в элитный клуб!*
-🌟 За каждого друга: \`+5\` звёзд
-👑 Ваши друзья получают стартовый бонус
+✨ *Приглашайте друзей и зарабатывайте!*
+🌟 За каждого друга: *+5* звёзд
+🎁 Ваши друзья получают стартовый бонус
 
-🔗 *Ваша эксклюзивная ссылка:*
-\`${refLink}\`
+┌─────────────────────────────────┐
+│ 🔗 *Ваша ссылка для друзей:*     │
+│ \`${refLink}\`                    │
+└─────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👥 *Приглашено VIP-друзей:* \`${user.invited || 0}\`
-💰 *Заработано с рефералов:* \`${(user.invited || 0) * 5}\` ⭐`;
+📊 *Статистика:*
+👥 Приглашено друзей: *${user.invited || 0}*
+💰 Заработано: *${(user.invited || 0) * 5}* ⭐`;
 
   ctx.editMessageText(inviteText, {
     parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]])
+    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
   });
 });
 
@@ -229,26 +236,25 @@ bot.on('text', async (ctx) => {
 });
 
 bot.action('admin_panel', async (ctx) => {
-  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа', { show_alert: true });
   const adminText = `
-⚙️ *ЦЕНТР УПРАВЛЕНИЯ VIP* ⚙️
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚙️ *ПАНЕЛЬ АДМИНИСТРАТОРА* ⚙️
+╔══════════════════════════════════╗
+║         ЦЕНТР УПРАВЛЕНИЯ         ║
+╚══════════════════════════════════╝
 
 👑 *Добро пожаловать, Администратор!*
-🔥 Управляйте элитной платформой
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💎 *Выберите действие:*`;
+✨ *Выберите действие:*`;
 
   ctx.editMessageText(adminText, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('📢 VIP РАССЫЛКА', 'admin_broadcast')],
-      [Markup.button.callback('🎫 СОЗДАТЬ ПРОМОКОД', 'admin_addpromo')],
-      [Markup.button.callback('📊 СТАТИСТИКА', 'admin_stats')],
-      [Markup.button.callback('⭐ УПРАВЛЕНИЕ ЗВЁЗДАМИ', 'admin_stars')],
-      [Markup.button.callback('👥 РЕФЕРАЛЫ ПОЛЬЗОВАТЕЛЯ', 'admin_refs')],
-      [Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]
+      [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
+      [Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
+      [Markup.button.callback('📊 Статистика', 'admin_stats')],
+      [Markup.button.callback('⭐ Звёзды', 'admin_stars')],
+      [Markup.button.callback('👥 Рефералы', 'admin_refs')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   });
 });
@@ -257,24 +263,24 @@ bot.action('admin_cancel', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
   ctx.answerCbQuery();
   const adminText = `
-⚙️ *ЦЕНТР УПРАВЛЕНИЯ VIP* ⚙️
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚙️ *ПАНЕЛЬ АДМИНИСТРАТОРА* ⚙️
+╔══════════════════════════════════╗
+║         ЦЕНТР УПРАВЛЕНИЯ         ║
+╚══════════════════════════════════╝
 
 👑 *Добро пожаловать, Администратор!*
-🔥 Управляйте элитной платформой
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💎 *Выберите действие:*`;
+✨ *Выберите действие:*`;
 
-  ctx.editMessageText(adminText, {
+  ctx.reply(adminText, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('📢 VIP РАССЫЛКА', 'admin_broadcast')],
-      [Markup.button.callback('🎫 СОЗДАТЬ ПРОМОКОД', 'admin_addpromo')],
-      [Markup.button.callback('📊 СТАТИСТИКА', 'admin_stats')],
-      [Markup.button.callback('⭐ УПРАВЛЕНИЕ ЗВЁЗДАМИ', 'admin_stars')],
-      [Markup.button.callback('👥 РЕФЕРАЛЫ ПОЛЬЗОВАТЕЛЯ', 'admin_refs')],
-      [Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]
+      [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
+      [Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
+      [Markup.button.callback('📊 Статистика', 'admin_stats')],
+      [Markup.button.callback('⭐ Звёзды', 'admin_stars')],
+      [Markup.button.callback('👥 Рефералы', 'admin_refs')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   );
 });
@@ -377,18 +383,18 @@ bot.on('text', async (ctx) => {
 bot.action('daily_tasks', async (ctx) => {
   const userTasks = await getUserTasks(ctx.from.id, true);
   let msg = `
-📋 *ЕЖЕДНЕВНЫЕ VIP КВЕСТЫ* 📋
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔥 *Выполняйте задания и получайте награды!*
+📋 *ЕЖЕДНЕВНЫЕ ЗАДАНИЯ* 📋
+╔══════════════════════════════════╗
+║       ВЫПОЛНЯЙТЕ И ПОЛУЧАЙТЕ     ║
+╚══════════════════════════════════╝
 
 `;
   
   dailyTasks.forEach(task => {
     const completed = userTasks.completed[task.id];
     const claimed = userTasks.claimed[task.id];
-    const status = claimed ? '✅ ПОЛУЧЕНО' : completed ? '🎁 ЗАБРАТЬ' : '⏳ ВЫПОЛНИТЬ';
-    msg += `${status} ${task.name} \`+${task.reward}\` ⭐\n${task.description}\n\n`;
+    const status = claimed ? '✅ Получено' : completed ? '🎁 Забрать' : '⏳ Выполнить';
+    msg += `${status} *${task.name}* (+${task.reward} ⭐)\n${task.description}\n\n`;
   });
   
   const buttons = [];
@@ -400,8 +406,8 @@ bot.action('daily_tasks', async (ctx) => {
     }
   });
   
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💎 *Возвращайтесь завтра за новыми квестами!*`;
-  buttons.push([Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]);
+  msg += `✨ *Возвращайтесь завтра за новыми заданиями!*`;
+  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
   
   ctx.editMessageText(msg, {
     parse_mode: 'Markdown',
@@ -412,10 +418,10 @@ bot.action('daily_tasks', async (ctx) => {
 bot.action('sponsor_tasks', async (ctx) => {
   const userTasks = await getUserTasks(ctx.from.id, false);
   let msg = `
-🎯 *ЭКСКЛЮЗИВНЫЕ СПОНСОР ЗАДАНИЯ* 🎯
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💎 *Партнёрские задания с премиум наградами!*
+🎯 *ЗАДАНИЯ ОТ СПОНСОРОВ* 🎯
+╔══════════════════════════════════╗
+║      ПАРТНЁРСКИЕ ЗАДАНИЯ         ║
+╚══════════════════════════════════╝
 
 `;
   
@@ -423,21 +429,21 @@ bot.action('sponsor_tasks', async (ctx) => {
   sponsorTasks.forEach(task => {
     const completed = userTasks.completed[task.id];
     const claimed = userTasks.claimed[task.id];
-    const status = claimed ? '✅ ПОЛУЧЕНО' : completed ? '🎁 ЗАБРАТЬ' : '⏳ ВЫПОЛНИТЬ';
-    msg += `${status} ${task.name} \`+${task.reward}\` ⭐\n${task.description}\n\n`;
+    const status = claimed ? '✅ Получено' : completed ? '🎁 Забрать' : '⏳ Выполнить';
+    msg += `${status} *${task.name}* (+${task.reward} ⭐)\n${task.description}\n\n`;
     
     if (!completed) {
       buttons.push([
-        Markup.button.url('🔗 ПЕРЕЙТИ', task.url),
-        Markup.button.callback('✅ ПРОВЕРИТЬ', `check_sponsor_${task.id}`)
+        Markup.button.url('🔗 Перейти', task.url),
+        Markup.button.callback('✅ Проверить', `check_sponsor_${task.id}`)
       ]);
     } else if (!claimed) {
       buttons.push([Markup.button.callback(`🎁 ${task.name}`, `claim_sponsor_${task.id}`)]);
     }
   });
   
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔥 *Больше заданий скоро появится!*`;
-  buttons.push([Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]);
+  msg += `🌟 *Больше заданий скоро появится!*`;
+  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
   
   ctx.editMessageText(msg, {
     parse_mode: 'Markdown',
@@ -447,17 +453,20 @@ bot.action('sponsor_tasks', async (ctx) => {
 
 bot.action('faq', async (ctx) => {
   const faqText = `
-❓ *VIP ПОМОЩЬ И FAQ* ❓
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❓ *ПОМОЩЬ И FAQ* ❓
+╔══════════════════════════════════╗
+║        ЧАСТО ЗАДАВАЕМЫЕ          ║
+║           ВОПРОСЫ                ║
+╚══════════════════════════════════╝
 
-🔥 *Как зарабатывать звёзды?*
+🌟 *Как зарабатывать звёзды?*
 ⭐ Фармите каждую минуту
 🎁 Получайте ежедневный бонус
-📋 Выполняйте квесты
+📋 Выполняйте задания
 👥 Приглашайте друзей
 
-💎 *Что такое VIP статус?*
-Все пользователи MagnumTap — элита!
+💫 *Что такое задания?*
+Простые действия за которые вы получаете награды
 
 🎯 *Как выполнять задания?*
 Нажимайте на задания и следуйте инструкциям
@@ -465,16 +474,15 @@ bot.action('faq', async (ctx) => {
 🎫 *Где взять промокоды?*
 Следите за нашими анонсами и партнёрами
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👑 *Станьте легендой MagnumTap!*`;
+✨ *Играйте и становитесь лидером!*`;
 
   ctx.editMessageText(faqText, {
     parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 ГЛАВНОЕ МЕНЮ', 'main_menu')]])
+    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
   });
 });
 
-// Обновляем уведомления фарма и бонуса
+// Уведомления фарма и бонуса
 bot.action('farm', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const canFarm = !user.lastFarm || (now() - user.lastFarm) >= 60;
@@ -484,10 +492,10 @@ bot.action('farm', async (ctx) => {
       $inc: { stars: 1 }, 
       $set: { lastFarm: now() } 
     });
-    ctx.answerCbQuery('💎 +1 VIP звезда получена! ⭐');
+    ctx.answerCbQuery('✨ +1 звезда получена! ⭐');
   } else {
     const timeLeft = 60 - (now() - user.lastFarm);
-    ctx.answerCbQuery(`🔥 Фарм через ${timeLeft} сек. Элита ждёт!`);
+    ctx.answerCbQuery(`⏳ Фарм через ${timeLeft} сек.`);
   }
 });
 
@@ -501,14 +509,14 @@ bot.action('bonus', async (ctx) => {
       $inc: { stars: 10 }, 
       $set: { lastBonus: today } 
     });
-    ctx.answerCbQuery('🎁 VIP бонус +10 звёзд! Элитно! 💎');
+    ctx.answerCbQuery('🎁 Бонус +10 звёзд получен! ✨');
   } else {
     const hoursLeft = 24 - Math.floor((Date.now() % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    ctx.answerCbQuery(`👑 Следующий VIP бонус через ${hoursLeft}ч!`);
+    ctx.answerCbQuery(`🕐 Следующий бонус через ${hoursLeft}ч`);
   }
 });
 
-// Обновляем уведомления заданий
+// Уведомления заданий
 bot.action(/^claim_daily_(.+)$/, async (ctx) => {
   const taskId = ctx.match[1];
   const task = dailyTasks.find(t => t.id === taskId);
@@ -520,7 +528,7 @@ bot.action(/^claim_daily_(.+)$/, async (ctx) => {
   );
   await users.updateOne({ id: ctx.from.id }, { $inc: { stars: task.reward } });
   
-  ctx.answerCbQuery(`🎁 VIP награда получена! +${task.reward} ⭐`);
+  ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} ⭐`);
   ctx.action('daily_tasks')(ctx);
 });
 
@@ -535,7 +543,7 @@ bot.action(/^claim_sponsor_(.+)$/, async (ctx) => {
   );
   await users.updateOne({ id: ctx.from.id }, { $inc: { stars: task.reward } });
   
-  ctx.answerCbQuery(`💎 Премиум награда! +${task.reward} ⭐`);
+  ctx.answerCbQuery(`✨ Награда получена! +${task.reward} ⭐`);
   ctx.action('sponsor_tasks')(ctx);
 });
 
@@ -546,7 +554,7 @@ bot.action(/^check_sponsor_(.+)$/, async (ctx) => {
     { $set: { [`completed.${taskId}`]: true } }
   );
   
-  ctx.answerCbQuery('✅ VIP задание выполнено! 🔥');
+  ctx.answerCbQuery('✅ Задание выполнено! 🌟');
   ctx.action('sponsor_tasks')(ctx);
 });
 
