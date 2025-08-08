@@ -12,12 +12,14 @@ if (!process.env.MONGODB_URI) {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const mongo = new MongoClient(process.env.MONGODB_URI);
 
-let db, users;
+let db, users, tasks, promocodes;
 
 async function connectDB() {
   await mongo.connect();
   db = mongo.db();
   users = db.collection('users');
+  tasks = db.collection('tasks');
+  promocodes = db.collection('promocodes');
 }
 
 function now() {
@@ -115,7 +117,7 @@ bot.on('text', withSubscription(async (ctx) => {
         console.log(`[ADMIN] ${ctx.from.id} ошибка формата промокода: ${ctx.message.text}`);
         return ctx.reply('❌ Формат: КОД 10 5', mainMenuButton(ctx.from.id));
       }
-      promoCodes[code.toUpperCase()] = { stars: Number(stars), max: Number(max), used: 0 };
+      promocodes[code.toUpperCase()] = { stars: Number(stars), max: Number(max), used: 0 };
       console.log(`[ADMIN] ${ctx.from.id} добавил промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций`);
       return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций добавлен.`, mainMenuButton(ctx.from.id));
     }
@@ -127,7 +129,7 @@ bot.on('text', withSubscription(async (ctx) => {
         console.log(`[USER] ${userId} повторная попытка промокода ${code}`);
         return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuButton(userId));
       }
-      const promo = promoCodes[code];
+      const promo = promocodes[code];
       if (promo && promo.used < promo.max) {
         await users.updateOne({ id: userId }, { $inc: { stars: promo.stars } });
         userPromoUsed[userId + ':' + code] = true;
@@ -177,19 +179,13 @@ async function tryDisableOldPanel(ctx) {
   } catch (e) {}
 }
 
-// Обёртка для action: если action не из последнего сообщения, гасим старую панель
+// Обёртка для action: если не удалось обновить сообщение, гасим панель
 function withPanelGuard(handler) {
   return async (ctx, ...args) => {
-    // Если это callback_query и message не последнее (например, message_id не совпадает с последним /start), гасим панель
-    if (ctx.updateType === 'callback_query' && ctx.callbackQuery && ctx.callbackQuery.message) {
-      // Можно добавить проверку на "устаревшее" сообщение, но проще всегда гасить старую панель
-      try {
-        await handler(ctx, ...args);
-      } catch (e) {
-        await tryDisableOldPanel(ctx);
-      }
-    } else {
+    try {
       await handler(ctx, ...args);
+    } catch (e) {
+      await tryDisableOldPanel(ctx);
     }
   };
 }
