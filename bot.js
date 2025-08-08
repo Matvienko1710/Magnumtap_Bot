@@ -13,7 +13,8 @@ async function connectDB() {
   await mongo.connect();
   const db = mongo.db();
   users = db.collection('users');
-  promocodes = db.collection('promocodes'); // если не нужен функционал промокодов — можно убрать
+  promocodes = db.collection('promocodes');
+  tasks = db.collection('tasks'); // добавляем коллекцию заданий
 }
 
 function now() { return Math.floor(Date.now() / 1000); }
@@ -45,6 +46,45 @@ function getWelcomeText(balance, invited) {
   );
 }
 
+// Ежедневные задания
+const dailyTasks = [
+  { id: 'login', name: 'Зайти в бота', reward: 5, description: 'Просто запустите бота!' },
+  { id: 'bonus', name: 'Получить дневной бонус', reward: 10, description: 'Нажмите кнопку "Бонус"' },
+  { id: 'invite', name: 'Пригласить друга', reward: 20, description: 'Пригласите одного друга' }
+];
+
+// Задания от спонсора
+const sponsorTasks = [
+  { id: 'channel1', name: 'Подписаться на @example', reward: 15, description: 'Подпишитесь на канал партнёра', url: 'https://t.me/example' },
+  { id: 'website', name: 'Посетить сайт', reward: 25, description: 'Перейдите на сайт партнёра', url: 'https://example.com' }
+];
+
+async function getUserTasks(userId, isDaily = true) {
+  const today = new Date().toDateString();
+  let userTasks = await tasks.findOne({ 
+    userId, 
+    date: isDaily ? today : 'sponsor',
+    type: isDaily ? 'daily' : 'sponsor'
+  });
+  
+  if (!userTasks) {
+    const taskList = isDaily ? dailyTasks : sponsorTasks;
+    userTasks = {
+      userId,
+      date: isDaily ? today : 'sponsor',
+      type: isDaily ? 'daily' : 'sponsor',
+      completed: {},
+      claimed: {}
+    };
+    taskList.forEach(task => {
+      userTasks.completed[task.id] = false;
+      userTasks.claimed[task.id] = false;
+    });
+    await tasks.insertOne(userTasks);
+  }
+  return userTasks;
+}
+
 function getMainMenu(ctx, balance, invited) {
   const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   return {
@@ -55,6 +95,7 @@ function getMainMenu(ctx, balance, invited) {
         [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
         [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
         [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -83,6 +124,7 @@ bot.action('main_menu', async (ctx) => {
         [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
         [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
         [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -297,6 +339,101 @@ bot.on('text', async (ctx) => {
     refs.forEach((u, i) => { msg += `${i + 1}. ${u.id}\n`; });
     return ctx.reply(msg, adminButtons);
   }
+});
+
+bot.action('daily_tasks', async (ctx) => {
+  const userTasks = await getUserTasks(ctx.from.id, true);
+  let msg = '📋 Ежедневные задания\n\n';
+  
+  dailyTasks.forEach(task => {
+    const completed = userTasks.completed[task.id];
+    const claimed = userTasks.claimed[task.id];
+    const status = claimed ? '✅ Получено' : completed ? '🎁 Забрать' : '⏳ Выполнить';
+    msg += `${status} ${task.name} (+${task.reward} звёзд)\n${task.description}\n\n`;
+  });
+  
+  const buttons = [];
+  dailyTasks.forEach(task => {
+    const completed = userTasks.completed[task.id];
+    const claimed = userTasks.claimed[task.id];
+    if (completed && !claimed) {
+      buttons.push([Markup.button.callback(`🎁 ${task.name}`, `claim_daily_${task.id}`)]);
+    }
+  });
+  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
+  
+  ctx.editMessageText(msg, Markup.inlineKeyboard(buttons));
+});
+
+bot.action('sponsor_tasks', async (ctx) => {
+  const userTasks = await getUserTasks(ctx.from.id, false);
+  let msg = '🎯 Задания от спонсора\n\n';
+  
+  const buttons = [];
+  sponsorTasks.forEach(task => {
+    const completed = userTasks.completed[task.id];
+    const claimed = userTasks.claimed[task.id];
+    const status = claimed ? '✅ Получено' : completed ? '🎁 Забрать' : '⏳ Выполнить';
+    msg += `${status} ${task.name} (+${task.reward} звёзд)\n${task.description}\n\n`;
+    
+    if (!completed) {
+      buttons.push([
+        Markup.button.url('🔗 Перейти', task.url),
+        Markup.button.callback('✅ Проверить', `check_sponsor_${task.id}`)
+      ]);
+    } else if (!claimed) {
+      buttons.push([Markup.button.callback(`🎁 ${task.name}`, `claim_sponsor_${task.id}`)]);
+    }
+  });
+  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
+  
+  ctx.editMessageText(msg, Markup.inlineKeyboard(buttons));
+});
+
+// Обработчики заданий
+bot.action(/^claim_daily_(.+)$/, async (ctx) => {
+  const taskId = ctx.match[1];
+  const task = dailyTasks.find(t => t.id === taskId);
+  if (!task) return;
+  
+  await tasks.updateOne(
+    { userId: ctx.from.id, type: 'daily' },
+    { $set: { [`claimed.${taskId}`]: true } }
+  );
+  await users.updateOne({ id: ctx.from.id }, { $inc: { stars: task.reward } });
+  
+  ctx.answerCbQuery(`🎁 Получено ${task.reward} звёзд!`);
+  // Обновляем задания
+  ctx.action('daily_tasks')(ctx);
+});
+
+bot.action(/^claim_sponsor_(.+)$/, async (ctx) => {
+  const taskId = ctx.match[1];
+  const task = sponsorTasks.find(t => t.id === taskId);
+  if (!task) return;
+  
+  await tasks.updateOne(
+    { userId: ctx.from.id, type: 'sponsor' },
+    { $set: { [`claimed.${taskId}`]: true } }
+  );
+  await users.updateOne({ id: ctx.from.id }, { $inc: { stars: task.reward } });
+  
+  ctx.answerCbQuery(`🎁 Получено ${task.reward} звёзд!`);
+  // Обновляем задания
+  ctx.action('sponsor_tasks')(ctx);
+});
+
+bot.action(/^check_sponsor_(.+)$/, async (ctx) => {
+  const taskId = ctx.match[1];
+  // Здесь можно добавить проверку выполнения (например, проверка подписки на канал)
+  await tasks.updateOne(
+    { userId: ctx.from.id, type: 'sponsor' },
+    { $set: { [`completed.${taskId}`]: true } }
+  );
+  
+  ctx.answerCbQuery('✅ Задание выполнено!');
+  // Обновляем задания
+  ctx.action('sponsor_tasks')(ctx);
 });
 
 connectDB().then(() => {
