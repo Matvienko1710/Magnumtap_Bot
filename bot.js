@@ -123,18 +123,10 @@ bot.action('farm', async (ctx) => {
   const t = now();
   if (t - user.lastFarm < 60) {
     const wait = 60 - (t - user.lastFarm);
-    return ctx.editMessageText(
-      `⏳ До следующего фарма осталось ${wait} сек.`,
-      mainMenuButton(ctx.from.id)
-    );
+    return ctx.answerCbQuery(`⏳ До следующего фарма: ${wait} сек.`, { show_alert: true });
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastFarm: t }, $inc: { stars: 1 } });
-  ctx.editMessageText(
-    `🌟 Вы получили 1 звезду!\n\n` +
-    `💫 Ваш новый баланс: ${user.stars + 1} звёзд\n\n` +
-    `Следующий фарм будет доступен через 60 секунд.`,
-    mainMenuButton(ctx.from.id)
-  );
+  ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${user.stars + 1}. Следующий фарм через 60 сек.`, { show_alert: true });
 });
 
 bot.action('bonus', async (ctx) => {
@@ -143,18 +135,10 @@ bot.action('bonus', async (ctx) => {
   if (t - user.lastBonus < 86400) {
     const hours = Math.floor((86400 - (t - user.lastBonus)) / 3600);
     const mins = Math.floor((86400 - (t - user.lastBonus)) % 3600 / 60);
-    return ctx.editMessageText(
-      `⏳ До следующего бонуса: ${hours}ч ${mins}м.`,
-      mainMenuButton(ctx.from.id)
-    );
+    return ctx.answerCbQuery(`⏳ До следующего бонуса: ${hours}ч ${mins}м.`, { show_alert: true });
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: t }, $inc: { stars: 50 } });
-  ctx.editMessageText(
-    `🎁 Вы получили 50 звёзд бонусом!\n\n` +
-    `💫 Ваш новый баланс: ${user.stars + 50} звёзд\n\n` +
-    `Следующий бонус будет доступен через 24 часа.`,
-    mainMenuButton(ctx.from.id)
-  );
+  ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${user.stars + 50}. Следующий бонус через 24ч.`, { show_alert: true });
 });
 
 bot.action('profile', async (ctx) => {
@@ -194,7 +178,7 @@ bot.action('admin', async (ctx) => {
 
 // Рассылка
 bot.action('admin_broadcast', async (ctx) => {
-  ctx.editMessageText('📢 Введите текст для рассылки:', Markup.forceReply());
+  await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
 });
 bot.on('text', async (ctx) => {
   if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('текст для рассылки')) {
@@ -214,17 +198,17 @@ bot.on('text', async (ctx) => {
 
 // Добавить промокод
 bot.action('admin_addpromo', async (ctx) => {
-  ctx.editMessageText('➕ Введите промокод и количество звёзд через пробел (например: NEWCODE 25):', Markup.forceReply());
+  await ctx.reply('➕ Введите промокод, количество звёзд и активаций через пробел (например: NEWCODE 25 10):', { reply_markup: { force_reply: true } });
 });
 bot.on('text', async (ctx) => {
   if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('Введите промокод')) {
     if (!isAdmin(ctx.from.id)) return;
-    const [code, stars] = ctx.message.text.trim().split(/\s+/);
-    if (!code || isNaN(Number(stars))) {
-      return ctx.reply('❌ Формат: КОД 10', mainMenuButton(ctx.from.id));
+    const [code, stars, max] = ctx.message.text.trim().split(/\s+/);
+    if (!code || isNaN(Number(stars)) || isNaN(Number(max))) {
+      return ctx.reply('❌ Формат: КОД 10 5', mainMenuButton(ctx.from.id));
     }
-    promoCodes[code.toUpperCase()] = Number(stars);
-    return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд добавлен.`, mainMenuButton(ctx.from.id));
+    promoCodes[code.toUpperCase()] = { stars: Number(stars), max: Number(max), used: 0 };
+    return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций добавлен.`, mainMenuButton(ctx.from.id));
   }
 });
 
@@ -245,20 +229,18 @@ bot.action('admin_stats', async (ctx) => {
   );
 });
 
+// Промокоды с количеством активаций
 const promoCodes = {
-  'MAGNUM10': 10,
-  'STAR50': 50
+  // 'CODE': { stars: 10, max: 5, used: 0 }
+  'MAGNUM10': { stars: 10, max: 100, used: 0 },
+  'STAR50': { stars: 50, max: 10, used: 0 }
 };
 
+// Активация промокода с учётом количества активаций
 const userPromoUsed = {};
-
 bot.action('promo', async (ctx) => {
-  ctx.editMessageText(
-    '🎫 Введите промокод одним сообщением:',
-    Markup.forceReply()
-  );
+  await ctx.reply('🎫 Введите промокод одним сообщением:', { reply_markup: { force_reply: true } });
 });
-
 bot.on('text', async (ctx) => {
   if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('Введите промокод')) {
     const code = ctx.message.text.trim().toUpperCase();
@@ -266,10 +248,14 @@ bot.on('text', async (ctx) => {
     if (userPromoUsed[userId + ':' + code]) {
       return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuButton(userId));
     }
-    if (promoCodes[code]) {
-      await users.updateOne({ id: userId }, { $inc: { stars: promoCodes[code] } });
+    const promo = promoCodes[code];
+    if (promo && promo.used < promo.max) {
+      await users.updateOne({ id: userId }, { $inc: { stars: promo.stars } });
       userPromoUsed[userId + ':' + code] = true;
-      return ctx.reply(`✅ Промокод активирован! Вы получили ${promoCodes[code]} звёзд.`, mainMenuButton(userId));
+      promoCodes[code].used++;
+      return ctx.reply(`✅ Промокод активирован! Вы получили ${promo.stars} звёзд. Осталось активаций: ${promo.max - promo.used}`, mainMenuButton(userId));
+    } else if (promo) {
+      return ctx.reply('❌ Лимит активаций промокода исчерпан.', mainMenuButton(userId));
     } else {
       return ctx.reply('❌ Неверный промокод.', mainMenuButton(userId));
     }
