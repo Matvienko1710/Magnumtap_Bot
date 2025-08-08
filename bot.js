@@ -234,9 +234,9 @@ bot.action('invite', withPanelGuard(withSubscription(async (ctx) => {
     `👥 Приглашено друзей: ${user.invited || 0}`,
     mainMenuButton(ctx.from.id)
   );
-}));
+})));
 
-bot.action('main_menu', withSubscription(async (ctx) => {
+bot.action('main_menu', withPanelGuard(withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
@@ -248,9 +248,9 @@ bot.action('main_menu', withSubscription(async (ctx) => {
     `Выбери действие и стань звездой MagnumTapBot! 🌟`,
     mainMenuKeyboard(ctx.from.id)
   );
-}));
+})));
 
-bot.action('farm', withSubscription(async (ctx) => {
+bot.action('farm', withPanelGuard(withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const t = now();
   if (t - user.lastFarm < 60) {
@@ -259,9 +259,9 @@ bot.action('farm', withSubscription(async (ctx) => {
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastFarm: t }, $inc: { stars: 1 } });
   ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${user.stars + 1}. Следующий фарм через 60 сек.`, { show_alert: true });
-}));
+})));
 
-bot.action('bonus', withSubscription(async (ctx) => {
+bot.action('bonus', withPanelGuard(withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const t = now();
   if (t - user.lastBonus < 86400) {
@@ -271,9 +271,9 @@ bot.action('bonus', withSubscription(async (ctx) => {
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: t }, $inc: { stars: 50 } });
   ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${user.stars + 50}. Следующий бонус через 24ч.`, { show_alert: true });
-}));
+})));
 
-bot.action('profile', withSubscription(async (ctx) => {
+bot.action('profile', withPanelGuard(withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
@@ -285,9 +285,9 @@ bot.action('profile', withSubscription(async (ctx) => {
       ...(isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin')]] : [])
     ])
   );
-}));
+})));
 
-bot.action('top', withSubscription(async (ctx) => {
+bot.action('top', withPanelGuard(withSubscription(async (ctx) => {
   const top = await users.find().sort({ stars: -1 }).limit(10).toArray();
   let msg = '🏆 Топ-10 игроков по звёздам:\n\n';
   top.forEach((u, i) => {
@@ -295,9 +295,9 @@ bot.action('top', withSubscription(async (ctx) => {
     msg += `${i + 1}. ${name} — ${u.stars || 0} звёзд\n`;
   });
   ctx.editMessageText(msg, mainMenuButton(ctx.from.id));
-}));
+})));
 
-bot.action('admin', withSubscription(async (ctx) => {
+bot.action('admin', withPanelGuard(withSubscription(async (ctx) => {
   if (!isAdmin(ctx.from.id)) {
     return ctx.answerCbQuery('Нет доступа', { show_alert: true });
   }
@@ -310,24 +310,24 @@ bot.action('admin', withSubscription(async (ctx) => {
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   );
-}));
+})));
 
-bot.action('admin_addpromo', withSubscription(async (ctx) => {
+bot.action('admin_addpromo', withPanelGuard(withSubscription(async (ctx) => {
   await ctx.reply('➕ Введите промокод, количество звёзд и активаций через пробел (например: NEWCODE 25 10):', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал создание промокода`);
-}));
+})));
 
-bot.action('promo', withSubscription(async (ctx) => {
+bot.action('promo', withPanelGuard(withSubscription(async (ctx) => {
   await ctx.reply('🎫 Введите промокод одним сообщением:', { reply_markup: { force_reply: true } });
   console.log(`[USER] ${ctx.from.id} начал ввод промокода`);
-}));
+})));
 
-bot.action('admin_broadcast', withSubscription(async (ctx) => {
+bot.action('admin_broadcast', withPanelGuard(withSubscription(async (ctx) => {
   await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал рассылку`);
-}));
+})));
 
-bot.action('admin_stats', withSubscription(async (ctx) => {
+bot.action('admin_stats', withPanelGuard(withSubscription(async (ctx) => {
   const totalUsers = await users.countDocuments();
   const totalStars = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$stars" } } }]).toArray();
   const totalInvited = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$invited" } } }]).toArray();
@@ -341,7 +341,7 @@ bot.action('admin_stats', withSubscription(async (ctx) => {
       [Markup.button.callback('⚙️ Админ-панель', 'admin')]
     ])
   );
-}));
+})));
 
 connectDB().then(() => {
   bot.launch();
@@ -351,7 +351,7 @@ connectDB().then(() => {
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-bot.action('faq', withSubscription(async (ctx) => {
+bot.action('faq', withPanelGuard(withSubscription(async (ctx) => {
   ctx.editMessageText(
     `❓ <b>FAQ MagnumTapBot</b>\n\n` +
     `• Фармите звёзды раз в минуту\n` +
@@ -361,4 +361,4 @@ bot.action('faq', withSubscription(async (ctx) => {
     `Все звёзды и приглашения хранятся в вашем профиле.`,
     { parse_mode: 'HTML', ...mainMenuButton(ctx.from.id) }
   );
-}));
+})));
