@@ -42,7 +42,7 @@ bot.action('invite', async (ctx) => {
     `Отправь эту ссылку друзьям и получай звёзды за каждого, кто присоединится!\n\n` +
     `🔗 Твоя ссылка: ${refLink}\n\n` +
     `👥 Приглашено друзей: ${user.invited || 0}`,
-    mainMenuKeyboard()
+    mainMenuKeyboard(ctx.from.id)
   );
 });
 
@@ -66,12 +66,18 @@ bot.start(async (ctx) => {
     `👥 Приглашено друзей: ${invited}\n\n` +
     `Выбери действие и стань звездой MagnumTapBot! 🌟\n` +
     `Подсказка: используй /help для справки по боту!`,
-    mainMenuKeyboard()
+    mainMenuKeyboard(ctx.from.id)
   );
 });
 
-function mainMenuKeyboard() {
-  return Markup.inlineKeyboard([
+const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+
+function isAdmin(userId) {
+  return ADMIN_IDS.includes(String(userId));
+}
+
+function mainMenuKeyboard(userId) {
+  const rows = [
     [
       Markup.button.callback('🌟 Фармить звёзды', 'farm'),
       Markup.button.callback('🎁 Бонус', 'bonus')
@@ -84,7 +90,11 @@ function mainMenuKeyboard() {
       Markup.button.callback('🤝 Пригласить друзей', 'invite'),
       Markup.button.callback('🎫 Ввести промокод', 'promo')
     ]
-  ]);
+  ];
+  if (isAdmin(userId)) {
+    rows.push([Markup.button.callback('⚙️ Админ-панель', 'admin')]);
+  }
+  return Markup.inlineKeyboard(rows);
 }
 
 bot.action('farm', async (ctx) => {
@@ -133,7 +143,7 @@ bot.action('profile', async (ctx) => {
     `👤 Профиль
 \n💫 Баланс: ${balance} звёзд\n👥 Приглашено друзей: ${invited}\n\n` +
     `Фармите звёзды, приглашайте друзей и получайте бонусы!`,
-    mainMenuKeyboard()
+    mainMenuKeyboard(ctx.from.id)
   );
 });
 
@@ -145,7 +155,15 @@ bot.action('top', async (ctx) => {
     msg += `${i + 1}. ${name} — ${u.stars || 0} звёзд\n`;
   });
   ctx.answerCbQuery();
-  ctx.editMessageText(msg, mainMenuKeyboard());
+  ctx.editMessageText(msg, mainMenuKeyboard(ctx.from.id));
+});
+
+bot.action('admin', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) {
+    return ctx.answerCbQuery('Нет доступа', { show_alert: true });
+  }
+  ctx.answerCbQuery();
+  ctx.editMessageText('⚙️ Админ-панель\n\nЗдесь будут админ-функции.', mainMenuKeyboard(ctx.from.id));
 });
 
 const promoCodes = {
@@ -168,14 +186,14 @@ bot.on('text', async (ctx) => {
     const code = ctx.message.text.trim().toUpperCase();
     const userId = ctx.from.id;
     if (userPromoUsed[userId + ':' + code]) {
-      return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuKeyboard());
+      return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuKeyboard(ctx.from.id));
     }
     if (promoCodes[code]) {
       await users.updateOne({ id: userId }, { $inc: { stars: promoCodes[code] } });
       userPromoUsed[userId + ':' + code] = true;
-      return ctx.reply(`✅ Промокод активирован! Вы получили ${promoCodes[code]} звёзд.`, mainMenuKeyboard());
+      return ctx.reply(`✅ Промокод активирован! Вы получили ${promoCodes[code]} звёзд.`, mainMenuKeyboard(ctx.from.id));
     } else {
-      return ctx.reply('❌ Неверный промокод.', mainMenuKeyboard());
+      return ctx.reply('❌ Неверный промокод.', mainMenuKeyboard(ctx.from.id));
     }
   }
 });
