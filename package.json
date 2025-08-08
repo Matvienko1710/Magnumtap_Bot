@@ -1,9 +1,9 @@
 {
   "name": "magnumtap_bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "bot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node bot.js"
   },
   "keywords": [],
   "author": "",
@@ -11,9 +11,7 @@
   "description": "",
   "dependencies": {
     "dotenv": "^17.2.1",
-    "fs": "^0.0.1-security",
     "mongodb": "^6.18.0",
-    "sqlite3": "^5.1.7",
     "telegraf": "^4.16.3"
   }
 }
