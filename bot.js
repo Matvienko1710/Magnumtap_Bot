@@ -602,6 +602,12 @@ bot.on('text', async (ctx) => {
         // Функция поиска заявок временно отключена
         return ctx.reply('❌ Функция поиска заявок временно недоступна.');
       }
+      
+      // Временная команда для тестирования бонуса
+      if (text === '/reset_bonus' && isAdmin(ctx.from.id)) {
+        await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: 0 } });
+        return ctx.reply('✅ Бонус сброшен, можете тестировать');
+      }
 
       // Остальные админские команды...
       if (replyText.includes('Выдача титула')) {
@@ -1119,6 +1125,8 @@ bot.action('bonus', async (ctx) => {
   const today = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
   const canBonus = !user.lastBonus || user.lastBonus < today;
   
+  console.log(`Бонус - Пользователь: ${ctx.from.id}, lastBonus: ${user.lastBonus}, today: ${today}, canBonus: ${canBonus}`);
+  
   if (canBonus) {
     // Проверяем серию ежедневных заходов
     const yesterday = today - 1;
@@ -1137,11 +1145,20 @@ bot.action('bonus', async (ctx) => {
     if (newTitles.length > 0) {
       ctx.answerCbQuery('🎁 +10 звёзд бонус! 🏆 Новый титул!');
     } else {
-      ctx.answerCbQuery('🎁 +10 звёзд бонус!');
+      ctx.answerCbQuery('🎁 +10 звёзд! Ежедневный бонус получен!');
     }
   } else {
-    const hoursLeft = 24 - Math.floor((Date.now() % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    ctx.answerCbQuery(`🕐 Следующий бонус через ${hoursLeft}ч`);
+    // Более точный расчет времени до следующего бонуса
+    const nextBonusTime = (user.lastBonus + 1) * (1000 * 60 * 60 * 24);
+    const timeLeft = nextBonusTime - Date.now();
+    const hoursLeft = Math.ceil(timeLeft / (1000 * 60 * 60));
+    const minutesLeft = Math.ceil((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hoursLeft > 0) {
+      ctx.answerCbQuery(`🕐 Следующий бонус через ${hoursLeft}ч ${minutesLeft}мин`);
+    } else {
+      ctx.answerCbQuery(`🕐 Следующий бонус через ${minutesLeft} минут`);
+    }
   }
 });
 
