@@ -70,28 +70,10 @@ function withSubscription(handler) {
 }
 
 // Применить withSubscription ко всем action и start
-bot.start = withSubscription(bot.start);
-bot.action = (type, handler) => {
-  Telegraf.prototype.action.call(bot, type, withSubscription(handler));
-};
-bot.command = (type, handler) => {
-  Telegraf.prototype.command.call(bot, type, withSubscription(handler));
-};
+// Удаляем ошибочную перезапись методов bot.start, bot.action, bot.command
+// Вместо этого оборачиваем каждый handler вручную:
 
-bot.action('invite', async (ctx) => {
-  const user = await getUser(ctx.from.id);
-  const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
-  ctx.editMessageText(
-    `🤝 Пригласить друзей\n\n` +
-    `Отправь эту ссылку друзьям и получай звёзды за каждого, кто присоединится!\n\n` +
-    `🔗 Твоя ссылка: ${refLink}\n\n` +
-    `👥 Приглашено друзей: ${user.invited || 0}`,
-    mainMenuButton(ctx.from.id)
-  );
-});
-
-// Учёт приглашённых друзей при старте по реферальной ссылке
-bot.start(async (ctx) => {
+bot.start(withSubscription(async (ctx) => {
   let ref = null;
   if (ctx.startPayload && ctx.startPayload !== String(ctx.from.id)) {
     ref = ctx.startPayload;
@@ -112,43 +94,21 @@ bot.start(async (ctx) => {
     `Подсказка: используй /help для справки по боту!`,
     mainMenuKeyboard(ctx.from.id)
   );
-});
+}));
 
-const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+bot.action('invite', withSubscription(async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
+  ctx.editMessageText(
+    `🤝 Пригласить друзей\n\n` +
+    `Отправь эту ссылку друзьям и получай звёзды за каждого, кто присоединится!\n\n` +
+    `🔗 Твоя ссылка: ${refLink}\n\n` +
+    `👥 Приглашено друзей: ${user.invited || 0}`,
+    mainMenuButton(ctx.from.id)
+  );
+}));
 
-function isAdmin(userId) {
-  return ADMIN_IDS.includes(String(userId));
-}
-
-function mainMenuKeyboard(userId) {
-  const rows = [
-    [
-      Markup.button.callback('🌟 Фармить звёзды', 'farm'),
-      Markup.button.callback('🎁 Бонус', 'bonus')
-    ],
-    [
-      Markup.button.callback('👤 Профиль', 'profile'),
-      Markup.button.callback('🏆 Топ', 'top')
-    ],
-    [
-      Markup.button.callback('🤝 Пригласить друзей', 'invite'),
-      Markup.button.callback('🎫 Ввести промокод', 'promo')
-    ]
-  ];
-  if (isAdmin(userId)) {
-    rows.push([Markup.button.callback('⚙️ Админ-панель', 'admin')]);
-  }
-  return Markup.inlineKeyboard(rows);
-}
-
-function mainMenuButton(userId) {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')],
-    ...(isAdmin(userId) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin')]] : [])
-  ]);
-}
-
-bot.action('main_menu', async (ctx) => {
+bot.action('main_menu', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
@@ -161,9 +121,9 @@ bot.action('main_menu', async (ctx) => {
     `Подсказка: используй /help для справки по боту!`,
     mainMenuKeyboard(ctx.from.id)
   );
-});
+}));
 
-bot.action('farm', async (ctx) => {
+bot.action('farm', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const t = now();
   if (t - user.lastFarm < 60) {
@@ -172,9 +132,9 @@ bot.action('farm', async (ctx) => {
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastFarm: t }, $inc: { stars: 1 } });
   ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${user.stars + 1}. Следующий фарм через 60 сек.`, { show_alert: true });
-});
+}));
 
-bot.action('bonus', async (ctx) => {
+bot.action('bonus', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const t = now();
   if (t - user.lastBonus < 86400) {
@@ -184,9 +144,9 @@ bot.action('bonus', async (ctx) => {
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: t }, $inc: { stars: 50 } });
   ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${user.stars + 50}. Следующий бонус через 24ч.`, { show_alert: true });
-});
+}));
 
-bot.action('profile', async (ctx) => {
+bot.action('profile', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
@@ -194,9 +154,9 @@ bot.action('profile', async (ctx) => {
     `👤 Профиль\n\n💫 Баланс: ${balance} звёзд\n👥 Приглашено друзей: ${invited}\n\nФармите звёзды, приглашайте друзей и получайте бонусы!`,
     mainMenuButton(ctx.from.id)
   );
-});
+}));
 
-bot.action('top', async (ctx) => {
+bot.action('top', withSubscription(async (ctx) => {
   const top = await users.find().sort({ stars: -1 }).limit(10).toArray();
   let msg = '🏆 Топ-10 игроков по звёздам:\n\n';
   top.forEach((u, i) => {
@@ -204,9 +164,9 @@ bot.action('top', async (ctx) => {
     msg += `${i + 1}. ${name} — ${u.stars || 0} звёзд\n`;
   });
   ctx.editMessageText(msg, mainMenuButton(ctx.from.id));
-});
+}));
 
-bot.action('admin', async (ctx) => {
+bot.action('admin', withSubscription(async (ctx) => {
   if (!isAdmin(ctx.from.id)) {
     return ctx.answerCbQuery('Нет доступа', { show_alert: true });
   }
@@ -219,85 +179,24 @@ bot.action('admin', async (ctx) => {
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   );
-});
+}));
 
-// Добавить промокод (админ)
-bot.action('admin_addpromo', async (ctx) => {
+bot.action('admin_addpromo', withSubscription(async (ctx) => {
   await ctx.reply('➕ Введите промокод, количество звёзд и активаций через пробел (например: NEWCODE 25 10):', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал создание промокода`);
-});
+}));
 
-// Активация промокода (пользователь)
-bot.action('promo', async (ctx) => {
+bot.action('promo', withSubscription(async (ctx) => {
   await ctx.reply('🎫 Введите промокод одним сообщением:', { reply_markup: { force_reply: true } });
   console.log(`[USER] ${ctx.from.id} начал ввод промокода`);
-});
+}));
 
-// Рассылка (админ)
-bot.action('admin_broadcast', async (ctx) => {
+bot.action('admin_broadcast', withSubscription(async (ctx) => {
   await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал рассылку`);
-});
+}));
 
-// Универсальный обработчик force_reply
-bot.on('text', async (ctx) => {
-  if (ctx.message.reply_to_message) {
-    const replyText = ctx.message.reply_to_message.text;
-    // Создание промокода (админ)
-    if (replyText.includes('Введите промокод, количество звёзд')) {
-      if (!isAdmin(ctx.from.id)) return;
-      const [code, stars, max] = ctx.message.text.trim().split(/\s+/);
-      if (!code || isNaN(Number(stars)) || isNaN(Number(max))) {
-        console.log(`[ADMIN] ${ctx.from.id} ошибка формата промокода: ${ctx.message.text}`);
-        return ctx.reply('❌ Формат: КОД 10 5', mainMenuButton(ctx.from.id));
-      }
-      promoCodes[code.toUpperCase()] = { stars: Number(stars), max: Number(max), used: 0 };
-      console.log(`[ADMIN] ${ctx.from.id} добавил промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций`);
-      return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций добавлен.`, mainMenuButton(ctx.from.id));
-    }
-    // Активация промокода (пользователь)
-    if (replyText.includes('Введите промокод одним сообщением')) {
-      const code = ctx.message.text.trim().toUpperCase();
-      const userId = ctx.from.id;
-      if (userPromoUsed[userId + ':' + code]) {
-        console.log(`[USER] ${userId} повторная попытка промокода ${code}`);
-        return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuButton(userId));
-      }
-      const promo = promoCodes[code];
-      if (promo && promo.used < promo.max) {
-        await users.updateOne({ id: userId }, { $inc: { stars: promo.stars } });
-        userPromoUsed[userId + ':' + code] = true;
-        promoCodes[code].used++;
-        console.log(`[USER] ${userId} активировал промокод ${code}, осталось ${promo.max - promo.used}`);
-        return ctx.reply(`✅ Промокод активирован! Вы получили ${promo.stars} звёзд. Осталось активаций: ${promo.max - promo.used}`, mainMenuButton(userId));
-      } else if (promo) {
-        console.log(`[USER] ${userId} попытка исчерпанного промокода ${code}`);
-        return ctx.reply('❌ Лимит активаций промокода исчерпан.', mainMenuButton(userId));
-      } else {
-        console.log(`[USER] ${userId} неверный промокод ${code}`);
-        return ctx.reply('❌ Неверный промокод.', mainMenuButton(userId));
-      }
-    }
-    // Рассылка (админ)
-    if (replyText.includes('текст для рассылки')) {
-      if (!isAdmin(ctx.from.id)) return;
-      const text = ctx.message.text;
-      const allUsers = await users.find().toArray();
-      let sent = 0;
-      for (const u of allUsers) {
-        try {
-          await ctx.telegram.sendMessage(u.id, `📢 Сообщение от администрации:\n\n${text}`);
-          sent++;
-        } catch {}
-      }
-      console.log(`[ADMIN] ${ctx.from.id} сделал рассылку, доставлено: ${sent}`);
-      return ctx.reply(`✅ Рассылка завершена. Доставлено: ${sent} пользователям.`, mainMenuButton(ctx.from.id));
-    }
-  }
-});
-
-// Статистика
-bot.action('admin_stats', async (ctx) => {
+bot.action('admin_stats', withSubscription(async (ctx) => {
   const totalUsers = await users.countDocuments();
   const totalStars = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$stars" } } }]).toArray();
   const totalInvited = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$invited" } } }]).toArray();
@@ -311,7 +210,7 @@ bot.action('admin_stats', async (ctx) => {
       [Markup.button.callback('⚙️ Админ-панель', 'admin')]
     ])
   );
-});
+}));
 
 // Промокоды с количеством активаций
 const promoCodes = {
