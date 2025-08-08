@@ -165,6 +165,12 @@ bot.on('text', withSubscription(async (ctx) => {
 // Вместо этого оборачиваем каждый handler вручную:
 
 bot.start(withSubscription(async (ctx) => {
+  // Удаляем предыдущее сообщение с панелью, если оно есть
+  if (ctx.message && ctx.message.message_id) {
+    try {
+      await ctx.deleteMessage(ctx.message.message_id - 1);
+    } catch (e) {}
+  }
   // Реферал: только если пользователь впервые запускает бота по чужой ссылке
   let ref = null;
   if (ctx.startPayload && ctx.startPayload !== String(ctx.from.id)) {
