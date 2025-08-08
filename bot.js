@@ -33,6 +33,51 @@ async function getUser(id) {
   return user;
 }
 
+const REQUIRED_CHANNEL = process.env.REQUIRED_CHANNEL;
+
+async function checkSubscription(ctx) {
+  if (!REQUIRED_CHANNEL) return true;
+  try {
+    const member = await ctx.telegram.getChatMember(REQUIRED_CHANNEL, ctx.from.id);
+    if (["member", "administrator", "creator"].includes(member.status)) {
+      return true;
+    }
+    // not subscribed
+  } catch (e) {
+    // channel not found or user not found
+  }
+  await ctx.reply(
+    `❗ Для использования бота подпишитесь на канал!`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '🔗 Перейти в канал', url: `https://t.me/${REQUIRED_CHANNEL.replace('@', '')}` }
+          ]
+        ]
+      }
+    }
+  );
+  return false;
+}
+
+// Обёртка для всех action и команд
+function withSubscription(handler) {
+  return async (ctx, ...args) => {
+    if (!(await checkSubscription(ctx))) return;
+    return handler(ctx, ...args);
+  };
+}
+
+// Применить withSubscription ко всем action и start
+bot.start = withSubscription(bot.start);
+bot.action = (type, handler) => {
+  Telegraf.prototype.action.call(bot, type, withSubscription(handler));
+};
+bot.command = (type, handler) => {
+  Telegraf.prototype.command.call(bot, type, withSubscription(handler));
+};
+
 bot.action('invite', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
