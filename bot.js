@@ -27,10 +27,14 @@ async function getUser(id) {
   return user;
 }
 
+const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
+
 bot.start(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   await ctx.reply(
     `👋 Добро пожаловать в MagnumTapBot! 🌟\n\n` +
     `Ты в игре, где можно зарабатывать звёзды ✨, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n` +
@@ -40,7 +44,8 @@ bot.start(async (ctx) => {
     Markup.inlineKeyboard([
       [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
       [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')]
+      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+      ...adminRow
     ])
   );
 });
@@ -138,6 +143,102 @@ bot.on('text', async (ctx) => {
     } else {
       return ctx.reply('❌ Неверный промокод.', Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]]));
     }
+  }
+});
+
+bot.action('admin_panel', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа', { show_alert: true });
+  ctx.editMessageText(
+    '⚙️ Админ-панель\n\nВыберите действие:',
+    Markup.inlineKeyboard([
+      [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
+      [Markup.button.callback('➕ Промокод', 'admin_addpromo')],
+      [Markup.button.callback('📊 Статистика', 'admin_stats')],
+      [Markup.button.callback('⭐ Выдать/забрать звёзды', 'admin_stars')],
+      [Markup.button.callback('👥 Рефералы пользователя', 'admin_refs')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ])
+  );
+});
+
+// Рассылка
+bot.action('admin_broadcast', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return;
+  await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
+});
+
+// Добавить промокод
+bot.action('admin_addpromo', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return;
+  await ctx.reply('➕ Введите промокод и количество звёзд через пробел (например: NEWCODE 25):', { reply_markup: { force_reply: true } });
+});
+
+// Статистика
+bot.action('admin_stats', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return;
+  const totalUsers = await users.countDocuments();
+  const totalStars = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$stars" } } }]).toArray();
+  const totalInvited = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$invited" } } }]).toArray();
+  ctx.editMessageText(
+    `📊 Статистика бота\n\n` +
+    `👥 Пользователей: ${totalUsers}\n` +
+    `💫 Всего звёзд: ${totalStars[0]?.sum || 0}\n` +
+    `🤝 Всего приглашений: ${totalInvited[0]?.sum || 0}`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')],
+      [Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]
+    ])
+  );
+});
+
+// Выдать/забрать звёзды
+bot.action('admin_stars', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return;
+  await ctx.reply('⭐ Введите ID пользователя и количество звёзд через пробел (например: 123456789 10 или 123456789 -5):', { reply_markup: { force_reply: true } });
+});
+
+// Рефералы пользователя
+bot.action('admin_refs', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return;
+  await ctx.reply('👥 Введите ID пользователя для просмотра его рефералов:', { reply_markup: { force_reply: true } });
+});
+
+// Обработка force_reply для админки
+bot.on('text', async (ctx) => {
+  if (!isAdmin(ctx.from.id) || !ctx.message.reply_to_message) return;
+  const replyText = ctx.message.reply_to_message.text;
+  // Рассылка
+  if (replyText.includes('текст для рассылки')) {
+    const text = ctx.message.text;
+    const allUsers = await users.find().toArray();
+    let sent = 0;
+    for (const u of allUsers) {
+      try { await ctx.telegram.sendMessage(u.id, `📢 Сообщение от администрации:\n\n${text}`); sent++; } catch {}
+    }
+    return ctx.reply(`✅ Рассылка завершена. Доставлено: ${sent} пользователям.`);
+  }
+  // Промокод
+  if (replyText.includes('Введите промокод и количество звёзд')) {
+    const [code, stars] = ctx.message.text.trim().split(/\s+/);
+    if (!code || isNaN(Number(stars))) return ctx.reply('❌ Формат: КОД 10');
+    promoCodes[code.toUpperCase()] = Number(stars);
+    return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд добавлен.`);
+  }
+  // Выдать/забрать звёзды
+  if (replyText.includes('ID пользователя и количество звёзд')) {
+    const [id, stars] = ctx.message.text.trim().split(/\s+/);
+    if (!id || isNaN(Number(stars))) return ctx.reply('❌ Формат: ID 10');
+    await users.updateOne({ id: Number(id) }, { $inc: { stars: Number(stars) } });
+    return ctx.reply(`✅ Пользователю ${id} выдано/забрано ${stars} звёзд.`);
+  }
+  // Рефералы пользователя
+  if (replyText.includes('для просмотра его рефералов')) {
+    const id = ctx.message.text.trim();
+    const refs = await users.find({ invitedBy: id }).toArray();
+    if (!refs.length) return ctx.reply('У пользователя нет рефералов.');
+    let msg = `👥 Рефералы пользователя ${id}:\n\n`;
+    refs.forEach((u, i) => { msg += `${i + 1}. ${u.id}\n`; });
+    return ctx.reply(msg);
   }
 });
 
