@@ -45,26 +45,25 @@ const TICKET_STATUSES = {
 };
 
 async function createSupportTicket(userId, username, message) {
-  const ticketId = Math.random().toString(36).substr(2, 9).toUpperCase();
   const ticket = {
-    id: ticketId,
     userId: userId,
     username: username || 'Неизвестно',
     message: message,
     status: 'new',
-    created: now(),
-    updated: now(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
     adminResponse: null
   };
   
-  await supportTickets.insertOne(ticket);
+  const result = await supportTickets.insertOne(ticket);
+  ticket._id = result.insertedId;
   return ticket;
 }
 
 async function updateTicketStatus(ticketId, status, adminResponse = null, messageId = null) {
   const updateData = { 
     status: status, 
-    updated: now() 
+    updatedAt: new Date() 
   };
   
   if (adminResponse) {
@@ -72,7 +71,7 @@ async function updateTicketStatus(ticketId, status, adminResponse = null, messag
   }
   
   await supportTickets.updateOne(
-    { id: ticketId },
+    { _id: ticketId },
     { $set: updateData }
   );
 
@@ -93,6 +92,23 @@ async function updateTicketStatus(ticketId, status, adminResponse = null, messag
         }
       }
     );
+  }
+}
+
+async function notifyUserStatusChange(ticketId, statusText) {
+  try {
+    const ticket = await supportTickets.findOne({ _id: ticketId });
+    if (!ticket) return;
+    
+    await bot.telegram.sendMessage(ticket.userId, 
+      `🎫 **Обновление заявки #${ticketId.toString().slice(-6)}**\n\n` +
+      `📊 **Статус:** Ваша заявка ${statusText}\n\n` +
+      `💬 **Исходное сообщение:** ${ticket.message}\n\n` +
+      `📅 **Дата обновления:** ${new Date().toLocaleString('ru-RU')}`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Ошибка уведомления пользователя:', error);
   }
 }
 
@@ -476,7 +492,7 @@ bot.on('text', async (ctx) => {
       
       ctx.reply(
         `✅ **Заявка создана успешно!**\n\n` +
-        `🎫 **ID заявки:** \`${ticket.id}\`\n` +
+        `🎫 **ID заявки:** \`${ticket._id.toString().slice(-6)}\`\n` +
         `📅 **Дата:** ${new Date().toLocaleString('ru-RU')}\n\n` +
         `💬 **Ваше сообщение:**\n${text}\n\n` +
         `⚡ Мы рассмотрим вашу заявку в течение 24 часов и уведомим о статусе.`,
@@ -494,50 +510,13 @@ bot.on('text', async (ctx) => {
     // Админские команды
     if (isAdmin(ctx.from.id)) {
       if (replyText.includes('Ответ пользователю по заявке')) {
-        const ticketId = replyText.match(/#([A-Z0-9]+)/)[1];
-        const ticket = await supportTickets.findOne({ id: ticketId });
-        
-        if (!ticket) {
-          return ctx.reply('❌ Заявка не найдена!');
-        }
-
-        // Обновляем заявку с ответом админа
-        await updateTicketStatus(ticketId, 'in_progress', text);
-
-        // Отправляем ответ пользователю
-        try {
-          await bot.telegram.sendMessage(ticket.userId,
-            `💼 **Ответ от техподдержки по заявке #${ticketId}:**\n\n${text}\n\n` +
-            `🎫 Ваша заявка находится в работе. При необходимости мы свяжемся с вами дополнительно.`,
-            { parse_mode: 'Markdown' }
-          );
-          ctx.reply(`✅ Ответ отправлен пользователю @${ticket.username}`);
-        } catch (error) {
-          ctx.reply('❌ Ошибка отправки ответа пользователю');
-        }
-        return;
+        // Функция ответа временно отключена для отладки
+        return ctx.reply('❌ Функция ответа на заявки временно недоступна. Используйте кнопки в канале поддержки.');
       }
 
       if (replyText.includes('Поиск заявки')) {
-        const searchQuery = text.trim();
-        let ticket;
-
-        // Поиск по ID заявки
-        if (searchQuery.length <= 10) {
-          ticket = await supportTickets.findOne({ id: searchQuery.toUpperCase() });
-        } else {
-          // Поиск по Telegram ID
-          const tickets = await supportTickets.find({ userId: parseInt(searchQuery) }).sort({ created: -1 }).limit(1).toArray();
-          ticket = tickets[0];
-        }
-
-        if (!ticket) {
-          return ctx.reply('❌ Заявка не найдена!');
-        }
-
-        // Показываем найденную заявку
-        ctx.action(`admin_ticket_view_${ticket.id}`)(ctx);
-        return;
+        // Функция поиска заявок временно отключена
+        return ctx.reply('❌ Функция поиска заявок временно недоступна.');
       }
 
       // Остальные админские команды...
@@ -1135,13 +1114,14 @@ bot.action(/^ticket_accept_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  await updateTicketStatus(ticketId, 'in_progress');
-  await notifyUserStatusChange(ticketId, 'принята в работу ⚙️');
+  const objectId = require('mongodb').ObjectId(ticketId);
+  await updateTicketStatus(objectId, 'in_progress');
+  await notifyUserStatusChange(objectId, 'принята в работу ⚙️');
   
   ctx.answerCbQuery('✅ Заявка принята в работу');
   
   // Обновляем сообщение в канале
-  const ticket = await supportTickets.findOne({ id: ticketId });
+  const ticket = await supportTickets.findOne({ _id: require('mongodb').ObjectId(ticketId) });
   if (ticket) {
     const statusInfo = TICKET_STATUSES[ticket.status];
     const newText = ctx.callbackQuery.message.text.replace(
@@ -1166,8 +1146,9 @@ bot.action(/^ticket_reject_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  await updateTicketStatus(ticketId, 'rejected');
-  await notifyUserStatusChange(ticketId, 'отклонена ❌');
+  const objectId = require('mongodb').ObjectId(ticketId);
+  await updateTicketStatus(objectId, 'rejected');
+  await notifyUserStatusChange(objectId, 'отклонена ❌');
   
   ctx.answerCbQuery('❌ Заявка отклонена');
   
@@ -1184,8 +1165,9 @@ bot.action(/^ticket_resolve_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  await updateTicketStatus(ticketId, 'resolved');
-  await notifyUserStatusChange(ticketId, 'решена ✅');
+  const objectId = require('mongodb').ObjectId(ticketId);
+  await updateTicketStatus(objectId, 'resolved');
+  await notifyUserStatusChange(objectId, 'решена ✅');
   
   ctx.answerCbQuery('✅ Заявка решена');
   
@@ -1201,8 +1183,9 @@ bot.action(/^ticket_close_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  await updateTicketStatus(ticketId, 'closed');
-  await notifyUserStatusChange(ticketId, 'закрыта 🔒');
+  const objectId = require('mongodb').ObjectId(ticketId);
+  await updateTicketStatus(objectId, 'closed');
+  await notifyUserStatusChange(objectId, 'закрыта 🔒');
   
   ctx.answerCbQuery('🔒 Заявка закрыта');
   
