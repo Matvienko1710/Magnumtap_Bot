@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 
 // Конфигурация
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -1200,7 +1200,7 @@ bot.action(/^ticket_accept_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  const objectId = require('mongodb').ObjectId(ticketId);
+  const objectId = new ObjectId(ticketId);
   await updateTicketStatus(objectId, 'in_progress');
   await notifyUserStatusChange(objectId, 'принята в работу ⚙️');
   await updateTicketInChannel(objectId);
@@ -1212,7 +1212,7 @@ bot.action(/^ticket_reject_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  const objectId = require('mongodb').ObjectId(ticketId);
+  const objectId = new ObjectId(ticketId);
   await updateTicketStatus(objectId, 'rejected');
   await notifyUserStatusChange(objectId, 'отклонена ❌');
   await updateTicketInChannel(objectId);
@@ -1224,7 +1224,7 @@ bot.action(/^ticket_resolve_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  const objectId = require('mongodb').ObjectId(ticketId);
+  const objectId = new ObjectId(ticketId);
   await updateTicketStatus(objectId, 'resolved');
   await notifyUserStatusChange(objectId, 'решена ✅');
   await updateTicketInChannel(objectId);
@@ -1236,7 +1236,7 @@ bot.action(/^ticket_close_(.+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   const ticketId = ctx.match[1];
-  const objectId = require('mongodb').ObjectId(ticketId);
+  const objectId = new ObjectId(ticketId);
   await updateTicketStatus(objectId, 'closed');
   await notifyUserStatusChange(objectId, 'закрыта 🔒');
   await updateTicketInChannel(objectId);
