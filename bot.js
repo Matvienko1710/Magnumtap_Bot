@@ -211,7 +211,7 @@ bot.action('invite', withSubscription(async (ctx) => {
     `👥 Приглашено друзей: ${user.invited || 0}`,
     mainMenuButton(ctx.from.id)
   );
-})));
+}));
 
 bot.action('main_menu', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -225,7 +225,7 @@ bot.action('main_menu', withSubscription(async (ctx) => {
     `Выбери действие и стань звездой MagnumTapBot! 🌟`,
     mainMenuKeyboard(ctx.from.id)
   );
-})));
+}));
 
 bot.action('farm', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -236,7 +236,7 @@ bot.action('farm', withSubscription(async (ctx) => {
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastFarm: t }, $inc: { stars: 1 } });
   ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${user.stars + 1}. Следующий фарм через 60 сек.`, { show_alert: true });
-})));
+}));
 
 bot.action('bonus', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -248,7 +248,7 @@ bot.action('bonus', withSubscription(async (ctx) => {
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: t }, $inc: { stars: 50 } });
   ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${user.stars + 50}. Следующий бонус через 24ч.`, { show_alert: true });
-})));
+}));
 
 bot.action('profile', withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -262,7 +262,7 @@ bot.action('profile', withSubscription(async (ctx) => {
       ...(isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin')]] : [])
     ])
   );
-})));
+}));
 
 bot.action('top', withSubscription(async (ctx) => {
   const top = await users.find().sort({ stars: -1 }).limit(10).toArray();
@@ -272,7 +272,7 @@ bot.action('top', withSubscription(async (ctx) => {
     msg += `${i + 1}. ${name} — ${u.stars || 0} звёзд\n`;
   });
   ctx.editMessageText(msg, mainMenuButton(ctx.from.id));
-})));
+}));
 
 bot.action('admin', withSubscription(async (ctx) => {
   if (!isAdmin(ctx.from.id)) {
@@ -287,22 +287,22 @@ bot.action('admin', withSubscription(async (ctx) => {
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   );
-})));
+}));
 
 bot.action('admin_addpromo', withSubscription(async (ctx) => {
   await ctx.reply('➕ Введите промокод, количество звёзд и активаций через пробел (например: NEWCODE 25 10):', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал создание промокода`);
-})));
+}));
 
 bot.action('promo', withSubscription(async (ctx) => {
   await ctx.reply('🎫 Введите промокод одним сообщением:', { reply_markup: { force_reply: true } });
   console.log(`[USER] ${ctx.from.id} начал ввод промокода`);
-})));
+}));
 
 bot.action('admin_broadcast', withSubscription(async (ctx) => {
   await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
   console.log(`[ADMIN] ${ctx.from.id} начал рассылку`);
-})));
+}));
 
 bot.action('admin_stats', withSubscription(async (ctx) => {
   const totalUsers = await users.countDocuments();
@@ -318,7 +318,7 @@ bot.action('admin_stats', withSubscription(async (ctx) => {
       [Markup.button.callback('⚙️ Админ-панель', 'admin')]
     ])
   );
-})));
+}));
 
 connectDB().then(() => {
   bot.launch();
@@ -338,4 +338,4 @@ bot.action('faq', withSubscription(async (ctx) => {
     `Все звёзды и приглашения хранятся в вашем профиле.`,
     { parse_mode: 'HTML', ...mainMenuButton(ctx.from.id) }
   );
-})));
+}));
