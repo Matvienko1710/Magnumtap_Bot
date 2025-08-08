@@ -5,7 +5,7 @@ const { MongoClient } = require('mongodb');
 // Конфигурация
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const MONGODB_URI = process.env.MONGODB_URI;
-const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => id.trim()) : [];
 const SUPPORT_CHANNEL = process.env.SUPPORT_CHANNEL; // Имя канала без @
 
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
