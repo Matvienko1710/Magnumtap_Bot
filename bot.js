@@ -176,39 +176,78 @@ bot.action('admin', async (ctx) => {
   );
 });
 
-// Рассылка
-bot.action('admin_broadcast', async (ctx) => {
-  await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
-});
-bot.on('text', async (ctx) => {
-  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('текст для рассылки')) {
-    if (!isAdmin(ctx.from.id)) return;
-    const text = ctx.message.text;
-    const allUsers = await users.find().toArray();
-    let sent = 0;
-    for (const u of allUsers) {
-      try {
-        await ctx.telegram.sendMessage(u.id, `📢 Сообщение от администрации:\n\n${text}`);
-        sent++;
-      } catch {}
-    }
-    return ctx.reply(`✅ Рассылка завершена. Доставлено: ${sent} пользователям.`, mainMenuButton(ctx.from.id));
-  }
-});
-
-// Добавить промокод
+// Добавить промокод (админ)
 bot.action('admin_addpromo', async (ctx) => {
   await ctx.reply('➕ Введите промокод, количество звёзд и активаций через пробел (например: NEWCODE 25 10):', { reply_markup: { force_reply: true } });
+  console.log(`[ADMIN] ${ctx.from.id} начал создание промокода`);
 });
+
+// Активация промокода (пользователь)
+bot.action('promo', async (ctx) => {
+  await ctx.reply('🎫 Введите промокод одним сообщением:', { reply_markup: { force_reply: true } });
+  console.log(`[USER] ${ctx.from.id} начал ввод промокода`);
+});
+
+// Рассылка (админ)
+bot.action('admin_broadcast', async (ctx) => {
+  await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
+  console.log(`[ADMIN] ${ctx.from.id} начал рассылку`);
+});
+
+// Универсальный обработчик force_reply
 bot.on('text', async (ctx) => {
-  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('Введите промокод')) {
-    if (!isAdmin(ctx.from.id)) return;
-    const [code, stars, max] = ctx.message.text.trim().split(/\s+/);
-    if (!code || isNaN(Number(stars)) || isNaN(Number(max))) {
-      return ctx.reply('❌ Формат: КОД 10 5', mainMenuButton(ctx.from.id));
+  if (ctx.message.reply_to_message) {
+    const replyText = ctx.message.reply_to_message.text;
+    // Создание промокода (админ)
+    if (replyText.includes('Введите промокод, количество звёзд')) {
+      if (!isAdmin(ctx.from.id)) return;
+      const [code, stars, max] = ctx.message.text.trim().split(/\s+/);
+      if (!code || isNaN(Number(stars)) || isNaN(Number(max))) {
+        console.log(`[ADMIN] ${ctx.from.id} ошибка формата промокода: ${ctx.message.text}`);
+        return ctx.reply('❌ Формат: КОД 10 5', mainMenuButton(ctx.from.id));
+      }
+      promoCodes[code.toUpperCase()] = { stars: Number(stars), max: Number(max), used: 0 };
+      console.log(`[ADMIN] ${ctx.from.id} добавил промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций`);
+      return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций добавлен.`, mainMenuButton(ctx.from.id));
     }
-    promoCodes[code.toUpperCase()] = { stars: Number(stars), max: Number(max), used: 0 };
-    return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд, ${max} активаций добавлен.`, mainMenuButton(ctx.from.id));
+    // Активация промокода (пользователь)
+    if (replyText.includes('Введите промокод одним сообщением')) {
+      const code = ctx.message.text.trim().toUpperCase();
+      const userId = ctx.from.id;
+      if (userPromoUsed[userId + ':' + code]) {
+        console.log(`[USER] ${userId} повторная попытка промокода ${code}`);
+        return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuButton(userId));
+      }
+      const promo = promoCodes[code];
+      if (promo && promo.used < promo.max) {
+        await users.updateOne({ id: userId }, { $inc: { stars: promo.stars } });
+        userPromoUsed[userId + ':' + code] = true;
+        promoCodes[code].used++;
+        console.log(`[USER] ${userId} активировал промокод ${code}, осталось ${promo.max - promo.used}`);
+        return ctx.reply(`✅ Промокод активирован! Вы получили ${promo.stars} звёзд. Осталось активаций: ${promo.max - promo.used}`, mainMenuButton(userId));
+      } else if (promo) {
+        console.log(`[USER] ${userId} попытка исчерпанного промокода ${code}`);
+        return ctx.reply('❌ Лимит активаций промокода исчерпан.', mainMenuButton(userId));
+      } else {
+        console.log(`[USER] ${userId} неверный промокод ${code}`);
+        return ctx.reply('❌ Неверный промокод.', mainMenuButton(userId));
+      }
+    }
+    // Рассылка (админ)
+    if (replyText.includes('текст для рассылки')) {
+      if (!isAdmin(ctx.from.id)) return;
+      const text = ctx.message.text;
+      const allUsers = await users.find().toArray();
+      let sent = 0;
+      for (const u of allUsers) {
+        try {
+          await ctx.telegram.sendMessage(u.id, `📢 Сообщение от администрации:\n\n${text}`);
+          sent++;
+        } catch {}
+      }
+      console.log(`[ADMIN] ${ctx.from.id} сделал рассылку, доставлено: ${sent}`);
+      return ctx.reply(`✅ Рассылка завершена. Доставлено: ${sent} пользователям.`, mainMenuButton(ctx.from.id));
+    }
   }
 });
 
@@ -238,29 +277,6 @@ const promoCodes = {
 
 // Активация промокода с учётом количества активаций
 const userPromoUsed = {};
-bot.action('promo', async (ctx) => {
-  await ctx.reply('🎫 Введите промокод одним сообщением:', { reply_markup: { force_reply: true } });
-});
-bot.on('text', async (ctx) => {
-  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('Введите промокод')) {
-    const code = ctx.message.text.trim().toUpperCase();
-    const userId = ctx.from.id;
-    if (userPromoUsed[userId + ':' + code]) {
-      return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuButton(userId));
-    }
-    const promo = promoCodes[code];
-    if (promo && promo.used < promo.max) {
-      await users.updateOne({ id: userId }, { $inc: { stars: promo.stars } });
-      userPromoUsed[userId + ':' + code] = true;
-      promoCodes[code].used++;
-      return ctx.reply(`✅ Промокод активирован! Вы получили ${promo.stars} звёзд. Осталось активаций: ${promo.max - promo.used}`, mainMenuButton(userId));
-    } else if (promo) {
-      return ctx.reply('❌ Лимит активаций промокода исчерпан.', mainMenuButton(userId));
-    } else {
-      return ctx.reply('❌ Неверный промокод.', mainMenuButton(userId));
-    }
-  }
-});
 
 connectDB().then(() => {
   bot.launch();
