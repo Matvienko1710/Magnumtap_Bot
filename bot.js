@@ -123,18 +123,10 @@ bot.action('farm', async (ctx) => {
   const t = now();
   if (t - user.lastFarm < 60) {
     const wait = 60 - (t - user.lastFarm);
-    return ctx.editMessageText(
-      `⏳ До следующего фарма осталось ${wait} сек.`,
-      mainMenuButton(ctx.from.id)
-    );
+    return ctx.answerCbQuery(`⏳ До следующего фарма: ${wait} сек.`, { show_alert: true });
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastFarm: t }, $inc: { stars: 1 } });
-  ctx.editMessageText(
-    `🌟 Вы получили 1 звезду!\n\n` +
-    `💫 Ваш новый баланс: ${user.stars + 1} звёзд\n\n` +
-    `Следующий фарм будет доступен через 60 секунд.`,
-    mainMenuButton(ctx.from.id)
-  );
+  ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${user.stars + 1}. Следующий фарм через 60 сек.`, { show_alert: true });
 });
 
 bot.action('bonus', async (ctx) => {
@@ -143,18 +135,10 @@ bot.action('bonus', async (ctx) => {
   if (t - user.lastBonus < 86400) {
     const hours = Math.floor((86400 - (t - user.lastBonus)) / 3600);
     const mins = Math.floor((86400 - (t - user.lastBonus)) % 3600 / 60);
-    return ctx.editMessageText(
-      `⏳ До следующего бонуса: ${hours}ч ${mins}м.`,
-      mainMenuButton(ctx.from.id)
-    );
+    return ctx.answerCbQuery(`⏳ До следующего бонуса: ${hours}ч ${mins}м.`, { show_alert: true });
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: t }, $inc: { stars: 50 } });
-  ctx.editMessageText(
-    `🎁 Вы получили 50 звёзд бонусом!\n\n` +
-    `💫 Ваш новый баланс: ${user.stars + 50} звёзд\n\n` +
-    `Следующий бонус будет доступен через 24 часа.`,
-    mainMenuButton(ctx.from.id)
-  );
+  ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${user.stars + 50}. Следующий бонус через 24ч.`, { show_alert: true });
 });
 
 bot.action('profile', async (ctx) => {
