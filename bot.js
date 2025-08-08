@@ -70,11 +70,23 @@ bot.start(async (ctx) => {
 });
 
 bot.action('main_menu', async (ctx) => {
+  try { await ctx.deleteMessage(); } catch (e) {}
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
-  const menu = getMainMenu(ctx, balance, invited);
-  await ctx.editMessageText(menu.text, menu.extra);
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
+  ctx.reply(
+    getWelcomeText(balance, invited),
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
+        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
+        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        ...adminRow
+      ])
+    }
+  );
 });
 
 bot.action('farm', async (ctx) => {
@@ -194,13 +206,13 @@ bot.action('cancel', async (ctx) => {
 // Рассылка
 bot.action('admin_broadcast', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
-  await ctx.reply('📢 Введите текст для рассылки:', { reply_markup: { force_reply: true } });
+  await adminForceReply(ctx, '📢 Введите текст для рассылки:');
 });
 
 // Добавить промокод
 bot.action('admin_addpromo', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
-  await ctx.reply('➕ Введите промокод и количество звёзд через пробел (например: NEWCODE 25):', { reply_markup: { force_reply: true } });
+  await adminForceReply(ctx, '➕ Введите промокод и количество звёзд через пробел (например: NEWCODE 25):');
 });
 
 // Статистика
@@ -223,16 +235,28 @@ bot.action('admin_stats', async (ctx) => {
 // Выдать/забрать звёзды
 bot.action('admin_stars', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
-  await ctx.reply('⭐ Введите ID пользователя и количество звёзд через пробел (например: 123456789 10 или 123456789 -5):', { reply_markup: { force_reply: true } });
+  await adminForceReply(ctx, '⭐ Введите ID пользователя и количество звёзд через пробел (например: 123456789 10 или 123456789 -5):');
 });
 
 // Рефералы пользователя
 bot.action('admin_refs', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
-  await ctx.reply('👥 Введите ID пользователя для просмотра его рефералов:', { reply_markup: { force_reply: true } });
+  await adminForceReply(ctx, '👥 Введите ID пользователя для просмотра его рефералов:');
 });
 
-// Обновлённые force_reply для админки с кнопками
+// Обновлённые force_reply для админки с кнопками и удалением по отмене
+function adminForceReply(ctx, text) {
+  return ctx.reply(text, {
+    reply_markup: {
+      force_reply: true,
+      inline_keyboard: [[
+        { text: '🏠 Главное меню', callback_data: 'main_menu' },
+        { text: '❌ Отмена', callback_data: 'admin_cancel' }
+      ]]
+    }
+  });
+}
+
 bot.on('text', async (ctx) => {
   if (!isAdmin(ctx.from.id) || !ctx.message.reply_to_message) return;
   const replyText = ctx.message.reply_to_message.text;
