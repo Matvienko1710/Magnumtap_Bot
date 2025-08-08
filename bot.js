@@ -2,11 +2,17 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const { MongoClient } = require('mongodb');
 
-if (!process.env.BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
-if (!process.env.MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
+// Конфигурация
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const MONGODB_URI = process.env.MONGODB_URI;
+const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+const SUPPORT_CHANNEL = process.env.SUPPORT_CHANNEL; // Имя канала без @
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const mongo = new MongoClient(process.env.MONGODB_URI);
+if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
+if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
+
+const bot = new Telegraf(BOT_TOKEN);
+const mongo = new MongoClient(MONGODB_URI);
 let users, promocodes;
 
 // Система титулов
@@ -28,6 +34,107 @@ const TITLES = {
   'night_owl': { name: '🦉 Ночная сова', description: 'Секретный титул для ночных игроков', condition: 'secret', requirement: 'special' },
   'vip_elite': { name: '💫 VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only' }
 };
+
+// Система техподдержки
+const TICKET_STATUSES = {
+  'new': { name: '🆕 Новая', color: '🔵', emoji: '🔵' },
+  'in_progress': { name: '⚙️ В работе', color: '🟡', emoji: '⚙️' },
+  'resolved': { name: '✅ Решена', color: '🟢', emoji: '✅' },
+  'rejected': { name: '❌ Отклонена', color: '🔴', emoji: '❌' },
+  'closed': { name: '🔒 Закрыта', color: '⚫', emoji: '🔒' }
+};
+
+async function createSupportTicket(userId, username, message) {
+  const ticketId = Math.random().toString(36).substr(2, 9).toUpperCase();
+  const ticket = {
+    id: ticketId,
+    userId: userId,
+    username: username || 'Неизвестно',
+    message: message,
+    status: 'new',
+    created: now(),
+    updated: now(),
+    adminResponse: null
+  };
+  
+  await supportTickets.insertOne(ticket);
+  return ticket;
+}
+
+async function updateTicketStatus(ticketId, status, adminResponse = null, messageId = null) {
+  const updateData = { 
+    status: status, 
+    updated: now() 
+  };
+  
+  if (adminResponse) {
+    updateData.adminResponse = adminResponse;
+  }
+  
+  await supportTickets.updateOne(
+    { id: ticketId },
+    { $set: updateData }
+  );
+
+  if (messageId) {
+    await bot.telegram.editMessageReplyMarkup(
+      `@${SUPPORT_CHANNEL}`,
+      messageId,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: TICKET_STATUSES[status].emoji + ' ' + TICKET_STATUSES[status].name, callback_data: `ticket_status_${ticketId}` }
+            ],
+            [
+              { text: '💬 Ответить', callback_data: `ticket_reply_${ticketId}` }
+            ]
+          ]
+        }
+      }
+    );
+  }
+}
+
+async function sendTicketToChannel(ticket) {
+  const supportChannelId = SUPPORT_CHANNEL;
+  if (!supportChannelId) return;
+
+  const statusInfo = TICKET_STATUSES[ticket.status];
+  
+  try {
+    const message = await bot.telegram.sendMessage(`@${supportChannelId}`, 
+      `🎫 *Новая заявка техподдержки #${ticket._id.toString().slice(-6)}*\n\n` +
+      `👤 Пользователь: ${ticket.username || 'Неизвестно'} (ID: ${ticket.userId})\n` +
+      `📝 Сообщение: ${ticket.message}\n` +
+      `📅 Создана: ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+      `📊 Статус: ${statusInfo.emoji} ${statusInfo.name}`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✅ Одобрить', callback_data: `ticket_accept_${ticket._id}` },
+              { text: '❌ Отклонить', callback_data: `ticket_reject_${ticket._id}` }
+            ],
+            [
+              { text: '🔧 В работе', callback_data: `ticket_progress_${ticket._id}` },
+              { text: '✅ Решено', callback_data: `ticket_resolve_${ticket._id}` }
+            ],
+            [
+              { text: '🗑️ Закрыть', callback_data: `ticket_close_${ticket._id}` },
+              { text: '💬 Ответить', callback_data: `ticket_reply_${ticket._id}` }
+            ]
+          ]
+        }
+      }
+    );
+    
+    await updateTicketStatus(ticket._id, ticket.status, null, message.message_id);
+  } catch (error) {
+    console.error('Ошибка отправки в канал поддержки:', error);
+  }
+}
 
 // Функции для работы с титулами
 async function checkAndAwardTitles(userId) {
@@ -127,7 +234,8 @@ async function connectDB() {
   users = db.collection('users');
   promocodes = db.collection('promocodes');
   tasks = db.collection('tasks');
-  titles = db.collection('titles'); // добавляем коллекцию титулов
+  titles = db.collection('titles');
+  supportTickets = db.collection('supportTickets'); // добавляем коллекцию заявок
 }
 
 function now() { return Math.floor(Date.now() / 1000); }
@@ -159,7 +267,6 @@ async function getUser(id) {
   return user;
 }
 
-const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
 
 function getWelcomeText(balance, invited) {
@@ -257,6 +364,7 @@ bot.action('main_menu', async (ctx) => {
   );
 });
 
+// Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
@@ -287,8 +395,8 @@ bot.action('profile', async (ctx) => {
   ctx.editMessageText(profileText, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('🏆 Мои титулы', 'my_titles')],
-      [Markup.button.callback('❓ FAQ', 'faq')],
+      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎫 Мои заявки', 'my_tickets')],
+      [Markup.button.callback('🛠️ Тех поддержка', 'support_create'), Markup.button.callback('❓ FAQ', 'faq')],
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   });
@@ -355,8 +463,84 @@ bot.on('text', async (ctx) => {
   const replyText = replyMsg.text;
 
   try {
+    // Создание заявки в техподдержку
+    if (replyText.includes('ТЕХНИЧЕСКАЯ ПОДДЕРЖКА') && replyText.includes('Опишите вашу проблему')) {
+      const ticket = await createSupportTicket(
+        ctx.from.id,
+        ctx.from.username,
+        text
+      );
+      
+      // Отправляем в канал поддержки
+      await sendTicketToChannel(ticket);
+      
+      ctx.reply(
+        `✅ **Заявка создана успешно!**\n\n` +
+        `🎫 **ID заявки:** \`${ticket.id}\`\n` +
+        `📅 **Дата:** ${new Date().toLocaleString('ru-RU')}\n\n` +
+        `💬 **Ваше сообщение:**\n${text}\n\n` +
+        `⚡ Мы рассмотрим вашу заявку в течение 24 часов и уведомим о статусе.`,
+        { 
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('📋 Мои заявки', 'my_tickets')],
+            [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+          ])
+        }
+      );
+      return;
+    }
+
     // Админские команды
     if (isAdmin(ctx.from.id)) {
+      if (replyText.includes('Ответ пользователю по заявке')) {
+        const ticketId = replyText.match(/#([A-Z0-9]+)/)[1];
+        const ticket = await supportTickets.findOne({ id: ticketId });
+        
+        if (!ticket) {
+          return ctx.reply('❌ Заявка не найдена!');
+        }
+
+        // Обновляем заявку с ответом админа
+        await updateTicketStatus(ticketId, 'in_progress', text);
+
+        // Отправляем ответ пользователю
+        try {
+          await bot.telegram.sendMessage(ticket.userId,
+            `💼 **Ответ от техподдержки по заявке #${ticketId}:**\n\n${text}\n\n` +
+            `🎫 Ваша заявка находится в работе. При необходимости мы свяжемся с вами дополнительно.`,
+            { parse_mode: 'Markdown' }
+          );
+          ctx.reply(`✅ Ответ отправлен пользователю @${ticket.username}`);
+        } catch (error) {
+          ctx.reply('❌ Ошибка отправки ответа пользователю');
+        }
+        return;
+      }
+
+      if (replyText.includes('Поиск заявки')) {
+        const searchQuery = text.trim();
+        let ticket;
+
+        // Поиск по ID заявки
+        if (searchQuery.length <= 10) {
+          ticket = await supportTickets.findOne({ id: searchQuery.toUpperCase() });
+        } else {
+          // Поиск по Telegram ID
+          const tickets = await supportTickets.find({ userId: parseInt(searchQuery) }).sort({ created: -1 }).limit(1).toArray();
+          ticket = tickets[0];
+        }
+
+        if (!ticket) {
+          return ctx.reply('❌ Заявка не найдена!');
+        }
+
+        // Показываем найденную заявку
+        ctx.action(`admin_ticket_view_${ticket.id}`)(ctx);
+        return;
+      }
+
+      // Остальные админские команды...
       if (replyText.includes('Выдача титула')) {
         const [userId, titleId] = text.split(' ');
         if (!userId || !titleId || !TITLES[titleId]) {
@@ -784,6 +968,64 @@ bot.action('faq', async (ctx) => {
   ctx.editMessageText(faqText, Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]]));
 });
 
+// Создание заявки в техподдержку
+bot.action('support_create', async (ctx) => {
+  const supportText = `
+🛠️ **ТЕХНИЧЕСКАЯ ПОДДЕРЖКА** 🛠️
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💬 **Опишите вашу проблему или вопрос:**
+
+Напишите одним сообщением:
+• Что случилось?
+• Когда это произошло?
+• Какие действия вы выполняли?
+
+⚡ Наша команда поддержки ответит в течение 24 часов!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  ctx.editMessageText(supportText, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      force_reply: true,
+      input_field_placeholder: 'Опишите вашу проблему...'
+    }
+  });
+});
+
+// Мои заявки в поддержку
+bot.action('my_tickets', async (ctx) => {
+  const userTickets = await supportTickets.find({ userId: ctx.from.id }).sort({ created: -1 }).limit(10).toArray();
+  
+  let ticketsText = `
+🎫 **МОИ ЗАЯВКИ В ПОДДЕРЖКУ** 🎫
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+`;
+
+  if (userTickets.length === 0) {
+    ticketsText += '📭 У вас пока нет заявок в техподдержку.';
+  } else {
+    userTickets.forEach(ticket => {
+      const statusInfo = TICKET_STATUSES[ticket.status];
+      const date = new Date(ticket.created * 1000).toLocaleDateString('ru-RU');
+      ticketsText += `${statusInfo.color} **#${ticket.id}** — ${statusInfo.name}\n`;
+      ticketsText += `📅 ${date} | ${ticket.message.substring(0, 50)}...\n\n`;
+    });
+  }
+
+  ticketsText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  ctx.editMessageText(ticketsText, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🛠️ Создать заявку', 'support_create')],
+      [Markup.button.callback('👤 Назад к профилю', 'profile')]
+    ])
+  });
+});
+
 // Уведомления фарма и бонуса
 bot.action('farm', async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -888,3 +1130,102 @@ connectDB().then(() => {
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+// Обработчики кнопок из канала поддержки
+bot.action(/^ticket_accept_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const ticketId = ctx.match[1];
+  await updateTicketStatus(ticketId, 'in_progress');
+  await notifyUserStatusChange(ticketId, 'принята в работу ⚙️');
+  
+  ctx.answerCbQuery('✅ Заявка принята в работу');
+  
+  // Обновляем сообщение в канале
+  const ticket = await supportTickets.findOne({ id: ticketId });
+  if (ticket) {
+    const statusInfo = TICKET_STATUSES[ticket.status];
+    const newText = ctx.callbackQuery.message.text.replace(
+      /🔵 \*\*Статус:\*\* 🆕 Новая/g,
+      `${statusInfo.color} **Статус:** ${statusInfo.name}`
+    );
+    
+    ctx.editMessageText(newText, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '✅ Решена', callback_data: `ticket_resolve_${ticketId}` }],
+          [{ text: '🔒 Закрыть', callback_data: `ticket_close_${ticketId}` }],
+          [{ text: '📝 Ответить', callback_data: `ticket_reply_${ticketId}` }]
+        ]
+      }
+    });
+  }
+});
+
+bot.action(/^ticket_reject_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const ticketId = ctx.match[1];
+  await updateTicketStatus(ticketId, 'rejected');
+  await notifyUserStatusChange(ticketId, 'отклонена ❌');
+  
+  ctx.answerCbQuery('❌ Заявка отклонена');
+  
+  // Удаляем кнопки из сообщения в канале
+  const newText = ctx.callbackQuery.message.text.replace(
+    /🔵 \*\*Статус:\*\* 🆕 Новая/g,
+    '🔴 **Статус:** ❌ Отклонена'
+  );
+  
+  ctx.editMessageText(newText, { parse_mode: 'Markdown' });
+});
+
+bot.action(/^ticket_resolve_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const ticketId = ctx.match[1];
+  await updateTicketStatus(ticketId, 'resolved');
+  await notifyUserStatusChange(ticketId, 'решена ✅');
+  
+  ctx.answerCbQuery('✅ Заявка решена');
+  
+  const newText = ctx.callbackQuery.message.text.replace(
+    /🟡 \*\*Статус:\*\* ⚙️ В работе/g,
+    '🟢 **Статус:** ✅ Решена'
+  );
+  
+  ctx.editMessageText(newText, { parse_mode: 'Markdown' });
+});
+
+bot.action(/^ticket_close_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const ticketId = ctx.match[1];
+  await updateTicketStatus(ticketId, 'closed');
+  await notifyUserStatusChange(ticketId, 'закрыта 🔒');
+  
+  ctx.answerCbQuery('🔒 Заявка закрыта');
+  
+  const newText = ctx.callbackQuery.message.text.replace(
+    /(🟡|🟢) \*\*Статус:\*\* (⚙️ В работе|✅ Решена)/g,
+    '⚫ **Статус:** 🔒 Закрыта'
+  );
+  
+  ctx.editMessageText(newText, { parse_mode: 'Markdown' });
+});
+
+bot.action(/^ticket_reply_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const ticketId = ctx.match[1];
+  ctx.reply(
+    `💬 **Ответ пользователю по заявке #${ticketId}**\n\nВведите ваш ответ:`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        force_reply: true
+      }
+    }
+  );
+});
