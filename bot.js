@@ -30,24 +30,51 @@ async function getUser(id) {
 const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
 
+function getWelcomeText(balance, invited) {
+  return (
+    "👋 Привет! Ты в *MagnumTapBot* — месте, где каждый может зарабатывать звёзды и получать классные бонусы, просто выполняя задания и приглашая друзей! ✨\n\n" +
+    "Вот что тебя ждёт:\n\n" +
+    "⭐ Заработок звёзд — выполняй доступные задания, собирай награды и увеличивай баланс.  \n" +
+    "👫 Приглашай друзей — за каждого приглашённого ты получаешь бонусы, а вместе играть веселее!  \n" +
+    "🎁 Бонусы и акции — не пропускай ежедневные подарки и специальные предложения.  \n" +
+    "📈 Статистика и прогресс — всегда знаешь, сколько у тебя звёзд и сколько друзей уже с тобой.\n\n" +
+    `🎯 Твой баланс сейчас: *${balance} звезды*\n` +
+    `👥 Приглашено друзей: *${invited}*\n\n` +
+    "Выбирай любое действие из меню ниже и начни свой путь к большим наградам вместе с *MagnumTapBot*! 🚀\n\n" +
+    "Помни: чем активнее ты — тем выше твои звёзды и возможности! 🌟"
+  );
+}
+
+function getMainMenu(ctx, balance, invited) {
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
+  return {
+    text: getWelcomeText(balance, invited),
+    extra: {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
+        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
+        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        ...adminRow
+      ])
+    }
+  };
+}
+
 bot.start(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
-  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
-  await ctx.reply(
-    `👋 Добро пожаловать в MagnumTapBot! 🌟\n\n` +
-    `Ты в игре, где можно зарабатывать звёзды ✨, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n` +
-    `💫 Твой баланс: ${balance} звёзд\n` +
-    `👥 Приглашено друзей: ${invited}\n\n` +
-    `Выбери действие и стань звездой MagnumTapBot! 🌟`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
-      [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
-      ...adminRow
-    ])
-  );
+  const menu = getMainMenu(ctx, balance, invited);
+  await ctx.reply(menu.text, menu.extra);
+});
+
+bot.action('main_menu', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const balance = user.stars || 0;
+  const invited = user.invited || 0;
+  const menu = getMainMenu(ctx, balance, invited);
+  await ctx.editMessageText(menu.text, menu.extra);
 });
 
 bot.action('farm', async (ctx) => {
@@ -58,7 +85,10 @@ bot.action('farm', async (ctx) => {
     return ctx.answerCbQuery(`⏳ До следующего фарма: ${wait} сек.`, { show_alert: true });
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastFarm: t }, $inc: { stars: 1 } });
-  ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${user.stars + 1}.`, { show_alert: true });
+  const updated = await getUser(ctx.from.id);
+  const menu = getMainMenu(ctx, updated.stars, updated.invited);
+  await ctx.editMessageText(menu.text, menu.extra);
+  ctx.answerCbQuery(`🌟 +1 звезда! Баланс: ${updated.stars}.`, { show_alert: true });
 });
 
 bot.action('bonus', async (ctx) => {
@@ -70,7 +100,10 @@ bot.action('bonus', async (ctx) => {
     return ctx.answerCbQuery(`⏳ До следующего бонуса: ${hours}ч ${mins}м.`, { show_alert: true });
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: t }, $inc: { stars: 50 } });
-  ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${user.stars + 50}.`, { show_alert: true });
+  const updated = await getUser(ctx.from.id);
+  const menu = getMainMenu(ctx, updated.stars, updated.invited);
+  await ctx.editMessageText(menu.text, menu.extra);
+  ctx.answerCbQuery(`🎁 +50 звёзд! Баланс: ${updated.stars}.`, { show_alert: true });
 });
 
 bot.action('profile', async (ctx) => {
@@ -81,26 +114,6 @@ bot.action('profile', async (ctx) => {
     `👤 Профиль\n\n💫 Баланс: ${balance} звёзд\n👥 Приглашено друзей: ${invited}`,
     Markup.inlineKeyboard([
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-    ])
-  );
-});
-
-bot.action('main_menu', async (ctx) => {
-  const user = await getUser(ctx.from.id);
-  const balance = user.stars || 0;
-  const invited = user.invited || 0;
-  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
-  ctx.editMessageText(
-    `👋 Добро пожаловать в MagnumTapBot! 🌟\n\n` +
-    `Ты в игре, где можно зарабатывать звёзды ✨, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n` +
-    `💫 Твой баланс: ${balance} звёзд\n` +
-    `👥 Приглашено друзей: ${invited}\n\n` +
-    `Выбери действие и стань звездой MagnumTapBot! 🌟`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
-      [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
-      ...adminRow
     ])
   );
 });
