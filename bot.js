@@ -188,9 +188,10 @@ bot.action('admin_panel', async (ctx) => {
   );
 });
 
-bot.action('cancel', async (ctx) => {
+bot.action('admin_cancel', async (ctx) => {
+  try { await ctx.deleteMessage(); } catch (e) {}
   ctx.answerCbQuery();
-  ctx.editMessageText(
+  ctx.reply(
     '⚙️ Админ-панель\n\nВыберите действие:',
     Markup.inlineKeyboard([
       [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
