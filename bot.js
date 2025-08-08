@@ -69,6 +69,40 @@ function withSubscription(handler) {
   };
 }
 
+const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+
+function isAdmin(userId) {
+  return ADMIN_IDS.includes(String(userId));
+}
+
+function mainMenuKeyboard(userId) {
+  const rows = [
+    [
+      Markup.button.callback('🌟 Фармить звёзды', 'farm'),
+      Markup.button.callback('🎁 Бонус', 'bonus')
+    ],
+    [
+      Markup.button.callback('👤 Профиль', 'profile'),
+      Markup.button.callback('🏆 Топ', 'top')
+    ],
+    [
+      Markup.button.callback('🤝 Пригласить друзей', 'invite'),
+      Markup.button.callback('🎫 Ввести промокод', 'promo')
+    ]
+  ];
+  if (isAdmin(userId)) {
+    rows.push([Markup.button.callback('⚙️ Админ-панель', 'admin')]);
+  }
+  return Markup.inlineKeyboard(rows);
+}
+
+function mainMenuButton(userId) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')],
+    ...(isAdmin(userId) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin')]] : [])
+  ]);
+}
+
 // Применить withSubscription ко всем action и start
 // Удаляем ошибочную перезапись методов bot.start, bot.action, bot.command
 // Вместо этого оборачиваем каждый handler вручную:
