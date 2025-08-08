@@ -970,9 +970,7 @@ bot.action('faq', async (ctx) => {
 
 // Создание заявки в техподдержку
 bot.action('support_create', async (ctx) => {
-  const supportText = `
-🛠️ **ТЕХНИЧЕСКАЯ ПОДДЕРЖКА** 🛠️
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const supportText = `🛠️ **ТЕХНИЧЕСКАЯ ПОДДЕРЖКА** 🛠️
 
 💬 **Опишите вашу проблему или вопрос:**
 
@@ -981,11 +979,12 @@ bot.action('support_create', async (ctx) => {
 • Когда это произошло?
 • Какие действия вы выполняли?
 
-⚡ Наша команда поддержки ответит в течение 24 часов!
+⚡ Наша команда поддержки ответит в течение 24 часов!`;
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  ctx.editMessageText(supportText, {
+  // Удаляем текущее сообщение и отправляем новое с force_reply
+  await ctx.deleteMessage();
+  
+  ctx.reply(supportText, {
     parse_mode: 'Markdown',
     reply_markup: {
       force_reply: true,
