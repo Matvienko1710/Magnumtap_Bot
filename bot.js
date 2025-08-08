@@ -36,13 +36,12 @@ async function getUser(id) {
 bot.action('invite', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
-  ctx.answerCbQuery();
   ctx.editMessageText(
     `🤝 Пригласить друзей\n\n` +
     `Отправь эту ссылку друзьям и получай звёзды за каждого, кто присоединится!\n\n` +
     `🔗 Твоя ссылка: ${refLink}\n\n` +
     `👥 Приглашено друзей: ${user.invited || 0}`,
-    mainMenuKeyboard(ctx.from.id)
+    mainMenuButton(ctx.from.id)
   );
 });
 
@@ -97,22 +96,45 @@ function mainMenuKeyboard(userId) {
   return Markup.inlineKeyboard(rows);
 }
 
+function mainMenuButton(userId) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')],
+    ...(isAdmin(userId) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin')]] : [])
+  ]);
+}
+
+bot.action('main_menu', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const balance = user.stars || 0;
+  const invited = user.invited || 0;
+  ctx.editMessageText(
+    `👋 Добро пожаловать в MagnumTapBot! 🌟\n\n` +
+    `Ты в игре, где можно зарабатывать звёзды ✨, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n` +
+    `💫 Твой баланс: ${balance} звёзд\n` +
+    `👥 Приглашено друзей: ${invited}\n\n` +
+    `Выбери действие и стань звездой MagnumTapBot! 🌟\n` +
+    `Подсказка: используй /help для справки по боту!`,
+    mainMenuKeyboard(ctx.from.id)
+  );
+});
+
 bot.action('farm', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const t = now();
   if (t - user.lastFarm < 60) {
     const wait = 60 - (t - user.lastFarm);
-    return ctx.answerCbQuery(`Подождите ${wait} сек. до следующего фарма!`, { show_alert: true });
+    return ctx.editMessageText(
+      `⏳ До следующего фарма осталось ${wait} сек.`,
+      mainMenuButton(ctx.from.id)
+    );
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastFarm: t }, $inc: { stars: 1 } });
-  ctx.answerCbQuery('Вы получили 1 звезду!');
-  ctx.editMessageText(`У вас ${user.stars + 1} звёзд.
-
-Фармить можно раз в минуту.`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🌟 Фармить звёзды', 'farm')],
-      [Markup.button.callback('🎁 Получить бонус', 'bonus')]
-    ]));
+  ctx.editMessageText(
+    `🌟 Вы получили 1 звезду!\n\n` +
+    `💫 Ваш новый баланс: ${user.stars + 1} звёзд\n\n` +
+    `Следующий фарм будет доступен через 60 секунд.`,
+    mainMenuButton(ctx.from.id)
+  );
 });
 
 bot.action('bonus', async (ctx) => {
@@ -121,29 +143,27 @@ bot.action('bonus', async (ctx) => {
   if (t - user.lastBonus < 86400) {
     const hours = Math.floor((86400 - (t - user.lastBonus)) / 3600);
     const mins = Math.floor((86400 - (t - user.lastBonus)) % 3600 / 60);
-    return ctx.answerCbQuery(`Бонус доступен через ${hours}ч ${mins}м!`, { show_alert: true });
+    return ctx.editMessageText(
+      `⏳ До следующего бонуса: ${hours}ч ${mins}м.`,
+      mainMenuButton(ctx.from.id)
+    );
   }
   await users.updateOne({ id: ctx.from.id }, { $set: { lastBonus: t }, $inc: { stars: 50 } });
-  ctx.answerCbQuery('Вы получили 50 звёзд бонусом!');
-  ctx.editMessageText(`У вас ${user.stars + 50} звёзд.
-
-Следующий бонус через 24 часа.`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🌟 Фармить звёзды', 'farm')],
-      [Markup.button.callback('🎁 Получить бонус', 'bonus')]
-    ]));
+  ctx.editMessageText(
+    `🎁 Вы получили 50 звёзд бонусом!\n\n` +
+    `💫 Ваш новый баланс: ${user.stars + 50} звёзд\n\n` +
+    `Следующий бонус будет доступен через 24 часа.`,
+    mainMenuButton(ctx.from.id)
+  );
 });
 
 bot.action('profile', async (ctx) => {
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const invited = user.invited || 0;
-  ctx.answerCbQuery();
   ctx.editMessageText(
-    `👤 Профиль
-\n💫 Баланс: ${balance} звёзд\n👥 Приглашено друзей: ${invited}\n\n` +
-    `Фармите звёзды, приглашайте друзей и получайте бонусы!`,
-    mainMenuKeyboard(ctx.from.id)
+    `👤 Профиль\n\n💫 Баланс: ${balance} звёзд\n👥 Приглашено друзей: ${invited}\n\nФармите звёзды, приглашайте друзей и получайте бонусы!`,
+    mainMenuButton(ctx.from.id)
   );
 });
 
@@ -154,16 +174,75 @@ bot.action('top', async (ctx) => {
     const name = u.username || u.id;
     msg += `${i + 1}. ${name} — ${u.stars || 0} звёзд\n`;
   });
-  ctx.answerCbQuery();
-  ctx.editMessageText(msg, mainMenuKeyboard(ctx.from.id));
+  ctx.editMessageText(msg, mainMenuButton(ctx.from.id));
 });
 
 bot.action('admin', async (ctx) => {
   if (!isAdmin(ctx.from.id)) {
     return ctx.answerCbQuery('Нет доступа', { show_alert: true });
   }
-  ctx.answerCbQuery();
-  ctx.editMessageText('⚙️ Админ-панель\n\nЗдесь будут админ-функции.', mainMenuKeyboard(ctx.from.id));
+  ctx.editMessageText(
+    '⚙️ Админ-панель\n\nВыберите действие:',
+    Markup.inlineKeyboard([
+      [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
+      [Markup.button.callback('➕ Добавить промокод', 'admin_addpromo')],
+      [Markup.button.callback('📊 Статистика', 'admin_stats')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ])
+  );
+});
+
+// Рассылка
+bot.action('admin_broadcast', async (ctx) => {
+  ctx.editMessageText('📢 Введите текст для рассылки:', Markup.forceReply());
+});
+bot.on('text', async (ctx) => {
+  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('текст для рассылки')) {
+    if (!isAdmin(ctx.from.id)) return;
+    const text = ctx.message.text;
+    const allUsers = await users.find().toArray();
+    let sent = 0;
+    for (const u of allUsers) {
+      try {
+        await ctx.telegram.sendMessage(u.id, `📢 Сообщение от администрации:\n\n${text}`);
+        sent++;
+      } catch {}
+    }
+    return ctx.reply(`✅ Рассылка завершена. Доставлено: ${sent} пользователям.`, mainMenuButton(ctx.from.id));
+  }
+});
+
+// Добавить промокод
+bot.action('admin_addpromo', async (ctx) => {
+  ctx.editMessageText('➕ Введите промокод и количество звёзд через пробел (например: NEWCODE 25):', Markup.forceReply());
+});
+bot.on('text', async (ctx) => {
+  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('Введите промокод')) {
+    if (!isAdmin(ctx.from.id)) return;
+    const [code, stars] = ctx.message.text.trim().split(/\s+/);
+    if (!code || isNaN(Number(stars))) {
+      return ctx.reply('❌ Формат: КОД 10', mainMenuButton(ctx.from.id));
+    }
+    promoCodes[code.toUpperCase()] = Number(stars);
+    return ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд добавлен.`, mainMenuButton(ctx.from.id));
+  }
+});
+
+// Статистика
+bot.action('admin_stats', async (ctx) => {
+  const totalUsers = await users.countDocuments();
+  const totalStars = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$stars" } } }]).toArray();
+  const totalInvited = await users.aggregate([{ $group: { _id: null, sum: { $sum: "$invited" } } }]).toArray();
+  ctx.editMessageText(
+    `📊 Статистика бота\n\n` +
+    `👥 Пользователей: ${totalUsers}\n` +
+    `💫 Всего звёзд: ${totalStars[0]?.sum || 0}\n` +
+    `🤝 Всего приглашений: ${totalInvited[0]?.sum || 0}`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')],
+      [Markup.button.callback('⚙️ Админ-панель', 'admin')]
+    ])
+  );
 });
 
 const promoCodes = {
@@ -174,7 +253,6 @@ const promoCodes = {
 const userPromoUsed = {};
 
 bot.action('promo', async (ctx) => {
-  ctx.answerCbQuery();
   ctx.editMessageText(
     '🎫 Введите промокод одним сообщением:',
     Markup.forceReply()
@@ -186,14 +264,14 @@ bot.on('text', async (ctx) => {
     const code = ctx.message.text.trim().toUpperCase();
     const userId = ctx.from.id;
     if (userPromoUsed[userId + ':' + code]) {
-      return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuKeyboard(ctx.from.id));
+      return ctx.reply('❗ Вы уже использовали этот промокод.', mainMenuButton(userId));
     }
     if (promoCodes[code]) {
       await users.updateOne({ id: userId }, { $inc: { stars: promoCodes[code] } });
       userPromoUsed[userId + ':' + code] = true;
-      return ctx.reply(`✅ Промокод активирован! Вы получили ${promoCodes[code]} звёзд.`, mainMenuKeyboard(ctx.from.id));
+      return ctx.reply(`✅ Промокод активирован! Вы получили ${promoCodes[code]} звёзд.`, mainMenuButton(userId));
     } else {
-      return ctx.reply('❌ Неверный промокод.', mainMenuKeyboard(ctx.from.id));
+      return ctx.reply('❌ Неверный промокод.', mainMenuButton(userId));
     }
   }
 });
