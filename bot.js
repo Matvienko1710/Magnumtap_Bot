@@ -160,17 +160,46 @@ bot.on('text', withSubscription(async (ctx) => {
   }
 }));
 
+// Промокоды с количеством активаций
+const promoCodes = {
+  // 'CODE': { stars: 10, max: 5, used: 0 }
+  'MAGNUM10': { stars: 10, max: 100, used: 0 },
+  'STAR50': { stars: 50, max: 10, used: 0 }
+};
+
+// Активация промокода с учётом количества активаций
+const userPromoUsed = {};
+
+// Хелпер для гашения старых панелей
+async function tryDisableOldPanel(ctx) {
+  try {
+    await ctx.editMessageText('Панель устарела, используйте /start для новой панели.');
+  } catch (e) {}
+}
+
+// Обёртка для action: если action не из последнего сообщения, гасим старую панель
+function withPanelGuard(handler) {
+  return async (ctx, ...args) => {
+    // Если это callback_query и message не последнее (например, message_id не совпадает с последним /start), гасим панель
+    if (ctx.updateType === 'callback_query' && ctx.callbackQuery && ctx.callbackQuery.message) {
+      // Можно добавить проверку на "устаревшее" сообщение, но проще всегда гасить старую панель
+      try {
+        await handler(ctx, ...args);
+      } catch (e) {
+        await tryDisableOldPanel(ctx);
+      }
+    } else {
+      await handler(ctx, ...args);
+    }
+  };
+}
+
 // Применить withSubscription ко всем action и start
 // Удаляем ошибочную перезапись методов bot.start, bot.action, bot.command
 // Вместо этого оборачиваем каждый handler вручную:
 
 bot.start(withSubscription(async (ctx) => {
-  // Удаляем предыдущее сообщение с панелью, если оно есть
-  if (ctx.message && ctx.message.message_id) {
-    try {
-      await ctx.deleteMessage(ctx.message.message_id - 1);
-    } catch (e) {}
-  }
+  // Просто отправляем новую панель, не пытаясь удалять старые сообщения
   // Реферал: только если пользователь впервые запускает бота по чужой ссылке
   let ref = null;
   if (ctx.startPayload && ctx.startPayload !== String(ctx.from.id)) {
@@ -195,7 +224,7 @@ bot.start(withSubscription(async (ctx) => {
   );
 }));
 
-bot.action('invite', withSubscription(async (ctx) => {
+bot.action('invite', withPanelGuard(withSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
   ctx.editMessageText(
@@ -313,16 +342,6 @@ bot.action('admin_stats', withSubscription(async (ctx) => {
     ])
   );
 }));
-
-// Промокоды с количеством активаций
-const promoCodes = {
-  // 'CODE': { stars: 10, max: 5, used: 0 }
-  'MAGNUM10': { stars: 10, max: 100, used: 0 },
-  'STAR50': { stars: 50, max: 10, used: 0 }
-};
-
-// Активация промокода с учётом количества активаций
-const userPromoUsed = {};
 
 connectDB().then(() => {
   bot.launch();
