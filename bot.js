@@ -667,6 +667,19 @@ async function getUserTasks(userId, isDaily = true) {
   return userTasks;
 }
 
+async function updateMainMenuBalance(ctx) {
+  try {
+    const user = await getUser(ctx.from.id);
+    const balance = user.stars || 0;
+    const invited = user.invited || 0;
+    const menu = getMainMenu(ctx, balance, invited);
+    
+    await ctx.editMessageText(menu.text, menu.extra);
+  } catch (error) {
+    console.error('Ошибка обновления баланса в меню:', error);
+  }
+}
+
 function getMainMenu(ctx, balance, invited) {
   const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   return {
@@ -715,6 +728,7 @@ bot.action('main_menu', async (ctx) => {
 
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
+  // Всегда получаем свежие данные
   const user = await getUser(ctx.from.id);
   const balance = user.stars || 0;
   const friends = user.invited || 0;
@@ -1642,6 +1656,9 @@ bot.action('farm', async (ctx) => {
     const newTitles = await checkAndAwardTitles(ctx.from.id);
     const newAchievements = await checkAndAwardAchievements(ctx.from.id);
     
+    // Обновляем баланс в интерфейсе
+    await updateMainMenuBalance(ctx);
+    
     if (newTitles.length > 0 && newAchievements.length > 0) {
       ctx.answerCbQuery('🌟 +1 звезда! 🏆 Новый титул! 🎖️ Достижение!');
     } else if (newTitles.length > 0) {
@@ -1680,6 +1697,9 @@ bot.action('bonus', async (ctx) => {
     // Проверяем новые титулы и достижения
     const newTitles = await checkAndAwardTitles(ctx.from.id);
     const newAchievements = await checkAndAwardAchievements(ctx.from.id);
+    
+    // Обновляем баланс в интерфейсе
+    await updateMainMenuBalance(ctx);
     
     if (newTitles.length > 0 && newAchievements.length > 0) {
       ctx.answerCbQuery('🎁 +10 звёзд! 🏆 Новый титул! 🎖️ Достижение!');
