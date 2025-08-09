@@ -786,6 +786,67 @@ const userPromoUsed = {};
 bot.action('promo', async (ctx) => {
   await adminForceReply(ctx, '🎫 Введите промокод:');
 });
+
+// Обработчик фото для заданий
+bot.on('photo', async (ctx) => {
+  try {
+    const replyToMessage = ctx.message.reply_to_message;
+    if (!replyToMessage) return;
+    
+    const replyText = replyToMessage.text || '';
+    
+    // Отправка скриншота для проверки задания
+    if (replyText.includes('Подтверждение выполнения задания')) {
+      // Извлекаем название задания из текста
+      const taskTitleMatch = replyText.match(/Задание:\*\s*(.+)/);
+      if (!taskTitleMatch) {
+        return ctx.reply('❌ Не удалось определить задание');
+      }
+      
+      const taskTitle = taskTitleMatch[1];
+      const task = SPONSOR_TASKS.find(t => t.title === taskTitle);
+      
+      if (!task) {
+        return ctx.reply('❌ Задание не найдено');
+      }
+      
+      // Получаем фото
+      const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+      
+      // Создаем проверку задания
+      const taskCheck = await createTaskCheck(
+        ctx.from.id,
+        ctx.from.username,
+        task.id,
+        task.title,
+        photo
+      );
+      
+      // Отправляем в канал поддержки
+      await sendTaskCheckToChannel(taskCheck);
+      
+      ctx.reply(
+        `✅ *Задание отправлено на проверку!*\n\n` +
+        `📋 *Задание:* ${task.title}\n` +
+        `🎫 *ID проверки:* \`${taskCheck._id.toString().slice(-6)}\`\n` +
+        `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n\n` +
+        `⏳ Ожидайте результата проверки администратором в течение 24 часов.`,
+        { 
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('📋 Задания спонсоров', 'sponsor_tasks')],
+            [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+          ])
+        }
+      );
+      return;
+    }
+  } catch (error) {
+    console.error('Ошибка обработки фото:', error);
+    ctx.reply('❌ Произошла ошибка при отправке скриншота. Попробуйте еще раз.');
+  }
+});
+
 bot.on('text', async (ctx) => {
   const replyMsg = ctx.message.reply_to_message;
   if (!replyMsg) return;
@@ -822,59 +883,7 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    // Отправка скриншота для проверки задания
-    if (replyText.includes('Подтверждение выполнения задания')) {
-      // Извлекаем название задания из текста
-      const taskTitleMatch = replyText.match(/Задание:\*\s*(.+)/);
-      if (!taskTitleMatch) {
-        return ctx.reply('❌ Не удалось определить задание');
-      }
-      
-      const taskTitle = taskTitleMatch[1];
-      const task = SPONSOR_TASKS.find(t => t.title === taskTitle);
-      
-      if (!task) {
-        return ctx.reply('❌ Задание не найдено');
-      }
-      
-      // Проверяем, есть ли скриншот
-      const photo = ctx.message.photo ? ctx.message.photo[ctx.message.photo.length - 1].file_id : null;
-      
-      if (!photo) {
-        return ctx.reply(
-          '❌ *Необходим скриншот*\n\nПожалуйста, отправьте скриншот выполнения задания.',
-          { parse_mode: 'Markdown' }
-        );
-      }
-      
-      // Создаем проверку задания
-      const taskCheck = await createTaskCheck(
-        ctx.from.id,
-        ctx.from.username,
-        task.id,
-        task.title,
-        photo
-      );
-      
-      // Отправляем в канал поддержки
-      await sendTaskCheckToChannel(taskCheck);
-      
-      ctx.reply(
-        `✅ *Задание отправлено на проверку!*\n\n` +
-        `📋 *Задание:* ${task.title}\n` +
-        `🎫 *ID проверки:* \`${taskCheck._id.toString().slice(-6)}\`\n` +
-        `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n\n` +
-        `⏳ Ожидайте результата проверки администратором в течение 24 часов.`,
-        { 
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback('📋 Задания спонсоров', 'sponsor_tasks')],
-            [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-          ])
-        }
-      );
-      return;
-    }
+
 
     // Админские команды
     if (isAdmin(ctx.from.id)) {
