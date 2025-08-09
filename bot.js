@@ -1616,8 +1616,8 @@ ${progressBar}
 [🪙 ${magnumCoinsBalance}] Magnum Coin  
 [💎 ${starsBalance}] звёзд  
 [👥 ${friends}] друзей приглашено  
-[${rank.color} ${rank.name}]  
-[${title}]
+**Ранг:** [${rank.color} ${rank.name}]  
+**Титул:** [${title}]
 
 ${progressText}
 
@@ -2076,8 +2076,8 @@ bot.action('top', async (ctx) => {
     msg += `├ [⭐ ${stars}] звёзд\n`;
     msg += `├ [🪙 ${magnumCoins}] Magnum Coin\n`;
     msg += `├ [${status.color} ${status.name}]\n`;
-    msg += `├ [${rank.color} ${rank.name}]\n`;
-    msg += `└ [${title}]\n`;
+    msg += `├ **Ранг:** [${rank.color} ${rank.name}]\n`;
+    msg += `└ **Титул:** [${title}]\n`;
     msg += `${divider}\n\n`;
   }
   
