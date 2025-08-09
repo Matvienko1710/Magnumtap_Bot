@@ -176,7 +176,7 @@ ADMIN_IDS=123456789,987654321
 SUPPORT_CHANNEL=имя_канала_техподдержки
 
 # Обязательная подписка
-REQUIRED_CHANNEL_ID=-1001234567890
+REQUIRED_CHANNEL=имя_канала_без_собаки
 REQUIRED_BOT_LINK=https://t.me/ReferalStarsRobot?start=6587897295
 ```
 
@@ -219,7 +219,7 @@ ADMIN_IDS=ваши_telegram_id_через_запятую
 SUPPORT_CHANNEL=support_channel_name     # Имя канала техподдержки без @
 
 # Обязательная подписка
-REQUIRED_CHANNEL_ID=-1001234567890       # ID канала для подписки
+REQUIRED_CHANNEL=имя_канала_без_собаки    # Имя канала для подписки без @
 REQUIRED_BOT_LINK=https://t.me/ReferalStarsRobot?start=6587897295
 
 # Ссылки для заданий от спонсоров

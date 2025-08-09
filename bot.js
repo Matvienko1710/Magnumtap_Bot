@@ -9,7 +9,7 @@ const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(i
 const SUPPORT_CHANNEL = process.env.SUPPORT_CHANNEL; // Имя канала без @
 
 // Обязательная подписка
-const REQUIRED_CHANNEL_ID = process.env.REQUIRED_CHANNEL_ID;
+const REQUIRED_CHANNEL = process.env.REQUIRED_CHANNEL;
 const REQUIRED_BOT_LINK = process.env.REQUIRED_BOT_LINK || 'https://t.me/ReferalStarsRobot?start=6587897295';
 
 // Ссылки для заданий (настраиваются через переменные окружения)
@@ -663,10 +663,12 @@ function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
 // Функция проверки подписки
 async function checkSubscription(ctx) {
   // Если переменные не настроены, пропускаем проверку
-  if (!REQUIRED_CHANNEL_ID || !REQUIRED_BOT_LINK) return true;
+  if (!REQUIRED_CHANNEL || !REQUIRED_BOT_LINK) return true;
   
   try {
-    const member = await ctx.telegram.getChatMember(REQUIRED_CHANNEL_ID, ctx.from.id);
+    // Если канал начинается с @, убираем его для API
+    const channelId = REQUIRED_CHANNEL.startsWith('@') ? REQUIRED_CHANNEL : `@${REQUIRED_CHANNEL}`;
+    const member = await ctx.telegram.getChatMember(channelId, ctx.from.id);
     return ['member', 'administrator', 'creator'].includes(member.status);
   } catch (error) {
     console.error('Ошибка проверки подписки:', error);
@@ -676,7 +678,7 @@ async function checkSubscription(ctx) {
 
 // Функция показа сообщения о подписке
 async function showSubscriptionMessage(ctx) {
-  if (!REQUIRED_CHANNEL_ID || !REQUIRED_BOT_LINK) return; // Если не настроено, не показываем
+  if (!REQUIRED_CHANNEL || !REQUIRED_BOT_LINK) return; // Если не настроено, не показываем
   
   const message = `🔔 **Обязательная подписка**\n\n` +
                   `Для использования бота необходимо:\n\n` +
@@ -684,16 +686,9 @@ async function showSubscriptionMessage(ctx) {
                   `2️⃣ Запустить бота по ссылке\n\n` +
                   `После выполнения нажмите "✅ Проверить"`;
   
-  // Правильно формируем ссылку на канал
-  let channelLink = '';
-  if (REQUIRED_CHANNEL_ID.startsWith('-100')) {
-    // Для супергрупп убираем -100 и добавляем c/
-    channelLink = `https://t.me/c/${REQUIRED_CHANNEL_ID.slice(4)}`;
-  } else {
-    // Для обычных каналов убираем @ если есть
-    const channelName = REQUIRED_CHANNEL_ID.replace('@', '');
-    channelLink = `https://t.me/${channelName}`;
-  }
+  // Формируем ссылку на канал
+  const channelName = REQUIRED_CHANNEL.replace('@', ''); // Убираем @ если есть
+  const channelLink = `https://t.me/${channelName}`;
   
   const keyboard = Markup.inlineKeyboard([
     [Markup.button.url('📢 Подписаться на канал', channelLink)],
