@@ -2343,7 +2343,133 @@ bot.command('updatechat', async (ctx) => {
   }
 });
 
+// Команда для выдачи титулов и статусов в чате
+bot.command('give', async (ctx) => {
+  try {
+    // Проверяем права администратора
+    if (!isAdmin(ctx.from.id)) {
+      return ctx.reply('❌ У вас нет прав для использования этой команды');
+    }
+    
+    // Парсим аргументы, учитывая кавычки
+    const text = ctx.message.text;
+    const match = text.match(/^\/give\s+(title|status)\s+(\d+)\s+(.+)$/);
+    
+    if (!match) {
+      const helpText = `🎁 **Команда выдачи наград**\n\n` +
+        `**Формат:** /give <тип> <ID_пользователя> <название>\n\n` +
+        `**Типы наград:**\n` +
+        `• \`title\` - выдать титул\n` +
+        `• \`status\` - выдать статус\n\n` +
+        `**Примеры:**\n` +
+        `• \`/give title 123456789 🌟 Звёздный лорд\`\n` +
+        `• \`/give status 123456789 👑 Владелец\`\n\n` +
+        `**Доступные титулы:**\n` +
+        `• 🌟 Звёздный лорд\n` +
+        `• 🏆 Чемпион\n` +
+        `• 👑 Король\n` +
+        `• 🎭 Легенда\n` +
+        `• ⭐ Суперзвезда\n` +
+        `• 🚀 Космонавт\n` +
+        `• 🎪 Артист\n` +
+        `• 🎨 Художник\n` +
+        `• 🎵 Музыкант\n` +
+        `• 🎬 Режиссёр\n\n` +
+        `**Доступные статусы:**\n` +
+        `• 👑 Владелец\n` +
+        `• 🔥 Администратор\n` +
+        `• ⭐ Модератор\n` +
+        `• 💎 VIP\n` +
+        `• 🎯 Игрок`;
+      
+      return ctx.reply(helpText, { parse_mode: 'Markdown' });
+    }
+    
+    const [, type, userIdStr, titleName] = match;
+    const userId = parseInt(userIdStr);
+    
+    if (isNaN(userId)) {
+      return ctx.reply('❌ Неверный ID пользователя');
+    }
+    
+    // Проверяем, существует ли пользователь
+    const user = await users.findOne({ id: userId });
+    if (!user) {
+      return ctx.reply(`❌ Пользователь с ID ${userId} не найден в базе`);
+    }
+    
+    console.log(`🎁 Админ ${ctx.from.id} выдает ${type} "${titleName}" пользователю ${userId}`);
+    
+    if (type === 'title') {
+      // Выдаем титул
+      const availableTitles = [
+        '🌟 Звёздный лорд', '🏆 Чемпион', '👑 Король', '🎭 Легенда', '⭐ Суперзвезда',
+        '🚀 Космонавт', '🎪 Артист', '🎨 Художник', '🎵 Музыкант', '🎬 Режиссёр'
+      ];
+      
+      if (!availableTitles.includes(titleName)) {
+        return ctx.reply(`❌ Неизвестный титул "${titleName}"\n\nДоступные титулы:\n${availableTitles.map(t => `• ${t}`).join('\n')}`);
+      }
+      
+      // Добавляем титул к пользователю
+      await users.updateOne(
+        { id: userId },
+        { $addToSet: { titles: titleName } }
+      );
+      
+      invalidateUserCache(userId);
+      
+      const successText = `✅ **Титул выдан!**\n\n` +
+        `👤 **Пользователь:** ${user.username || userId}\n` +
+        `🏆 **Титул:** ${titleName}\n` +
+        `👑 **Выдал:** ${ctx.from.first_name || 'Администратор'}\n\n` +
+        `💡 Пользователь получил новый титул в боте!`;
+      
+      await ctx.reply(successText, { parse_mode: 'Markdown' });
+      
+    } else if (type === 'status') {
+      // Выдаем статус
+      const availableStatuses = [
+        '👑 Владелец', '🔥 Администратор', '⭐ Модератор', '💎 VIP', '🎯 Игрок'
+      ];
+      
+      if (!availableStatuses.includes(titleName)) {
+        return ctx.reply(`❌ Неизвестный статус "${titleName}"\n\nДоступные статусы:\n${availableStatuses.map(s => `• ${s}`).join('\n')}`);
+      }
+      
+      // Обновляем статус пользователя
+      await users.updateOne(
+        { id: userId },
+        { $set: { status: titleName } }
+      );
+      
+      invalidateUserCache(userId);
+      
+      const successText = `✅ **Статус выдан!**\n\n` +
+        `👤 **Пользователь:** ${user.username || userId}\n` +
+        `💫 **Статус:** ${titleName}\n` +
+        `👑 **Выдал:** ${ctx.from.first_name || 'Администратор'}\n\n` +
+        `💡 Пользователь получил новый статус в боте!`;
+      
+      await ctx.reply(successText, { parse_mode: 'Markdown' });
+      
+    } else {
+      return ctx.reply('❌ Неверный тип награды. Используйте `title` или `status`', { parse_mode: 'Markdown' });
+    }
+    
+  } catch (error) {
+    console.error('❌ Ошибка при выдаче награды:', error);
+    await ctx.reply('❌ Произошла ошибка при выдаче награды');
+  }
+});
+
 bot.start(async (ctx) => {
+  // Проверяем, что команда отправлена в личном чате, а не в группе
+  if (ctx.chat.type !== 'private') {
+    console.log(`🚫 Команда /start заблокирована в чате ${ctx.chat.type}: ${ctx.chat.title || ctx.chat.username}`);
+    return; // Просто игнорируем команду в групповых чатах
+  }
+  
   // Обрабатываем реферальный параметр
   const startPayload = ctx.startPayload;
   let referrerId = null;
@@ -3183,11 +3309,7 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
       return;
     }
 
-    // Автоматически добавляем @ для текстовых ID (если это не числовой ID)
-    if (promoChatId && !promoChatId.startsWith('-') && !promoChatId.startsWith('@') && isNaN(Number(promoChatId))) {
-      promoChatId = '@' + promoChatId;
-      console.log(`📢 Автоматически добавлен @ к имени чата: ${promoChatId}`);
-    }
+    // Используем ID чата как есть, без автоматического добавления @
 
     console.log(`📢 Отправляем уведомление о активации промокода ${code} в чат ${promoChatId}`);
     
@@ -3360,17 +3482,26 @@ async function handlePostButtonInput(ctx, text, userState) {
     // Парсим данные кнопки
     const buttonMatch = text.match(/^(.+?):(.+)$/);
     if (!buttonMatch) {
-      await ctx.reply('❌ Неверный формат! Используйте: ТЕКСТ_КНОПКИ:ССЫЛКА\n\nПример: 🎮 Играть:https://t.me/bot?start=game');
+      await ctx.reply('❌ Неверный формат! Используйте: ТЕКСТ_КНОПКИ:ССЫЛКА\n\n⚠️ **Важно:** Не добавляйте пробелы перед ссылкой!\n\nПример: 🎮 Играть:https://t.me/bot?start=game');
       return;
     }
     
     const [, buttonText, buttonUrl] = buttonMatch;
     
-    console.log(`🔘 Создаем кнопку: "${buttonText}" → ${buttonUrl}`);
+    // Очищаем URL от лишних пробелов
+    const cleanButtonUrl = buttonUrl.trim();
+    
+    // Проверяем валидность URL
+    if (!cleanButtonUrl.startsWith('http://') && !cleanButtonUrl.startsWith('https://') && !cleanButtonUrl.startsWith('tg://')) {
+      await ctx.reply('❌ Неверный формат ссылки! Ссылка должна начинаться с http://, https:// или tg://\n\nПример: https://t.me/+Poy0ZtUoux1hMTMy');
+      return;
+    }
+    
+    console.log(`🔘 Создаем кнопку: "${buttonText}" → ${cleanButtonUrl}`);
     
     // Создаем клавиатуру
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.url(buttonText, buttonUrl)]
+      [Markup.button.url(buttonText, cleanButtonUrl)]
     ]);
     
     const channelChatId = REQUIRED_CHANNEL ? `@${REQUIRED_CHANNEL}` : '@magnumtap';
@@ -4487,7 +4618,7 @@ bot.action('post_add_button', async (ctx) => {
   
   console.log(`💾 Новое состояние: ${JSON.stringify(userStates.get(ctx.from.id))}`);
   
-  await adminForceReply(ctx, '🔘 **Добавление кнопки**\n\nВведите данные кнопки в формате:\n\nТЕКСТ_КНОПКИ:ССЫЛКА\n\nПримеры:\n🎮 Играть:https://t.me/bot?start=game\n💬 Чат:https://t.me/+Poy0ZtUoux1hMTMy\n🌐 Сайт:https://magnumtap.com');
+  await adminForceReply(ctx, '🔘 **Добавление кнопки**\n\nВведите данные кнопки в формате:\n\nТЕКСТ_КНОПКИ:ССЫЛКА\n\n⚠️ **Важно:** Не добавляйте пробелы перед ссылкой!\n\nПримеры:\n🎮 Играть:https://t.me/bot?start=game\n💬 Чат:https://t.me/+Poy0ZtUoux1hMTMy\n🌐 Сайт:https://magnumtap.com');
   
   console.log(`✅ Запрос на ввод кнопки отправлен`);
 });
