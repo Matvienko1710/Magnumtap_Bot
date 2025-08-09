@@ -3309,22 +3309,12 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
       return;
     }
 
-    // Обрабатываем разные форматы ссылок на чат
-    if (promoChatId.includes('t.me/')) {
-      // Это ссылка на чат, извлекаем ID
-      const match = promoChatId.match(/t\.me\/([^\/\s]+)/);
-      if (match) {
-        const chatIdentifier = match[1];
-        if (chatIdentifier.startsWith('+')) {
-          // Это приватная ссылка, нужно использовать invite_link
-          promoChatId = chatIdentifier;
-          console.log(`📢 Обнаружена приватная ссылка на чат: ${promoChatId}`);
-        } else {
-          // Это публичный чат
-          promoChatId = '@' + chatIdentifier;
-          console.log(`📢 Обнаружен публичный чат: ${promoChatId}`);
-        }
-      }
+    // Проверяем, что ID чата начинается с @ (публичный чат)
+    if (!promoChatId.startsWith('@')) {
+      console.log(`❌ PROMO_NOTIFICATIONS_CHAT должен начинаться с @ для публичного чата`);
+      console.log(`   Текущее значение: ${promoChatId}`);
+      console.log(`   Пример правильного значения: @magnumtapchat`);
+      return;
     }
 
     console.log(`📢 Отправляем уведомление о активации промокода ${code} в чат ${promoChatId}`);
@@ -3347,32 +3337,19 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
     console.error('📋 Отладочная информация:');
     console.error(`   Исходное значение PROMO_NOTIFICATIONS_CHAT: "${process.env.PROMO_NOTIFICATIONS_CHAT}"`);
     
-    // Получаем обработанный ID чата для отладки
-    let processedChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
-    if (processedChatId && processedChatId.includes('t.me/')) {
-      const match = processedChatId.match(/t\.me\/([^\/\s]+)/);
-      if (match) {
-        const chatIdentifier = match[1];
-        if (chatIdentifier.startsWith('+')) {
-          processedChatId = chatIdentifier;
-        } else {
-          processedChatId = '@' + chatIdentifier;
-        }
-      }
-    }
-    console.error(`   Обработанный ID чата: "${processedChatId}"`);
+    console.error(`   ID чата: "${process.env.PROMO_NOTIFICATIONS_CHAT}"`);
     
     // Проверяем типичные ошибки и даем конкретные советы
     if (error.message.includes('chat not found')) {
       console.error('💡 Возможные причины и решения:');
       console.error('   1. Бот не добавлен в чат - добавьте бота в чат как участника');
       console.error('   2. Неправильное имя чата - убедитесь что чат публичный с username');
-      console.error('   3. Попробуйте использовать числовой ID чата вместо username');
+      console.error('   3. Проверьте правильность PROMO_NOTIFICATIONS_CHAT (должно быть @username)');
       console.error('   4. Дайте боту права администратора в чате');
     } else if (error.message.includes('CHAT_ID_INVALID')) {
       console.error('💡 Проверьте правильность PROMO_NOTIFICATIONS_CHAT:');
-      console.error('   - Для публичного чата: @chatusername или chatusername');
-      console.error('   - Для приватного чата: числовой ID (например: -1001234567890)');
+      console.error('   - Должно быть: @username (например: @magnumtapchat)');
+      console.error('   - Убедитесь что чат публичный и имеет username');
     } else if (error.message.includes('Forbidden')) {
       console.error('💡 Бот не имеет прав для отправки сообщений в чат');
       console.error('   - Сделайте бота администратором чата');
