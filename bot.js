@@ -3309,11 +3309,7 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
       return;
     }
 
-    // Автоматически добавляем @ для текстовых ID (если это не числовой ID)
-    if (promoChatId && !promoChatId.startsWith('-') && !promoChatId.startsWith('@') && isNaN(Number(promoChatId))) {
-      promoChatId = '@' + promoChatId;
-      console.log(`📢 Автоматически добавлен @ к имени чата: ${promoChatId}`);
-    }
+    // Используем ID чата как есть, без автоматического добавления @
 
     console.log(`📢 Отправляем уведомление о активации промокода ${code} в чат ${promoChatId}`);
     

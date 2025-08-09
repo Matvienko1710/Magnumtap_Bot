@@ -281,7 +281,7 @@ BOT_PHOTO_URL=https://your-image-url.com/bot-photo.jpg
 PRIVATE_CHANNEL_LINK=https://t.me/+4BUF9S_rLZw3NDQ6
 
 # Чат для уведомлений о промокодах (необязательно)
-PROMO_NOTIFICATIONS_CHAT=@magnumtapchat    # @chatusername или числовой ID
+PROMO_NOTIFICATIONS_CHAT=@magnumtapchat    # @chatusername или числовой ID (добавляйте @ вручную)
 
 # Канал для публикации постов (используется REQUIRED_CHANNEL)
 # REQUIRED_CHANNEL=magnumtap              # Имя канала без @ для публикации постов
