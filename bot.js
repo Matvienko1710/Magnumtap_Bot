@@ -3309,7 +3309,23 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
       return;
     }
 
-    // Используем ID чата как есть, без автоматического добавления @
+    // Обрабатываем разные форматы ссылок на чат
+    if (promoChatId.includes('t.me/')) {
+      // Это ссылка на чат, извлекаем ID
+      const match = promoChatId.match(/t\.me\/([^\/\s]+)/);
+      if (match) {
+        const chatIdentifier = match[1];
+        if (chatIdentifier.startsWith('+')) {
+          // Это приватная ссылка, нужно использовать invite_link
+          promoChatId = chatIdentifier;
+          console.log(`📢 Обнаружена приватная ссылка на чат: ${promoChatId}`);
+        } else {
+          // Это публичный чат
+          promoChatId = '@' + chatIdentifier;
+          console.log(`📢 Обнаружен публичный чат: ${promoChatId}`);
+        }
+      }
+    }
 
     console.log(`📢 Отправляем уведомление о активации промокода ${code} в чат ${promoChatId}`);
     
@@ -3330,7 +3346,21 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
     console.error('❌ Ошибка при отправке уведомления о промокоде в чат:', error);
     console.error('📋 Отладочная информация:');
     console.error(`   Исходное значение PROMO_NOTIFICATIONS_CHAT: "${process.env.PROMO_NOTIFICATIONS_CHAT}"`);
-    console.error(`   Обработанный ID чата: "${promoChatId}"`);
+    
+    // Получаем обработанный ID чата для отладки
+    let processedChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
+    if (processedChatId && processedChatId.includes('t.me/')) {
+      const match = processedChatId.match(/t\.me\/([^\/\s]+)/);
+      if (match) {
+        const chatIdentifier = match[1];
+        if (chatIdentifier.startsWith('+')) {
+          processedChatId = chatIdentifier;
+        } else {
+          processedChatId = '@' + chatIdentifier;
+        }
+      }
+    }
+    console.error(`   Обработанный ID чата: "${processedChatId}"`);
     
     // Проверяем типичные ошибки и даем конкретные советы
     if (error.message.includes('chat not found')) {
