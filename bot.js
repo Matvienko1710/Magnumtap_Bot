@@ -186,8 +186,8 @@ setInterval(() => {
 // Кеш для оптимизации
 const photoUrlCache = process.env.BOT_PHOTO_URL;
 
-// Универсальная функция для отправки сообщений с фото (оптимизированная)
-async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
+// Функция для отправки сообщений главного меню с фото
+async function sendMainMenuWithPhoto(ctx, text, keyboard, isEdit = true) {
   try {
     if (photoUrlCache && isEdit) {
       // Попытка 1: редактирование медиа (если сообщение уже с фото)
@@ -250,7 +250,7 @@ async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
         });
       }
     } else {
-      // Без фото
+      // Без фото - отправляем обычное сообщение
       if (isEdit) {
         try {
           return await ctx.editMessageText(text, {
@@ -277,6 +277,55 @@ async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
           ...keyboard
         });
       }
+    }
+  } catch (criticalError) {
+    console.error('Критическая ошибка в sendMainMenuWithPhoto:', criticalError);
+    
+    // Последняя попытка отправить хотя бы базовое уведомление
+    try {
+      return await ctx.reply('⚠️ Временно недоступно. Повторите через пару секунд.', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🔄 Попробовать снова', callback_data: 'main_menu' }
+          ]]
+        }
+      });
+    } catch (finalError) {
+      console.error('Полный провал отправки сообщения:', finalError);
+      return null;
+    }
+  }
+}
+
+// Универсальная функция для отправки сообщений БЕЗ фото (для всех остальных меню)
+async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
+  try {
+    // Всегда отправляем только текстовые сообщения (без фото)
+    if (isEdit) {
+      try {
+        return await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      } catch (editError) {
+        console.log('Не удалось отредактировать текст:', editError.message);
+        
+        try {
+          await ctx.deleteMessage();
+        } catch (deleteError) {
+          console.log('Не удалось удалить сообщение:', deleteError.message);
+        }
+        
+        return await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      }
+    } else {
+      return await ctx.reply(text, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
     }
   } catch (criticalError) {
     console.error('Критическая ошибка в sendMessageWithPhoto:', criticalError);
@@ -1859,6 +1908,14 @@ const SPONSOR_TASKS = [
     reward: 3,
     instruction: 'Сделайте скриншот результатов 3 игр',
     link: BASKET_BOT_LINK
+  },
+  {
+    id: 'private_channel',
+    title: '🔒 Подписаться на приватный канал',
+    description: 'Подпишитесь на закрытый канал команды MagnumTap',
+    reward: 5,
+    instruction: 'Сделайте скриншот что вы в канале (список участников или любое сообщение)',
+    link: process.env.PRIVATE_CHANNEL_LINK || 'https://t.me/+4BUF9S_rLZw3NDQ6'
   }
 ];
 
@@ -1973,7 +2030,7 @@ async function updateMainMenuBalance(ctx) {
     // Принудительно обновляем кеш пользователя
     invalidateUserCache(ctx.from.id);
     const menu = await getMainMenu(ctx, ctx.from.id);
-    await sendMessageWithPhoto(ctx, menu.text, menu.keyboard);
+    await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard);
   } catch (error) {
     console.error('Ошибка обновления баланса в меню:', error);
   }
@@ -2094,7 +2151,7 @@ bot.start(async (ctx) => {
   invalidateBotStatsCache();
   
   const menu = await getMainMenu(ctx, ctx.from.id);
-  await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
+  await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
 
 bot.action('check_subscription', async (ctx) => {
@@ -2107,7 +2164,7 @@ bot.action('check_subscription', async (ctx) => {
   await ctx.answerCbQuery('✅ Подписка подтверждена!');
   const user = await getUser(ctx.from.id, ctx);
   const menu = await getMainMenu(ctx, ctx.from.id);
-  await sendMessageWithPhoto(ctx, menu.text, menu.keyboard);
+  await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard);
 });
 
 bot.action('main_menu', async (ctx) => {
@@ -2116,7 +2173,7 @@ bot.action('main_menu', async (ctx) => {
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   const menu = await getMainMenu(ctx, ctx.from.id);
-  await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
+  await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
 
 // Обновляем профиль с кнопкой техподдержки
