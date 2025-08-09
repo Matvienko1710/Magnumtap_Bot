@@ -57,33 +57,33 @@ const userStates = new Map();
 // Система титулов
 const TITLES = {
   // Обычные титулы (10)
-  'newcomer': { name: '🌱 Новичок', description: 'Начал путь в MagnumTap', condition: 'registration', requirement: 1 },
-  'farmer': { name: '⚡ Фармер', description: 'Выполнил 30 действий фарминга', condition: 'farm_count', requirement: 30 },
-  'collector': { name: '💎 Коллекционер', description: 'Собрал 50 звёзд', condition: 'stars', requirement: 50 },
-  'inviter': { name: '🤝 Амбассадор', description: 'Пригласил 3 друзей', condition: 'invited', requirement: 3 },
-  'daily_visitor': { name: '📅 Постоянный посетитель', description: '5 дней подряд заходил в бота', condition: 'daily_streak', requirement: 5 },
-  'bonus_hunter': { name: '🎁 Охотник за бонусами', description: 'Собрал 15 ежедневных бонусов', condition: 'bonus_count', requirement: 15 },
-  'promo_master': { name: '🎫 Мастер промокодов', description: 'Активировал 5 промокодов', condition: 'promo_count', requirement: 5 },
-  'task_warrior': { name: '⚔️ Воин заданий', description: 'Выполнил 20 заданий', condition: 'task_count', requirement: 20 },
-  'star_lord': { name: '🌟 Звёздный лорд', description: 'Собрал 200 звёзд', condition: 'stars', requirement: 200 },
-  'legend': { name: '👑 Легенда', description: 'Собрал 500 звёзд и пригласил 10 друзей', condition: 'combined', requirement: { stars: 500, invited: 10 } },
+  'newcomer': { name: 'Новичок', description: 'Начал путь в MagnumTap', condition: 'registration', requirement: 1, icon: '🌱' },
+  'farmer': { name: 'Фармер', description: 'Выполнил 30 действий фарминга', condition: 'farm_count', requirement: 30, icon: '⚡' },
+  'collector': { name: 'Коллекционер', description: 'Собрал 50 звёзд', condition: 'stars', requirement: 50, icon: '💎' },
+  'inviter': { name: 'Амбассадор', description: 'Пригласил 3 друзей', condition: 'invited', requirement: 3, icon: '🤝' },
+  'daily_visitor': { name: 'Постоянный посетитель', description: '5 дней подряд заходил в бота', condition: 'daily_streak', requirement: 5, icon: '📅' },
+  'bonus_hunter': { name: 'Охотник за бонусами', description: 'Собрал 15 ежедневных бонусов', condition: 'bonus_count', requirement: 15, icon: '🎁' },
+  'promo_master': { name: 'Мастер промокодов', description: 'Активировал 5 промокодов', condition: 'promo_count', requirement: 5, icon: '🎫' },
+  'task_warrior': { name: 'Воин заданий', description: 'Выполнил 20 заданий', condition: 'task_count', requirement: 20, icon: '⚔️' },
+  'star_lord': { name: 'Звёздный лорд', description: 'Собрал 200 звёзд', condition: 'stars', requirement: 200, icon: '🌟' },
+  'legend': { name: 'Легенда', description: 'Собрал 500 звёзд и пригласил 10 друзей', condition: 'combined', requirement: { stars: 500, invited: 10 }, icon: '👑' },
 
   // Секретные титулы (3)
-  'early_bird': { name: '🌅 Ранняя пташка', description: 'Секретный титул за особую активность', condition: 'secret', requirement: 'special' },
-  'night_owl': { name: '🦉 Ночная сова', description: 'Секретный титул для ночных игроков', condition: 'secret', requirement: 'special' },
-  'vip_elite': { name: '💫 VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only' }
+  'early_bird': { name: 'Ранняя пташка', description: 'Секретный титул за особую активность', condition: 'secret', requirement: 'special', icon: '🌅' },
+  'night_owl': { name: 'Ночная сова', description: 'Секретный титул для ночных игроков', condition: 'secret', requirement: 'special', icon: '🦉' },
+  'vip_elite': { name: 'VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only', icon: '💫' }
 };
 
 // Система рангов (по звёздам)
 const RANKS = [
-  { name: '🥉 Bronze Star', requirement: 0, color: '🥉' },
-  { name: '🥈 Silver Star', requirement: 50, color: '🥈' },
-  { name: '🥇 Gold Star', requirement: 150, color: '🥇' },
-  { name: '💎 Platinum Star', requirement: 300, color: '💎' },
-  { name: '💍 Diamond Star', requirement: 500, color: '💍' },
-  { name: '👑 Master Star', requirement: 1000, color: '👑' },
-  { name: '🏆 Grandmaster', requirement: 2000, color: '🏆' },
-  { name: '⭐ Legend', requirement: 5000, color: '⭐' }
+  { name: 'Bronze Star', requirement: 0, color: '🥉' },
+  { name: 'Silver Star', requirement: 50, color: '🥈' },
+  { name: 'Gold Star', requirement: 150, color: '🥇' },
+  { name: 'Platinum Star', requirement: 300, color: '💎' },
+  { name: 'Diamond Star', requirement: 500, color: '💍' },
+  { name: 'Master Star', requirement: 1000, color: '👑' },
+  { name: 'Grandmaster', requirement: 2000, color: '🏆' },
+  { name: 'Legend', requirement: 5000, color: '⭐' }
 ];
 
 // Система магазина
@@ -147,43 +147,43 @@ const SHOP_ITEMS = {
 // Система статусов пользователей
 const USER_STATUSES = {
   'owner': { 
-    name: '👑 Владелец', 
+    name: 'Владелец', 
     description: 'Создатель и владелец бота', 
     color: '👑',
     priority: 1
   },
   'admin': { 
-    name: '⚡ Администратор', 
+    name: 'Администратор', 
     description: 'Полный доступ к управлению ботом', 
     color: '⚡',
     priority: 2
   },
   'moderator': { 
-    name: '🛡️ Модератор', 
+    name: 'Модератор', 
     description: 'Модерация пользователей и контента', 
     color: '🛡️',
     priority: 3
   },
   'vip_gold': { 
-    name: '💎 VIP Gold', 
+    name: 'VIP Gold', 
     description: 'Премиум статус высшего уровня', 
     color: '💎',
     priority: 4
   },
   'vip': { 
-    name: '💫 VIP', 
+    name: 'VIP', 
     description: 'Премиум пользователь', 
     color: '💫',
     priority: 5
   },
   'verified': { 
-    name: '✅ Верифицированный', 
+    name: 'Верифицированный', 
     description: 'Проверенный активный пользователь', 
     color: '✅',
     priority: 6
   },
   'member': { 
-    name: '🎮 Участник', 
+    name: 'Участник', 
     description: 'Обычный участник сообщества', 
     color: '🎮',
     priority: 7
@@ -654,7 +654,8 @@ function getUserMainTitle(user) {
     }
     // Проверяем обычные титулы
     if (TITLES[user.selectedTitle] && (user.titles || []).includes(user.selectedTitle)) {
-      return TITLES[user.selectedTitle].name;
+      const title = TITLES[user.selectedTitle];
+      return `${title.icon} ${title.name}`;
     }
   }
   
@@ -671,7 +672,8 @@ function getUserMainTitle(user) {
   
   for (const titleId of titleOrder) {
     if (userTitles.includes(titleId)) {
-      return TITLES[titleId].name;
+      const title = TITLES[titleId];
+      return `${title.icon} ${title.name}`;
     }
   }
   return '🆕 Нет титула';
@@ -1447,12 +1449,12 @@ ${progressBar}
 
 👋 **Приветствую, ${userInfo}!**
 
-[💫 ${getStatusDisplayName(user)}]  
+[${status.color} ${status.name}]  
 [🪙 ${magnumCoinsBalance}] Magnum Coin  
 [💎 ${starsBalance}] звёзд  
 [👥 ${friends}] друзей приглашено  
-[🏅 ${rank.name}]  
-[🏆 ${title}]
+[${rank.color} ${rank.name}]  
+[${title}]
 
 ${progressText}`;
 }
@@ -1709,10 +1711,11 @@ bot.action('my_titles', async (ctx) => {
     // Показываем обычные титулы
     userTitles.forEach(titleId => {
       if (TITLES[titleId]) {
+        const title = TITLES[titleId];
         const isSelected = user.selectedTitle === titleId;
-        const indicator = isSelected ? '✅' : '🏆';
-        titlesText += `${indicator} **${TITLES[titleId].name}** ${isSelected ? '(активен)' : ''}\n`;
-        titlesText += `📝 ${TITLES[titleId].description}\n\n`;
+        const indicator = isSelected ? '✅' : title.icon;
+        titlesText += `${indicator} **${title.name}** ${isSelected ? '(активен)' : ''}\n`;
+        titlesText += `📝 ${title.description}\n\n`;
       }
     });
   }
@@ -1755,8 +1758,9 @@ bot.action('select_title', async (ctx) => {
   // Обычные титулы
   userTitles.forEach(titleId => {
     if (TITLES[titleId]) {
+      const title = TITLES[titleId];
       const isSelected = user.selectedTitle === titleId;
-      const text = `${isSelected ? '✅' : '🏆'} ${TITLES[titleId].name} ${isSelected ? '(активен)' : ''}`;
+      const text = `${isSelected ? '✅' : title.icon} ${title.name} ${isSelected ? '(активен)' : ''}`;
       buttons.push([Markup.button.callback(text, `set_title_${titleId}`)]);
     }
   });
@@ -1840,8 +1844,9 @@ bot.action(/^set_title_(.+)$/, async (ctx) => {
     // Обычные титулы
     userTitles.forEach(titleId => {
       if (TITLES[titleId]) {
+        const title = TITLES[titleId];
         const isSelected = updatedUser.selectedTitle === titleId;
-        const text = `${isSelected ? '✅' : '🏆'} ${TITLES[titleId].name} ${isSelected ? '(активен)' : ''}`;
+        const text = `${isSelected ? '✅' : title.icon} ${title.name} ${isSelected ? '(активен)' : ''}`;
         buttons.push([Markup.button.callback(text, `set_title_${titleId}`)]);
       }
     });
@@ -1913,8 +1918,8 @@ bot.action('top', async (ctx) => {
     msg += `├ [⭐ ${stars}] звёзд\n`;
     msg += `├ [🪙 ${magnumCoins}] Magnum Coin\n`;
     msg += `├ [${status.color} ${status.name}]\n`;
-    msg += `├ [🏅 ${rank.name}]\n`;
-    msg += `└ [🏆 ${title}]\n`;
+    msg += `├ [${rank.color} ${rank.name}]\n`;
+    msg += `└ [${title}]\n`;
     msg += `${divider}\n\n`;
   }
   
@@ -3334,14 +3339,14 @@ bot.action('admin_titles', async (ctx) => {
   
   Object.entries(TITLES).forEach(([id, title]) => {
     if (title.condition !== 'secret') {
-      titlesList += `${title.name}\n${title.description}\n\n`;
+      titlesList += `${title.icon} ${title.name}\n${title.description}\n\n`;
     }
   });
   
   titlesList += '**СЕКРЕТНЫЕ ТИТУЛЫ:**\n';
   Object.entries(TITLES).forEach(([id, title]) => {
     if (title.condition === 'secret') {
-      titlesList += `${title.name}\n${title.description}\n\n`;
+      titlesList += `${title.icon} ${title.name}\n${title.description}\n\n`;
     }
   });
 
