@@ -40,6 +40,18 @@ const TITLES = {
   'vip_elite': { name: '💫 VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only' }
 };
 
+// Система рангов (по звёздам)
+const RANKS = [
+  { name: '🥉 Bronze Star', requirement: 0, color: '🥉' },
+  { name: '🥈 Silver Star', requirement: 50, color: '🥈' },
+  { name: '🥇 Gold Star', requirement: 150, color: '🥇' },
+  { name: '💎 Platinum Star', requirement: 300, color: '💎' },
+  { name: '💍 Diamond Star', requirement: 500, color: '💍' },
+  { name: '👑 Master Star', requirement: 1000, color: '👑' },
+  { name: '🏆 Grandmaster', requirement: 2000, color: '🏆' },
+  { name: '⭐ Legend', requirement: 5000, color: '⭐' }
+];
+
 // Система статусов пользователей
 const USER_STATUSES = {
   'owner': { 
@@ -543,7 +555,7 @@ async function checkAndAwardTitles(userId) {
 
 function getUserMainTitle(user) {
   const userTitles = user.titles || [];
-  if (userTitles.length === 0) return '🆕 Новичок';
+  if (userTitles.length === 0) return '🆕 Нет титула';
   
   // Приоритет: секретные > легенда > по порядку
   const titleOrder = ['vip_elite', 'early_bird', 'night_owl', 'legend', 'star_lord', 'task_warrior', 'promo_master', 'bonus_hunter', 'daily_visitor', 'inviter', 'collector', 'farmer', 'newcomer'];
@@ -553,30 +565,52 @@ function getUserMainTitle(user) {
       return TITLES[titleId].name;
     }
   }
-  return '🆕 Новичок';
+  return '🆕 Нет титула';
 }
 
-function getNextLevelInfo(user) {
+function getUserRank(user) {
   const stars = user.stars || 0;
-  const levels = [
-    { name: 'Bronze Star', requirement: 50 },
-    { name: 'Silver Star', requirement: 150 },
-    { name: 'Gold Star', requirement: 300 },
-    { name: 'Platinum Star', requirement: 500 },
-    { name: 'Diamond Star', requirement: 1000 },
-    { name: 'Master Star', requirement: 2000 }
-  ];
-
-  for (const level of levels) {
-    if (stars < level.requirement) {
-      return {
-        nextLevel: level.name,
-        starsNeeded: level.requirement - stars
-      };
+  let currentRank = RANKS[0]; // По умолчанию Bronze Star
+  
+  for (const rank of RANKS) {
+    if (stars >= rank.requirement) {
+      currentRank = rank;
+    } else {
+      break;
     }
   }
-  return { nextLevel: 'Максимальный уровень', starsNeeded: 0 };
+  
+  return currentRank;
 }
+
+function getNextRankInfo(user) {
+  const stars = user.stars || 0;
+  const currentRank = getUserRank(user);
+  
+  // Найти следующий ранг
+  const currentIndex = RANKS.findIndex(rank => rank.name === currentRank.name);
+  if (currentIndex < RANKS.length - 1) {
+    const nextRank = RANKS[currentIndex + 1];
+    const starsToNext = nextRank.requirement - stars;
+    const progress = Math.max(0, Math.min(100, (stars - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
+    
+    return {
+      current: currentRank,
+      next: nextRank,
+      starsToNext: starsToNext,
+      progress: Math.round(progress)
+    };
+  }
+  
+  return {
+    current: currentRank,
+    next: null,
+    starsToNext: 0,
+    progress: 100
+  };
+}
+
+
 
 async function connectDB() {
   await mongo.connect();
@@ -644,59 +678,30 @@ async function getDetailedProfile(userId) {
   const user = await getUser(userId);
   const balance = Math.round((user.stars || 0) * 100) / 100; // Округляем до 2 знаков
   const friends = user.invited || 0;
-  const rank = getUserMainTitle(user);
-  const nextLevel = getNextLevelInfo(user);
+  const title = getUserMainTitle(user);
+  const rank = getUserRank(user);
+  const nextRankInfo = getNextRankInfo(user);
+  const status = getUserStatus(user);
   
-  // Создаем шкалу прогресса
-  const levels = [
-    { name: 'Bronze Star', requirement: 50 },
-    { name: 'Silver Star', requirement: 150 },
-    { name: 'Gold Star', requirement: 300 },
-    { name: 'Platinum Star', requirement: 500 },
-    { name: 'Diamond Star', requirement: 1000 },
-    { name: 'Master Star', requirement: 2000 }
-  ];
-  
-  let prevLevelStars = 0;
-  let nextLevelStars = 50; // По умолчанию до Bronze Star
-  
-  // Находим текущий диапазон уровня
-  for (let i = 0; i < levels.length; i++) {
-    if (balance < levels[i].requirement) {
-      nextLevelStars = levels[i].requirement;
-      prevLevelStars = i > 0 ? levels[i - 1].requirement : 0;
-      break;
-    }
+  let progressText = '';
+  if (nextRankInfo.next && nextRankInfo.starsToNext > 0) {
+    const progressBar = createProgressBar(nextRankInfo.progress, 100) + ` ${nextRankInfo.progress}%`;
+    progressText = `📊 **Прогресс ранга:**  
+${progressBar}
+До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} звёзд`;
+  } else {
+    progressText = '🏆 **Максимальный ранг достигнут!**';
   }
-  
-  // Если достиг максимального уровня
-  if (nextLevel.starsNeeded === 0) {
-    prevLevelStars = levels[levels.length - 1].requirement;
-    nextLevelStars = prevLevelStars;
-  }
-  
-  const currentProgress = Math.max(0, balance - prevLevelStars);
-  const levelRange = nextLevelStars - prevLevelStars;
-  const progressPercent = nextLevel.starsNeeded === 0 ? 100 : 
-    levelRange > 0 ? Math.floor((currentProgress / levelRange) * 100) : 0;
-  
-  const progressBar = nextLevel.starsNeeded === 0 ? 
-    '▓▓▓▓▓▓▓▓▓▓ 100%' : 
-    createProgressBar(currentProgress, levelRange) + ` ${progressPercent}%`;
-  
-  // Округляем starsNeeded до 2 знаков
-  const starsNeededRounded = Math.round(nextLevel.starsNeeded * 100) / 100;
   
   return `👑 **Профиль игрока MagnumTap** 👑
 
 💫 **Статус:** ${getStatusDisplayName(user)}  
 💎 **Баланс:** ${balance} ⭐ звёзд  
 👥 **Друзей приглашено:** ${friends}  
-🏆 **Ранг:** ${rank} 🌟
+🏅 **Ранг:** ${rank.name}  
+🏆 **Титул:** ${title}
 
-📊 **Прогресс уровня:**  
-${progressBar}
-${nextLevel.starsNeeded === 0 ? '🌟 Максимальный уровень достигнут!' : `До ${nextLevel.nextLevel}: ${starsNeededRounded} звёзд`}`;
+${progressText}`;
 }
 
 function getWelcomeText(balance, invited) {
@@ -878,7 +883,8 @@ bot.action('top', async (ctx) => {
     const name = user.username || user.id;
     const stars = Math.round((user.stars || 0) * 100) / 100;
     const status = getUserStatus(user);
-    const mainTitle = getUserMainTitle(user);
+    const title = getUserMainTitle(user);
+    const rank = getUserRank(user);
     
     // Медали для топ-3
     let medal = '';
@@ -890,7 +896,8 @@ bot.action('top', async (ctx) => {
     msg += `${medal} *${name}*\n`;
     msg += `   💰 ${stars} ⭐ звёзд\n`;
     msg += `   ${status.color} ${status.name}\n`;
-    msg += `   🏆 ${mainTitle}\n\n`;
+    msg += `   🏅 ${rank.name}\n`;
+    msg += `   🏆 ${title}\n\n`;
   });
   
   if (topUsers.length === 0) {
@@ -1994,7 +2001,20 @@ bot.action('faq_referrals', async (ctx) => {
 });
 
 bot.action('faq_titles', async (ctx) => {
-  const titlesText = `🏆 **Титулы и ранги** 🏆
+  const titlesText = `🏆 **Ранги и титулы** 🏆
+
+🏅 **Что такое ранги:**
+Автоматические уровни, основанные на количестве звёзд. Показывают ваше мастерство!
+
+**📊 Система рангов (по звёздам):**
+• 🥉 **Bronze Star** - 0+ звёзд
+• 🥈 **Silver Star** - 50+ звёзд  
+• 🥇 **Gold Star** - 150+ звёзд
+• 💎 **Platinum Star** - 300+ звёзд
+• 💍 **Diamond Star** - 500+ звёзд
+• 👑 **Master Star** - 1000+ звёзд
+• 🏆 **Grandmaster** - 2000+ звёзд
+• ⭐ **Legend** - 5000+ звёзд
 
 🎖️ **Что такое титулы:**
 Специальные награды за достижения в боте. Показывают ваш прогресс и активность!
