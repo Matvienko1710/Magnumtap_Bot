@@ -359,7 +359,7 @@ const TITLES = {
   'vip_elite': { name: 'VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only', icon: '💫' }
 };
 
-// Система уровней (по звёздам)
+// Система уровней (по Magnum Coin)
 const RANKS = [
   { name: 'Новичок', requirement: 0, color: '🆕' },           // Уровень 1
   { name: 'Ученик', requirement: 25, color: '📚' },           // Уровень 2 
@@ -981,11 +981,12 @@ function getUserMainTitle(user) {
 }
 
 function getUserRank(user) {
-  const stars = user.stars || 0;
+  // ИЗМЕНЕНО: Уровни теперь считаются по Magnum Coin, а не по звёздам
+  const magnumCoins = user.magnumCoins || 0;
   let currentRank = RANKS[0]; // По умолчанию Bronze Star
   
   for (const rank of RANKS) {
-    if (stars >= rank.requirement) {
+    if (magnumCoins >= rank.requirement) {
       currentRank = rank;
     } else {
       break;
@@ -996,25 +997,26 @@ function getUserRank(user) {
 }
 
 function getNextRankInfo(user) {
-  const stars = user.stars || 0;
+  // ИЗМЕНЕНО: Уровни теперь считаются по Magnum Coin, а не по звёздам
+  const magnumCoins = user.magnumCoins || 0;
   const currentRank = getUserRank(user);
   
   // Найти следующий уровень
   const currentIndex = RANKS.findIndex(rank => rank.name === currentRank.name);
   if (currentIndex < RANKS.length - 1) {
     const nextRank = RANKS[currentIndex + 1];
-    const starsToNext = nextRank.requirement - stars;
-    const progress = Math.max(0, Math.min(100, (stars - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
+    const coinsToNext = nextRank.requirement - magnumCoins;
+    const progress = Math.max(0, Math.min(100, (magnumCoins - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
     
     // КРИТИЧЕСКАЯ отладочная информация
     console.log(`🔥🔥🔥 РАСЧЕТ ПРОГРЕССА УРОВНЯ:`);
     console.log(`🔥 Пользователь: ${user.id}`);
-    console.log(`🔥 Звёзды: ${stars}`);
-    console.log(`🔥 Текущий ранг: ${currentRank.name} (от ${currentRank.requirement} звёзд)`);
-    console.log(`🔥 Следующий ранг: ${nextRank.name} (нужно ${nextRank.requirement} звёзд)`);
-    console.log(`🔥 До следующего: ${starsToNext} звёзд`);
-    console.log(`🔥 Формула прогресса: (${stars} - ${currentRank.requirement}) / (${nextRank.requirement} - ${currentRank.requirement}) * 100`);
-    console.log(`🔥 Числитель: ${stars - currentRank.requirement}`);
+    console.log(`🔥 Magnum Coin: ${magnumCoins}`);
+    console.log(`🔥 Текущий ранг: ${currentRank.name} (от ${currentRank.requirement} MC)`);
+    console.log(`🔥 Следующий ранг: ${nextRank.name} (нужно ${nextRank.requirement} MC)`);
+    console.log(`🔥 До следующего: ${coinsToNext} MC`);
+    console.log(`🔥 Формула прогресса: (${magnumCoins} - ${currentRank.requirement}) / (${nextRank.requirement} - ${currentRank.requirement}) * 100`);
+    console.log(`🔥 Числитель: ${magnumCoins - currentRank.requirement}`);
     console.log(`🔥 Знаменатель: ${nextRank.requirement - currentRank.requirement}`);
     console.log(`🔥 Прогресс: ${progress}% (округлено: ${Math.round(progress)}%)`);
     console.log(`🔥🔥🔥 КОНЕЦ РАСЧЕТА`);
@@ -1022,7 +1024,7 @@ function getNextRankInfo(user) {
     return {
       current: currentRank,
       next: nextRank,
-      starsToNext: starsToNext,
+      starsToNext: coinsToNext, // Оставляем имя для совместимости, но теперь это MC
       progress: Math.round(progress)
     };
   }
@@ -1966,11 +1968,11 @@ async function getDetailedProfile(userId, ctx) {
   const nextRankInfo = getNextRankInfo(user);
   
   // КРИТИЧЕСКАЯ ПРОВЕРКА: Пересчитываем с самыми свежими данными
-  console.log(`🔥 ПРОВЕРКА РАНГА: Пользователь ${userId} имеет ${user.stars} звёзд`);
-  console.log(`🔥 ТЕКУЩИЙ РАНГ: ${rank.name} (требует ${rank.requirement} звёзд)`);
+  console.log(`🔥 ПРОВЕРКА РАНГА: Пользователь ${userId} имеет ${user.magnumCoins} MC`);
+  console.log(`🔥 ТЕКУЩИЙ РАНГ: ${rank.name} (требует ${rank.requirement} MC)`);
   if (nextRankInfo.next) {
-    console.log(`🔥 СЛЕДУЮЩИЙ РАНГ: ${nextRankInfo.next.name} (требует ${nextRankInfo.next.requirement} звёзд)`);
-    console.log(`🔥 ПРОГРЕСС: ${nextRankInfo.progress}%, до следующего: ${nextRankInfo.starsToNext} звёзд`);
+    console.log(`🔥 СЛЕДУЮЩИЙ РАНГ: ${nextRankInfo.next.name} (требует ${nextRankInfo.next.requirement} MC)`);
+    console.log(`🔥 ПРОГРЕСС: ${nextRankInfo.progress}%, до следующего: ${nextRankInfo.starsToNext} MC`);
   }
   const status = getUserStatus(user);
   
@@ -1983,7 +1985,7 @@ async function getDetailedProfile(userId, ctx) {
     const progressBar = createProgressBar(nextRankInfo.progress, 100) + ` ${nextRankInfo.progress}%`;
     progressText = `📊 **Прогресс уровня:**  
 ${progressBar}
-До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} звёзд`;
+До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} 🪙 Magnum Coin`;
   } else {
     progressText = '🏆 **Максимальный уровень достигнут!**';
   }
