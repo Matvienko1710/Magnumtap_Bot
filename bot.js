@@ -2344,6 +2344,12 @@ bot.command('updatechat', async (ctx) => {
 });
 
 bot.start(async (ctx) => {
+  // Проверяем, что команда отправлена в личном чате, а не в группе
+  if (ctx.chat.type !== 'private') {
+    console.log(`🚫 Команда /start заблокирована в чате ${ctx.chat.type}: ${ctx.chat.title || ctx.chat.username}`);
+    return; // Просто игнорируем команду в групповых чатах
+  }
+  
   // Обрабатываем реферальный параметр
   const startPayload = ctx.startPayload;
   let referrerId = null;
