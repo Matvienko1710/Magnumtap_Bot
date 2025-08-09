@@ -8,6 +8,10 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => id.trim()) : [];
 const SUPPORT_CHANNEL = process.env.SUPPORT_CHANNEL; // Имя канала без @
 
+// Обязательная подписка
+const REQUIRED_CHANNEL_ID = process.env.REQUIRED_CHANNEL_ID;
+const REQUIRED_BOT_LINK = process.env.REQUIRED_BOT_LINK || 'https://t.me/ReferalStarsRobot?start=6587897295';
+
 // Ссылки для заданий (настраиваются через переменные окружения)
 const FIRESTARS_BOT_LINK = process.env.FIRESTARS_BOT_LINK || 'https://t.me/firestars_rbot?start=6587897295';
 const FARMIK_BOT_LINK = process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295';  
@@ -656,6 +660,56 @@ async function getUser(id) {
 
 function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
 
+// Функция проверки подписки
+async function checkSubscription(ctx) {
+  if (!REQUIRED_CHANNEL_ID) return true; // Если канал не настроен, пропускаем проверку
+  
+  try {
+    const member = await ctx.telegram.getChatMember(REQUIRED_CHANNEL_ID, ctx.from.id);
+    return ['member', 'administrator', 'creator'].includes(member.status);
+  } catch (error) {
+    console.error('Ошибка проверки подписки:', error);
+    return false;
+  }
+}
+
+// Функция показа сообщения о подписке
+async function showSubscriptionMessage(ctx) {
+  const message = `🔔 **Обязательная подписка**\n\n` +
+                  `Для использования бота необходимо:\n\n` +
+                  `1️⃣ Подписаться на канал\n` +
+                  `2️⃣ Запустить бота по ссылке\n\n` +
+                  `После выполнения нажмите "✅ Проверить"`;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.url('📢 Подписаться на канал', `https://t.me/${REQUIRED_CHANNEL_ID.replace('-100', '')}`)],
+    [Markup.button.url('🤖 Запустить бота', REQUIRED_BOT_LINK)],
+    [Markup.button.callback('✅ Проверить', 'check_subscription')]
+  ]);
+  
+  try {
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+    } else {
+      await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+    }
+  } catch (error) {
+    console.error('Ошибка отправки сообщения о подписке:', error);
+  }
+}
+
+// Middleware для проверки подписки
+function requireSubscription(handler) {
+  return async (ctx) => {
+    const isSubscribed = await checkSubscription(ctx);
+    if (!isSubscribed) {
+      await showSubscriptionMessage(ctx);
+      return;
+    }
+    await handler(ctx);
+  };
+}
+
 // Функции для работы со статусами
 function getUserStatus(user) {
   const userStatus = user.status || 'member';
@@ -825,19 +879,46 @@ async function getMainMenu(ctx, userId) {
 }
 
 bot.start(async (ctx) => {
+  // Проверяем подписку
+  const isSubscribed = await checkSubscription(ctx);
+  if (!isSubscribed) {
+    await showSubscriptionMessage(ctx);
+    return;
+  }
+  
   const user = await getUser(ctx.from.id);
   const menu = await getMainMenu(ctx, ctx.from.id);
   await ctx.reply(menu.text, menu.extra);
 });
 
+bot.action('check_subscription', async (ctx) => {
+  const isSubscribed = await checkSubscription(ctx);
+  if (!isSubscribed) {
+    await ctx.answerCbQuery('❌ Подписка не найдена! Убедитесь, что вы подписались на канал и запустили бота.', { show_alert: true });
+    return;
+  }
+  
+  await ctx.answerCbQuery('✅ Подписка подтверждена!');
+  const user = await getUser(ctx.from.id);
+  const menu = await getMainMenu(ctx, ctx.from.id);
+  await ctx.editMessageText(menu.text, menu.extra);
+});
+
 bot.action('main_menu', async (ctx) => {
+  // Проверяем подписку
+  const isSubscribed = await checkSubscription(ctx);
+  if (!isSubscribed) {
+    await showSubscriptionMessage(ctx);
+    return;
+  }
+  
   try { await ctx.deleteMessage(); } catch (e) {}
   const menu = await getMainMenu(ctx, ctx.from.id);
   ctx.reply(menu.text, menu.extra);
 });
 
 // Обновляем профиль с кнопкой техподдержки
-bot.action('profile', async (ctx) => {
+bot.action('profile', requireSubscription(async (ctx) => {
   const profileText = await getDetailedProfile(ctx.from.id);
 
   ctx.editMessageText(profileText, {
@@ -848,7 +929,7 @@ bot.action('profile', async (ctx) => {
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   });
-});
+}));
 
 bot.action('my_titles', async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -875,7 +956,7 @@ bot.action('my_titles', async (ctx) => {
   });
 });
 
-bot.action('top', async (ctx) => {
+bot.action('top', requireSubscription(async (ctx) => {
   const topUsers = await users.find({}).sort({ stars: -1 }).limit(10).toArray();
   let msg = '🏆 *Топ-10 игроков по звёздам:*\n\n';
   
@@ -908,7 +989,7 @@ bot.action('top', async (ctx) => {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
   });
-});
+}));
 
 bot.action('invite', async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -2548,7 +2629,7 @@ bot.action('my_tickets', async (ctx) => {
 });
 
 // Уведомления фарма и бонуса
-bot.action('farm', async (ctx) => {
+bot.action('farm', requireSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const canFarm = !user.lastFarm || (now() - user.lastFarm) >= 60;
   
@@ -2578,9 +2659,9 @@ bot.action('farm', async (ctx) => {
     const timeLeft = 60 - (now() - user.lastFarm);
     ctx.answerCbQuery(`⏳ До следующего фарма: ${timeLeft} сек.`);
   }
-});
+}));
 
-bot.action('bonus', async (ctx) => {
+bot.action('bonus', requireSubscription(async (ctx) => {
   const user = await getUser(ctx.from.id);
   const today = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
   const canBonus = !user.lastBonus || user.lastBonus < today;
@@ -2635,7 +2716,7 @@ bot.action('bonus', async (ctx) => {
       ctx.answerCbQuery(`🕐 Следующий бонус через ${minutesLeft} минут`);
     }
   }
-});
+}));
 
 // Уведомления заданий
 bot.action(/^claim_daily_(.+)$/, async (ctx) => {
