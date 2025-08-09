@@ -1616,8 +1616,8 @@ ${progressBar}
 [🪙 ${magnumCoinsBalance}] Magnum Coin  
 [💎 ${starsBalance}] звёзд  
 [👥 ${friends}] друзей приглашено  
-[${rank.color} ${rank.name}]  
-[${title}]
+**Ранг:** [${rank.color} ${rank.name}]  
+**Титул:** [${title}]
 
 ${progressText}
 
