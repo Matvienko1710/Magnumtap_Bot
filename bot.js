@@ -1881,7 +1881,7 @@ const SPONSOR_TASKS = [
     id: 'music_channel',
     title: '📱 Подписаться на канал @musice46',
     description: 'Подпишитесь на канал @musice46',
-    reward: 3,
+    reward: 8,
     instruction: 'Сделайте скриншот подписки на канал',
     link: 'https://t.me/musice46'
   },
@@ -1889,7 +1889,7 @@ const SPONSOR_TASKS = [
     id: 'firestars_bot',
     title: '🔥 Запустить бота FireStars',
     description: 'Запустите бота и получите бонус',
-    reward: 3,
+    reward: 10,
     instruction: 'Сделайте скриншот запуска бота',
     link: FIRESTARS_BOT_LINK
   },
@@ -1897,7 +1897,7 @@ const SPONSOR_TASKS = [
     id: 'farmik_bot',
     title: '⭐ Запустить бота FarmikStars',
     description: 'Запустите бота для заработка подарков',
-    reward: 3,
+    reward: 10,
     instruction: 'Сделайте скриншот запуска бота',
     link: FARMIK_BOT_LINK
   },
@@ -1905,7 +1905,7 @@ const SPONSOR_TASKS = [
     id: 'basket_game_bot',
     title: '🏀 Играть в BasketGift бота',
     description: 'Запустите бота и сыграйте в игру 3 раза',
-    reward: 3,
+    reward: 12,
     instruction: 'Сделайте скриншот результатов 3 игр',
     link: BASKET_BOT_LINK
   },
@@ -1913,7 +1913,7 @@ const SPONSOR_TASKS = [
     id: 'private_channel',
     title: '🔒 Подписаться на приватный канал',
     description: 'Подпишитесь на закрытый канал команды MagnumTap',
-    reward: 5,
+    reward: 15,
     instruction: 'Сделайте скриншот что вы в канале (список участников или любое сообщение)',
     link: process.env.PRIVATE_CHANNEL_LINK || 'https://t.me/+4BUF9S_rLZw3NDQ6'
   }
@@ -4148,7 +4148,7 @@ async function showSponsorTask(ctx, taskIndex) {
   let taskText = `📋 *Задание ${taskIndex + 1}/${SPONSOR_TASKS.length}*\n\n`;
   taskText += `*${task.title}*\n\n`;
   taskText += `📝 *Описание:* ${task.description}\n`;
-  taskText += `🎁 *Награда:* ${task.reward} звёзд\n\n`;
+  taskText += `🎁 *Награда:* ${task.reward} 🪙 Magnum Coin\n\n`;
   
   if (completedTask) {
     taskText += `✅ *Задание выполнено!*\n\n`;
