@@ -228,14 +228,21 @@ const TITLES = {
 
 // Система рангов (по звёздам)
 const RANKS = [
-  { name: 'Bronze Star', requirement: 0, color: '🥉' },
-  { name: 'Silver Star', requirement: 50, color: '🥈' },
-  { name: 'Gold Star', requirement: 150, color: '🥇' },
-  { name: 'Platinum Star', requirement: 300, color: '💎' },
-  { name: 'Diamond Star', requirement: 500, color: '💍' },
-  { name: 'Master Star', requirement: 1000, color: '👑' },
-  { name: 'Grandmaster', requirement: 2000, color: '🏆' },
-  { name: 'Legend', requirement: 5000, color: '⭐' }
+  { name: 'Новичок', requirement: 0, color: '🆕' },           // Уровень 1
+  { name: 'Ученик', requirement: 25, color: '📚' },           // Уровень 2 
+  { name: 'Стажёр', requirement: 75, color: '🎓' },           // Уровень 3
+  { name: 'Работник', requirement: 150, color: '⚙️' },        // Уровень 4
+  { name: 'Специалист', requirement: 300, color: '🔧' },      // Уровень 5
+  { name: 'Эксперт', requirement: 500, color: '💼' },         // Уровень 6
+  { name: 'Мастер', requirement: 800, color: '🏅' },          // Уровень 7
+  { name: 'Профессионал', requirement: 1200, color: '🥉' },   // Уровень 8
+  { name: 'Виртуоз', requirement: 1800, color: '🥈' },        // Уровень 9
+  { name: 'Элита', requirement: 2500, color: '🥇' },          // Уровень 10
+  { name: 'Чемпион', requirement: 3500, color: '🏆' },        // Уровень 11
+  { name: 'Титан', requirement: 5000, color: '💎' },          // Уровень 12
+  { name: 'Божество', requirement: 7500, color: '👑' },       // Уровень 13
+  { name: 'Легенда', requirement: 12000, color: '⭐' },       // Уровень 14
+  { name: 'Император', requirement: 20000, color: '🌟' }      // Уровень 15 (максимальный)
 ];
 
 // Система магазина
@@ -4065,9 +4072,12 @@ bot.action('faq_referrals', async (ctx) => {
 bot.action('faq_titles', async (ctx) => {
   const titlesText = `🏆 **Ранги и титулы** 🏆
 
-📊 **Ранги (по звёздам):**
-🥉 Bronze → 🥈 Silver → 🥇 Gold → 💎 Platinum → 
-💍 Diamond → 👑 Master → 🏆 Grandmaster → ⭐ Legend
+📊 **15 рангов (по звёздам):**
+🆕 Новичок (0) → 📚 Ученик (25) → 🎓 Стажёр (75) → ⚙️ Работник (150) →
+🔧 Специалист (300) → 💼 Эксперт (500) → 🏅 Мастер (800) →
+🥉 Профессионал (1200) → 🥈 Виртуоз (1800) → 🥇 Элита (2500) →
+🏆 Чемпион (3500) → 💎 Титан (5000) → 👑 Божество (7500) →
+⭐ Легенда (12000) → 🌟 Император (20000)
 
 🎖️ **Основные титулы:**
 • 🌱 Новичок - автоматически
@@ -4118,24 +4128,21 @@ bot.action('faq_achievements', async (ctx) => {
 bot.action('faq_levels', async (ctx) => {
   const levelsText = `📊 **Система уровней** 📊
 
-⭐ **Все ранги (по звёздам):**
-🥉 Bronze Star - 50 звёзд
-🥈 Silver Star - 150 звёзд  
-🥇 Gold Star - 300 звёзд
-💎 Platinum Star - 500 звёзд
-💍 Diamond Star - 1000 звёзд
-👑 Master Star - 2000 звёзд
-🏆 Grandmaster - 5000 звёзд
-⭐ Legend - максимальный!
+⭐ **15 рангов (по звёздам):**
+🆕 Новичок - 0 | 📚 Ученик - 25 | 🎓 Стажёр - 75
+⚙️ Работник - 150 | 🔧 Специалист - 300 | 💼 Эксперт - 500
+🏅 Мастер - 800 | 🥉 Профессионал - 1200 | 🥈 Виртуоз - 1800
+🥇 Элита - 2500 | 🏆 Чемпион - 3500 | 💎 Титан - 5000
+👑 Божество - 7500 | ⭐ Легенда - 12000 | 🌟 Император - 20000
 
 📊 **Отслеживание:**
 • Шкала прогресса в профиле
 • Проценты до следующего уровня
 
 💡 **Быстрый рост:**
-• 🎁 Ежедневный бонус
-• 🎯 Спонсорские задания
-• 📈 Обмен Magnum Coin на звёзды`;
+• 🎁 Ежедневный бонус (3 Magnum Coin)
+• 🎯 Спонсорские задания (3 Magnum Coin)
+• 📈 Обмен 100 Magnum Coin → 10 звёзд`;
 
   await sendMessageWithPhoto(ctx, levelsText, Markup.inlineKeyboard([
     [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
