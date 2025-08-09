@@ -300,40 +300,20 @@ async function sendMainMenuWithPhoto(ctx, text, keyboard, isEdit = true) {
 // Универсальная функция для отправки сообщений БЕЗ фото (для всех остальных меню)
 async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
   try {
-    // Всегда отправляем только текстовые сообщения (без фото)
     if (isEdit) {
+      // Стратегия: всегда удаляем старое сообщение и отправляем новое
+      // Это решает все проблемы с типами сообщений
       try {
-        // Сначала пытаемся отредактировать как текст
-        return await ctx.editMessageText(text, {
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
-      } catch (editError) {
-        console.log('Не удалось отредактировать текст:', editError.message);
-        
-        // Если не получается отредактировать текст, возможно это сообщение с фото
-        // Пытаемся отредактировать caption
-        try {
-          return await ctx.editMessageCaption(text, {
-            parse_mode: 'Markdown',
-            ...keyboard
-          });
-        } catch (captionError) {
-          console.log('Не удалось отредактировать caption:', captionError.message);
-          
-          // Если и caption не работает, удаляем и создаем новое
-          try {
-            await ctx.deleteMessage();
-          } catch (deleteError) {
-            console.log('Не удалось удалить сообщение:', deleteError.message);
-          }
-          
-          return await ctx.reply(text, {
-            parse_mode: 'Markdown',
-            ...keyboard
-          });
-        }
+        await ctx.deleteMessage();
+      } catch (deleteError) {
+        // Игнорируем ошибки удаления - сообщение может быть уже удалено
       }
+      
+      // Отправляем новое сообщение
+      return await ctx.reply(text, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
     } else {
       return await ctx.reply(text, {
         parse_mode: 'Markdown',
@@ -1068,6 +1048,54 @@ async function connectDB() {
 function now() { return Math.floor(Date.now() / 1000); }
 
 // Обновляем функцию getUser для автоматической проверки титулов
+// Функция для получения СВЕЖИХ данных пользователя БЕЗ кеша
+async function getUserFresh(id, ctx = null) {
+  const user = await users.findOne({ id });
+  if (!user) {
+    // Создаем нового пользователя если не существует
+    const newUser = {
+      id,
+      username: ctx?.from?.username || '',
+      magnumCoins: 0,
+      totalEarnedMagnumCoins: 0,
+      stars: 100,
+      lastFarm: 0,
+      lastBonus: 0,
+      farmCount: 0,
+      bonusCount: 0,
+      promoCodesUsed: 0,
+      invited: 0,
+      invitedBy: null,
+      titles: [],
+      mainTitle: null,
+      purchases: [],
+      customTitleRequested: false,
+      achievements: [],
+      dailyStreak: 0,
+      lastDaily: 0,
+      lastSeen: Math.floor(Date.now() / 1000),
+      userStatus: 'user',
+      dailyTasks: {},
+      dailyFarms: 0,
+      miner: { active: false }
+    };
+    
+    await users.insertOne(newUser);
+    return newUser;
+  }
+  
+  // Обновляем время последнего посещения
+  await users.updateOne({ id }, { $set: { lastSeen: Math.floor(Date.now() / 1000) } });
+  
+  // Backward compatibility
+  if (user.totalEarnedMagnumCoins === undefined) {
+    await users.updateOne({ id }, { $set: { totalEarnedMagnumCoins: user.magnumCoins || 0 } });
+    user.totalEarnedMagnumCoins = user.magnumCoins || 0;
+  }
+  
+  return user;
+}
+
 async function getUser(id, ctx = null) {
   // Проверяем кеш
   const cacheKey = id.toString();
@@ -1869,7 +1897,7 @@ function createProgressBar(current, total, length = 10) {
 }
 
 async function getDetailedProfile(userId, ctx) {
-  const user = await getUser(userId, ctx);
+  const user = await getUserFresh(userId, ctx); // Используем getUserFresh для гарантированно свежих данных
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   const friends = user.invited || 0;
@@ -2089,20 +2117,15 @@ async function markDailyTaskCompleted(userId, taskId) {
 
 async function updateMainMenuBalance(ctx) {
   try {
-    // Принудительно обновляем кеш пользователя НЕСКОЛЬКО РАЗ для гарантии
-    for (let i = 0; i < 3; i++) {
-      invalidateUserCache(ctx.from.id);
-      invalidateBotStatsCache();
-    }
+    // Очищаем кеш
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
-    // Получаем свежие данные из базы принудительно
-    const freshUser = await users.findOne({ id: ctx.from.id });
-    if (freshUser) {
-      userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
-    }
+    // Получаем АБСОЛЮТНО свежие данные БЕЗ кеша
+    const freshUser = await getUserFresh(ctx.from.id, ctx);
     
-    // Небольшая задержка для гарантии обновления кеша
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Обновляем кеш свежими данными
+    userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
     
     const menu = await getMainMenu(ctx, ctx.from.id);
     await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard);
@@ -2114,20 +2137,15 @@ async function updateMainMenuBalance(ctx) {
 // Функция для обновления профиля в реальном времени
 async function updateProfileRealtime(ctx) {
   try {
-    // Принудительно очищаем кеш несколько раз для гарантии
-    for (let i = 0; i < 3; i++) {
-      invalidateUserCache(ctx.from.id);
-      invalidateBotStatsCache();
-    }
+    // Очищаем кеш
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
-    // Получаем свежие данные из базы принудительно
-    const freshUser = await users.findOne({ id: ctx.from.id });
-    if (freshUser) {
-      userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
-    }
+    // Получаем АБСОЛЮТНО свежие данные БЕЗ кеша
+    const freshUser = await getUserFresh(ctx.from.id, ctx);
     
-    // Небольшая задержка для гарантии обновления кеша
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Обновляем кеш свежими данными
+    userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
     
     const profileText = await getDetailedProfile(ctx.from.id, ctx);
 
@@ -4875,7 +4893,7 @@ bot.action('farm', async (ctx) => {
     return;
   }
   
-  const user = await getUser(ctx.from.id, ctx);
+  const user = await getUserFresh(ctx.from.id, ctx);
   const canFarm = !farmCooldownEnabled || !user.lastFarm || (now() - user.lastFarm) >= farmCooldownSeconds;
   
   if (canFarm) {
@@ -4890,7 +4908,7 @@ bot.action('farm', async (ctx) => {
     invalidateBotStatsCache();
     
     // Проверяем задание активного фармера
-    const updatedUser = await getUser(ctx.from.id);
+    const updatedUser = await getUserFresh(ctx.from.id);
     if ((updatedUser.dailyFarms || 0) >= 10) {
       await markDailyTaskCompleted(ctx.from.id, 'farm_10');
     }
@@ -4927,7 +4945,7 @@ bot.action('bonus', async (ctx) => {
     return;
   }
   
-  const user = await getUser(ctx.from.id, ctx);
+  const user = await getUserFresh(ctx.from.id, ctx);
   const today = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
   const canBonus = !user.lastBonus || user.lastBonus < today;
   
