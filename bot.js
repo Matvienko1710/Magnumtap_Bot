@@ -54,6 +54,57 @@ let users, promocodes, taskChecks, withdrawalRequests;
 // Состояния пользователей для обработки ввода
 const userStates = new Map();
 
+// Универсальная функция для отправки сообщений с фото
+async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
+  const photoUrl = process.env.BOT_PHOTO_URL;
+  
+  if (photoUrl) {
+    try {
+      if (isEdit) {
+        await ctx.editMessageMedia({
+          type: 'photo',
+          media: photoUrl,
+          caption: text,
+          parse_mode: 'Markdown'
+        }, keyboard);
+      } else {
+        await ctx.replyWithPhoto(photoUrl, {
+          caption: text,
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      }
+    } catch (error) {
+      console.log('⚠️ Ошибка отправки фото, используем текст:', error.message);
+      // Fallback на текст
+      if (isEdit) {
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      } else {
+        await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      }
+    }
+  } else {
+    // Если фото нет, используем обычный текст
+    if (isEdit) {
+      await ctx.editMessageText(text, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    } else {
+      await ctx.reply(text, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    }
+  }
+}
+
 // Система титулов
 const TITLES = {
   // Обычные титулы (10)
@@ -1625,18 +1676,17 @@ async function getMainMenu(ctx, userId) {
   const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   const profileText = await getDetailedProfile(userId, ctx);
   
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('🪙 Фармить Magnum Coin', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
+    [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
+    [Markup.button.callback('🎫 Промокод', 'promo')],
+    [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
+    ...adminRow
+  ]);
+  
   return {
     text: profileText,
-    extra: {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('🪙 Фармить Magnum Coin', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
-        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
-        [Markup.button.callback('🎫 Промокод', 'promo')],
-        [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
-        ...adminRow
-      ])
-    }
+    keyboard: keyboard
   };
 }
 
@@ -1654,7 +1704,7 @@ bot.start(async (ctx) => {
   await markDailyTaskCompleted(ctx.from.id, 'login');
   
   const menu = await getMainMenu(ctx, ctx.from.id);
-  await ctx.reply(menu.text, menu.extra);
+  await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
 
 bot.action('check_subscription', async (ctx) => {
@@ -1667,19 +1717,18 @@ bot.action('check_subscription', async (ctx) => {
   await ctx.answerCbQuery('✅ Подписка подтверждена!');
   const user = await getUser(ctx.from.id, ctx);
   const menu = await getMainMenu(ctx, ctx.from.id);
-  await ctx.editMessageText(menu.text, menu.extra);
+  await sendMessageWithPhoto(ctx, menu.text, menu.keyboard);
 });
 
 bot.action('main_menu', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
   const menu = await getMainMenu(ctx, ctx.from.id);
-  ctx.reply(menu.text, menu.extra);
+  await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
 
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
   const profileText = await getDetailedProfile(ctx.from.id, ctx);
-  const photoUrl = process.env.BOT_PHOTO_URL;
 
   const keyboard = Markup.inlineKeyboard([
     [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
@@ -1688,30 +1737,7 @@ bot.action('profile', async (ctx) => {
     [Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]);
 
-  if (photoUrl) {
-    // Если есть фото, используем editMessageMedia
-    try {
-      await ctx.editMessageMedia({
-        type: 'photo',
-        media: photoUrl,
-        caption: profileText,
-        parse_mode: 'Markdown'
-      }, keyboard);
-    } catch (error) {
-      console.log('⚠️ Ошибка обновления фото, используем текст:', error.message);
-      // Fallback на обычный текст если фото не загружается
-      ctx.editMessageText(profileText, {
-        parse_mode: 'Markdown',
-        ...keyboard
-      });
-    }
-  } else {
-    // Если фото нет, используем обычный текст
-    ctx.editMessageText(profileText, {
-      parse_mode: 'Markdown',
-      ...keyboard
-    });
-  }
+  await sendMessageWithPhoto(ctx, profileText, keyboard);
 });
 
 bot.action('my_titles', async (ctx) => {
@@ -1959,10 +1985,7 @@ bot.action('top', async (ctx) => {
     [Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ];
   
-  ctx.editMessageText(msg, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard(buttons)
-  });
+  await sendMessageWithPhoto(ctx, msg, Markup.inlineKeyboard(buttons));
 });
 
 bot.action('invite', async (ctx) => {
@@ -2407,7 +2430,7 @@ bot.action('shop', async (ctx) => {
     [Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]);
   
-  ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+  await sendMessageWithPhoto(ctx, message, keyboard);
 });
 
 // Категории магазина
@@ -3454,7 +3477,7 @@ bot.action('exchange', async (ctx) => {
     [Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]);
   
-  ctx.editMessageText(exchangeText, { parse_mode: 'Markdown', ...keyboard });
+  await sendMessageWithPhoto(ctx, exchangeText, keyboard);
 });
 
 // Обмен валют
@@ -3676,14 +3699,11 @@ bot.action('sponsor_tasks', async (ctx) => {
 
 async function showSponsorTask(ctx, taskIndex) {
   if (taskIndex >= SPONSOR_TASKS.length) {
-    return ctx.editMessageText(
+    return await sendMessageWithPhoto(ctx, 
       '🎉 *Все задания от спонсоров выполнены!*\n\nВы прошли все доступные задания. Следите за обновлениями!',
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-        ])
-      }
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      ])
     );
   }
 
@@ -3750,10 +3770,7 @@ async function showSponsorTask(ctx, taskIndex) {
   
   buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
 
-  ctx.editMessageText(taskText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard(buttons)
-  });
+  await sendMessageWithPhoto(ctx, taskText, Markup.inlineKeyboard(buttons));
 }
 
 bot.action('faq', async (ctx) => {
@@ -4415,12 +4432,9 @@ bot.action('achievements', async (ctx) => {
   const totalCount = Object.keys(ACHIEVEMENTS).length;
   achievementsText += `📈 *Получено: ${earnedCount}/${totalCount} достижений*`;
   
-  ctx.editMessageText(achievementsText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('👤 Назад к профилю', 'profile')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, achievementsText, Markup.inlineKeyboard([
+    [Markup.button.callback('👤 Назад к профилю', 'profile')]
+  ]));
 });
 
 function getUserProgress(user, achievement) {
