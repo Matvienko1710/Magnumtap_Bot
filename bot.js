@@ -8,6 +8,11 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => id.trim()) : [];
 const SUPPORT_CHANNEL = process.env.SUPPORT_CHANNEL; // Имя канала без @
 
+// Ссылки для заданий (настраиваются через переменные окружения)
+const TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || 'https://t.me/example_channel';
+const YOUTUBE_CHANNEL = process.env.YOUTUBE_CHANNEL || 'https://youtube.com/@example';  
+const INSTAGRAM_ACCOUNT = process.env.INSTAGRAM_ACCOUNT || 'https://instagram.com/example';
+
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
 
@@ -145,7 +150,10 @@ async function sendTaskCheckToChannel(taskCheck) {
       });
     }
     
-    await updateTaskCheckStatus(taskCheck._id, taskCheck.status, null, message.message_id);
+    await taskChecks.updateOne(
+      { _id: taskCheck._id },
+      { $set: { channelMessageId: message.message_id } }
+    );
   } catch (error) {
     console.error('Ошибка отправки проверки задания в канал:', error);
   }
@@ -577,15 +585,15 @@ function getWelcomeText(balance, invited) {
   );
 }
 
-// Задания от спонсоров
+// Задания от спонсоров (динамически заполняются из переменных)
 const SPONSOR_TASKS = [
   {
     id: 'telegram_channel',
     title: '📱 Подписаться на Telegram канал',
-    description: 'Подпишитесь на наш официальный канал @example_channel',
+    description: 'Подпишитесь на наш официальный канал',
     reward: 50,
     instruction: 'Сделайте скриншот подписки на канал',
-    link: 'https://t.me/example_channel'
+    link: TELEGRAM_CHANNEL
   },
   {
     id: 'youtube_subscribe',
@@ -593,7 +601,7 @@ const SPONSOR_TASKS = [
     description: 'Подпишитесь и поставьте лайк последнему видео',
     reward: 75,
     instruction: 'Сделайте скриншот подписки и лайка',
-    link: 'https://youtube.com/@example'
+    link: YOUTUBE_CHANNEL
   },
   {
     id: 'instagram_follow',
@@ -601,7 +609,7 @@ const SPONSOR_TASKS = [
     description: 'Подпишитесь и поставьте лайк последнему посту',
     reward: 60,
     instruction: 'Сделайте скриншот подписки и лайка в Instagram',
-    link: 'https://instagram.com/example'
+    link: INSTAGRAM_ACCOUNT
   }
 ];
 
@@ -1392,14 +1400,14 @@ async function showSponsorTask(ctx, taskIndex) {
   });
 
   let taskText = `📋 *Задание ${taskIndex + 1}/${SPONSOR_TASKS.length}*\n\n`;
-  taskText += `${task.title}\n\n`;
+  taskText += `*${task.title}*\n\n`;
   taskText += `📝 *Описание:* ${task.description}\n`;
   taskText += `🎁 *Награда:* ${task.reward} звёзд\n\n`;
   
   if (completedTask) {
     taskText += `✅ *Задание выполнено!*\n\n`;
   } else if (pendingCheck) {
-    taskText += `⏳ *Задание на проверке*\nОжидайте результата проверки администратором.\n\n`;
+    taskText += `⏳ *Задание на проверке*\nОжидайте результата проверки администратором\\.\n\n`;
   } else {
     taskText += `📋 *Инструкция:* ${task.instruction}\n\n`;
   }
