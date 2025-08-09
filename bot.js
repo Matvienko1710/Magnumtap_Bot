@@ -1620,7 +1620,7 @@ async function updateMainMenuBalance(ctx) {
 }
 
 async function getMainMenu(ctx, userId) {
-  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('[⚙️ Админ-панель]', 'admin_panel')]] : [];
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   const profileText = await getDetailedProfile(userId, ctx);
   
   return {
@@ -1628,10 +1628,10 @@ async function getMainMenu(ctx, userId) {
     extra: {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('[🪙 Фармить] Magnum Coin', 'farm'), Markup.button.callback('[🎁 Бонус]', 'bonus')],
-        [Markup.button.callback('[👤 Профиль]', 'profile'), Markup.button.callback('[🏆 Топ]', 'top'), Markup.button.callback('[🛒 Магазин]', 'shop')],
-        [Markup.button.callback('[🎫 Промокод]', 'promo')],
-        [Markup.button.callback('[📈 Биржа]', 'exchange'), Markup.button.callback('[🎯 Задания] от спонсора', 'sponsor_tasks')],
+        [Markup.button.callback('🪙 Фармить Magnum Coin', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
+        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
+        [Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -1926,9 +1926,9 @@ bot.action('top', async (ctx) => {
   }
   
   const buttons = [
-    [Markup.button.callback('[🔄 Обновить]', 'top')],
-    [Markup.button.callback('[📈 Биржа]', 'exchange'), Markup.button.callback('[🪙 Фармить]', 'farm')],
-    [Markup.button.callback('[🏠 Главное меню]', 'main_menu')]
+    [Markup.button.callback('🔄 Обновить', 'top')],
+    [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🪙 Фармить', 'farm')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ];
   
   ctx.editMessageText(msg, {
@@ -3455,14 +3455,14 @@ bot.action('exchange_currency', async (ctx) => {
   
   // Добавляем кнопку обмена TG Stars только если достаточно монет
   if (magnumCoinsBalance >= 100) {
-    buttons.push([Markup.button.callback('[⭐ Купить TG Stars] (100🪙→10⭐)', 'buy_tg_stars')]);
+    buttons.push([Markup.button.callback('⭐ Купить TG Stars (100🪙→10⭐)', 'buy_tg_stars')]);
   } else {
-    buttons.push([Markup.button.callback('[❌ Недостаточно] Magnum Coin', 'insufficient_funds')]);
+    buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
   }
   
   buttons.push(
-    [Markup.button.callback('[💵 Купить USDT] (скоро)', 'buy_usdt'), Markup.button.callback('[💎 Купить TON] (скоро)', 'buy_ton')],
-    [Markup.button.callback('[🔙 Назад] на биржу', 'exchange')]
+    [Markup.button.callback('💵 Купить USDT (скоро)', 'buy_usdt'), Markup.button.callback('💎 Купить TON (скоро)', 'buy_ton')],
+    [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
   );
   
   const keyboard = Markup.inlineKeyboard(buttons);
