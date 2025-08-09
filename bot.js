@@ -92,14 +92,14 @@ const SHOP_ITEMS = {
   },
   'lucky_box': {
     name: '🎲 Коробка удачи',
-    description: 'Случайная награда от 10 до 1000 звёзд',
+    description: 'Средний выигрыш ~10⭐ (диапазон 1-100⭐)',
     price: 25,
     icon: '🎲',
     category: 'boxes'
   },
   'mega_box': {
     name: '💎 Мега коробка',
-    description: 'Гарантированно 100-2000 звёзд + бонус',
+    description: 'Средний выигрыш ~75⭐ (диапазон 20-284⭐)',
     price: 150,
     icon: '💎',
     category: 'boxes'
@@ -842,16 +842,19 @@ async function purchaseItem(userId, itemId) {
       // Коробки с наградами
       let reward = 0;
       if (itemId === 'lucky_box') {
-        reward = Math.floor(Math.random() * 991) + 10; // 10-1000
+        reward = calculateLuckyBoxReward('lucky');
       } else if (itemId === 'mega_box') {
-        reward = Math.floor(Math.random() * 1901) + 100; // 100-2000
+        reward = calculateLuckyBoxReward('mega');
       }
+      
+      const netGain = reward - item.price;
+      const profitText = netGain > 0 ? ` (прибыль: +${netGain}⭐)` : netGain < 0 ? ` (убыток: ${netGain}⭐)` : ` (в ноль)`;
       
       await users.updateOne(
         { id: userId },
-        { $inc: { stars: reward - item.price } }
+        { $inc: { stars: netGain } }
       );
-      result.message = `${item.icon} Получено ${reward} звёзд!`;
+      result.message = `${item.icon} Получено ${reward} звёзд!${profitText}`;
       break;
       
     case 'cosmetic':
@@ -880,6 +883,40 @@ async function purchaseItem(userId, itemId) {
   );
   
   return result;
+}
+
+// Функция для расчета награды из коробки удачи с вероятностями
+function calculateLuckyBoxReward(boxType = 'lucky') {
+  if (boxType === 'lucky') {
+    // Обычная коробка удачи: средний выигрыш 8-12 звёзд
+    const rand = Math.random() * 100;
+    
+    // Система вероятностей со средним выигрышем ~10 звёзд
+    if (rand <= 25) return Math.floor(Math.random() * 5) + 1;   // 1-5 звёзд (25%)
+    if (rand <= 45) return Math.floor(Math.random() * 5) + 6;   // 6-10 звёзд (20%)
+    if (rand <= 65) return Math.floor(Math.random() * 5) + 11;  // 11-15 звёзд (20%)
+    if (rand <= 80) return Math.floor(Math.random() * 5) + 16;  // 16-20 звёзд (15%)
+    if (rand <= 90) return Math.floor(Math.random() * 10) + 21; // 21-30 звёзд (10%)
+    if (rand <= 96) return Math.floor(Math.random() * 15) + 31; // 31-45 звёзд (6%)
+    if (rand <= 99) return Math.floor(Math.random() * 25) + 46; // 46-70 звёзд (3%)
+    return Math.floor(Math.random() * 30) + 71; // 71-100 звёзд (1%)
+    
+  } else if (boxType === 'mega') {
+    // Мега коробка: средний выигрыш 60-90 звёзд
+    const rand = Math.random() * 100;
+    
+    // Система вероятностей со средним выигрышем ~75 звёзд
+    if (rand <= 20) return Math.floor(Math.random() * 15) + 20; // 20-34 звёзд (20%)
+    if (rand <= 35) return Math.floor(Math.random() * 15) + 35; // 35-49 звёзд (15%)
+    if (rand <= 50) return Math.floor(Math.random() * 15) + 50; // 50-64 звезды (15%)
+    if (rand <= 70) return Math.floor(Math.random() * 20) + 65; // 65-84 звезды (20%)
+    if (rand <= 85) return Math.floor(Math.random() * 20) + 85; // 85-104 звезды (15%)
+    if (rand <= 95) return Math.floor(Math.random() * 30) + 105; // 105-134 звезды (10%)
+    if (rand <= 99) return Math.floor(Math.random() * 50) + 135; // 135-184 звезды (4%)
+    return Math.floor(Math.random() * 100) + 185; // 185-284 звезды (1%)
+  }
+  
+  return 1;
 }
 
 // Функции для работы со статусами
@@ -1238,6 +1275,19 @@ bot.action(/^shop_(.+)$/, async (ctx) => {
   
   let message = `${categoryNames[category]} 🛒\n\n`;
   message += `💰 **Баланс:** ${Math.round((user.stars || 0) * 100) / 100} ⭐ звёзд\n\n`;
+  
+  // Добавляем информацию о вероятностях для коробок
+  if (category === 'boxes') {
+    message += `🎯 **Система вероятностей:**\n`;
+    message += `🎲 **Коробка удачи:** средний выигрыш ~10⭐\n`;
+    message += `   • 45% шанс получить 1-15⭐\n`;
+    message += `   • 25% шанс получить 16-30⭐\n`;
+    message += `   • 30% шанс получить 31-100⭐\n\n`;
+    message += `💎 **Мега коробка:** средний выигрыш ~75⭐\n`;
+    message += `   • 50% шанс получить 20-64⭐\n`;
+    message += `   • 35% шанс получить 65-104⭐\n`;
+    message += `   • 15% шанс получить 105-284⭐\n\n`;
+  }
   
   items.forEach(item => {
     const canAfford = user.stars >= item.price ? '✅' : '❌';
