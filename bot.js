@@ -43,6 +43,7 @@ console.log('👑 ADMIN_IDS:', ADMIN_IDS.length ? ADMIN_IDS.join(', ') : 'НЕ �
 console.log('📞 SUPPORT_CHANNEL:', SUPPORT_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('💳 WITHDRAWAL_CHANNEL:', WITHDRAWAL_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('🔐 REQUIRED_CHANNEL:', REQUIRED_CHANNEL || 'НЕ УСТАНОВЛЕН');
+console.log('📢 PROMO_NOTIFICATIONS_CHAT:', process.env.PROMO_NOTIFICATIONS_CHAT || 'НЕ УСТАНОВЛЕН');
 
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
@@ -359,7 +360,7 @@ const TITLES = {
   'vip_elite': { name: 'VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only', icon: '💫' }
 };
 
-// Система уровней (по звёздам)
+// Система уровней (по Magnum Coin)
 const RANKS = [
   { name: 'Новичок', requirement: 0, color: '🆕' },           // Уровень 1
   { name: 'Ученик', requirement: 25, color: '📚' },           // Уровень 2 
@@ -981,11 +982,12 @@ function getUserMainTitle(user) {
 }
 
 function getUserRank(user) {
-  const stars = user.stars || 0;
+  // ИЗМЕНЕНО: Уровни теперь считаются по Magnum Coin, а не по звёздам
+  const magnumCoins = user.magnumCoins || 0;
   let currentRank = RANKS[0]; // По умолчанию Bronze Star
   
   for (const rank of RANKS) {
-    if (stars >= rank.requirement) {
+    if (magnumCoins >= rank.requirement) {
       currentRank = rank;
     } else {
       break;
@@ -996,25 +998,26 @@ function getUserRank(user) {
 }
 
 function getNextRankInfo(user) {
-  const stars = user.stars || 0;
+  // ИЗМЕНЕНО: Уровни теперь считаются по Magnum Coin, а не по звёздам
+  const magnumCoins = user.magnumCoins || 0;
   const currentRank = getUserRank(user);
   
   // Найти следующий уровень
   const currentIndex = RANKS.findIndex(rank => rank.name === currentRank.name);
   if (currentIndex < RANKS.length - 1) {
     const nextRank = RANKS[currentIndex + 1];
-    const starsToNext = nextRank.requirement - stars;
-    const progress = Math.max(0, Math.min(100, (stars - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
+    const coinsToNext = nextRank.requirement - magnumCoins;
+    const progress = Math.max(0, Math.min(100, (magnumCoins - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
     
     // КРИТИЧЕСКАЯ отладочная информация
     console.log(`🔥🔥🔥 РАСЧЕТ ПРОГРЕССА УРОВНЯ:`);
     console.log(`🔥 Пользователь: ${user.id}`);
-    console.log(`🔥 Звёзды: ${stars}`);
-    console.log(`🔥 Текущий ранг: ${currentRank.name} (от ${currentRank.requirement} звёзд)`);
-    console.log(`🔥 Следующий ранг: ${nextRank.name} (нужно ${nextRank.requirement} звёзд)`);
-    console.log(`🔥 До следующего: ${starsToNext} звёзд`);
-    console.log(`🔥 Формула прогресса: (${stars} - ${currentRank.requirement}) / (${nextRank.requirement} - ${currentRank.requirement}) * 100`);
-    console.log(`🔥 Числитель: ${stars - currentRank.requirement}`);
+    console.log(`🔥 Magnum Coin: ${magnumCoins}`);
+    console.log(`🔥 Текущий ранг: ${currentRank.name} (от ${currentRank.requirement} MC)`);
+    console.log(`🔥 Следующий ранг: ${nextRank.name} (нужно ${nextRank.requirement} MC)`);
+    console.log(`🔥 До следующего: ${coinsToNext} MC`);
+    console.log(`🔥 Формула прогресса: (${magnumCoins} - ${currentRank.requirement}) / (${nextRank.requirement} - ${currentRank.requirement}) * 100`);
+    console.log(`🔥 Числитель: ${magnumCoins - currentRank.requirement}`);
     console.log(`🔥 Знаменатель: ${nextRank.requirement - currentRank.requirement}`);
     console.log(`🔥 Прогресс: ${progress}% (округлено: ${Math.round(progress)}%)`);
     console.log(`🔥🔥🔥 КОНЕЦ РАСЧЕТА`);
@@ -1022,7 +1025,7 @@ function getNextRankInfo(user) {
     return {
       current: currentRank,
       next: nextRank,
-      starsToNext: starsToNext,
+      starsToNext: coinsToNext, // Оставляем имя для совместимости, но теперь это MC
       progress: Math.round(progress)
     };
   }
@@ -1640,24 +1643,56 @@ async function handlePromoActivation(ctx, text, userState) {
       return;
     }
     
-    console.log('✅ Промокод валиден, выдаем награду:', promo.stars, 'Magnum Coin');
+    console.log('✅ Промокод валиден, тип награды:', promo.rewardType || 'legacy');
+    
+    // Определяем тип награды (для обратной совместимости)
+    const rewardType = promo.rewardType || (promo.stars ? 'legacy' : 'unknown');
+    
+    let updateQuery = {
+      $inc: { promoCount: 1 },
+      $addToSet: { promoCodes: code }
+    };
+    
+    let rewardText = '';
+    let newBalanceText = '';
+    
+    if (rewardType === 'stars') {
+      updateQuery.$inc.stars = promo.stars;
+      rewardText = `[⭐ +${promo.stars}] звёзд получено`;
+      newBalanceText = `[💎 ${Math.round((user.stars + promo.stars) * 100) / 100}] новый баланс звёзд`;
+      
+    } else if (rewardType === 'magnum') {
+      updateQuery.$inc.magnumCoins = promo.magnumCoins;
+      updateQuery.$inc.totalEarnedMagnumCoins = promo.magnumCoins;
+      rewardText = `[🪙 +${promo.magnumCoins}] Magnum Coin получено`;
+      newBalanceText = `[💰 ${Math.round((user.magnumCoins + promo.magnumCoins) * 100) / 100}] новый баланс MC`;
+      
+    } else if (rewardType === 'title') {
+      updateQuery.$addToSet.titles = promo.title;
+      rewardText = `[🏆 ${promo.title}] титул получен`;
+      newBalanceText = `🎭 Титул добавлен в вашу коллекцию`;
+      
+    } else if (rewardType === 'status') {
+      updateQuery.$set = updateQuery.$set || {};
+      updateQuery.$set.userStatus = promo.status;
+      rewardText = `[💫 ${promo.status.toUpperCase()}] статус получен`;
+      newBalanceText = `👑 Ваш новый статус активирован`;
+      
+    } else if (rewardType === 'legacy') {
+      // Обратная совместимость для старых промокодов
+      updateQuery.$inc.magnumCoins = promo.stars;
+      updateQuery.$inc.totalEarnedMagnumCoins = promo.stars;
+      rewardText = `[🪙 +${promo.stars}] Magnum Coin получено`;
+      newBalanceText = `[💰 ${Math.round((user.magnumCoins + promo.stars) * 100) / 100}] новый баланс MC`;
+    }
     
     // Обновляем пользователя
-    await users.updateOne(
-      { id: userId },
-      { 
-        $inc: { magnumCoins: promo.stars, promoCount: 1, totalEarnedMagnumCoins: promo.stars },
-        $addToSet: { promoCodes: code }
-      }
-    );
+    await users.updateOne({ id: userId }, updateQuery);
     invalidateUserCache(userId);
     invalidateBotStatsCache();
     
     // Обновляем промокод
-    await promocodes.updateOne(
-      { code },
-      { $inc: { used: 1 } }
-    );
+    await promocodes.updateOne({ code }, { $inc: { used: 1 } });
     
     // Проверяем достижения
     await checkAndAwardAchievements(userId);
@@ -1666,14 +1701,18 @@ async function handlePromoActivation(ctx, text, userState) {
     // Очищаем состояние
     userStates.delete(userId);
     
-    const newBalance = Math.round((user.magnumCoins + promo.stars) * 100) / 100;
+    // Получаем имя активатора для уведомлений
+    const activatorName = ctx.from.first_name || ctx.from.username || `ID${userId}`;
     
     await ctx.reply(`✅ **Промокод активирован!**\n\n` +
                     `[🎫 ${code}]\n` +
-                    `[🪙 +${promo.stars}] Magnum Coin получено\n` +
-                    `[💰 ${newBalance}] новый баланс\n\n` +
+                    rewardText + `\n` +
+                    newBalanceText + `\n\n` +
                     `🎉 Поздравляем с успешной активацией!`, 
                     { parse_mode: 'Markdown' });
+    
+    // Отправляем уведомление в чат
+    await notifyPromoActivationToChat(userId, activatorName, code, rewardText);
     
     console.log('✅ Промокод успешно активирован пользователем:', userId);
     
@@ -1966,11 +2005,11 @@ async function getDetailedProfile(userId, ctx) {
   const nextRankInfo = getNextRankInfo(user);
   
   // КРИТИЧЕСКАЯ ПРОВЕРКА: Пересчитываем с самыми свежими данными
-  console.log(`🔥 ПРОВЕРКА РАНГА: Пользователь ${userId} имеет ${user.stars} звёзд`);
-  console.log(`🔥 ТЕКУЩИЙ РАНГ: ${rank.name} (требует ${rank.requirement} звёзд)`);
+  console.log(`🔥 ПРОВЕРКА РАНГА: Пользователь ${userId} имеет ${user.magnumCoins} MC`);
+  console.log(`🔥 ТЕКУЩИЙ РАНГ: ${rank.name} (требует ${rank.requirement} MC)`);
   if (nextRankInfo.next) {
-    console.log(`🔥 СЛЕДУЮЩИЙ РАНГ: ${nextRankInfo.next.name} (требует ${nextRankInfo.next.requirement} звёзд)`);
-    console.log(`🔥 ПРОГРЕСС: ${nextRankInfo.progress}%, до следующего: ${nextRankInfo.starsToNext} звёзд`);
+    console.log(`🔥 СЛЕДУЮЩИЙ РАНГ: ${nextRankInfo.next.name} (требует ${nextRankInfo.next.requirement} MC)`);
+    console.log(`🔥 ПРОГРЕСС: ${nextRankInfo.progress}%, до следующего: ${nextRankInfo.starsToNext} MC`);
   }
   const status = getUserStatus(user);
   
@@ -1983,7 +2022,7 @@ async function getDetailedProfile(userId, ctx) {
     const progressBar = createProgressBar(nextRankInfo.progress, 100) + ` ${nextRankInfo.progress}%`;
     progressText = `📊 **Прогресс уровня:**  
 ${progressBar}
-До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} звёзд`;
+До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} 🪙 Magnum Coin`;
   } else {
     progressText = '🏆 **Максимальный уровень достигнут!**';
   }
@@ -3060,6 +3099,156 @@ bot.action('admin_cancel', async (ctx) => {
   await ctx.answerCbQuery('❌ Операция отменена');
 });
 
+// Функция уведомления в чат о активации промокода
+async function notifyPromoActivationToChat(activatorId, activatorName, code, rewardText) {
+  try {
+    // Проверяем, настроен ли чат для уведомлений
+    const promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
+    if (!promoChatId) {
+      console.log('📢 Чат для уведомлений о промокодах не настроен (PROMO_NOTIFICATIONS_CHAT)');
+      return;
+    }
+
+    console.log(`📢 Отправляем уведомление о активации промокода ${code} в чат ${promoChatId}`);
+    
+    const notificationText = `🎫 **ПРОМОКОД АКТИВИРОВАН!** 🎫\n\n` +
+                           `👤 **Игрок:** ${activatorName} (ID: ${activatorId})\n` +
+                           `🏷️ **Промокод:** \`${code}\`\n` +
+                           `🎁 **Награда:** ${rewardText}\n` +
+                           `⏰ **Время:** ${new Date().toLocaleString('ru-RU')}\n\n` +
+                           `🎉 Поздравляем с успешной активацией!`;
+
+    await bot.telegram.sendMessage(promoChatId, notificationText, { 
+      parse_mode: 'Markdown'
+    });
+
+    console.log(`📢 Уведомление о промокоде отправлено в чат ${promoChatId}`);
+    
+  } catch (error) {
+    console.error('❌ Ошибка при отправке уведомления о промокоде в чат:', error);
+    // Проверяем типичные ошибки
+    if (error.message.includes('chat not found')) {
+      console.error('💡 Убедитесь, что бот добавлен в чат и имеет права на отправку сообщений');
+    } else if (error.message.includes('CHAT_ID_INVALID')) {
+      console.error('💡 Проверьте правильность PROMO_NOTIFICATIONS_CHAT (должен быть числовой ID или @username)');
+    }
+  }
+}
+
+// Функция обработки создания промокодов
+async function handlePromoCodeCreation(ctx, text, userState) {
+  try {
+    const { rewardType } = userState;
+    
+    if (rewardType === 'title') {
+      // Для титулов парсим с учетом кавычек
+      const match = text.trim().match(/^(\S+)\s+"([^"]+)"\s+(\d+)$/);
+      if (!match) {
+        return ctx.reply('❌ Неверный формат! Используйте: НАЗВАНИЕ "ТИТУЛ" ЛИМИТ\n\nПример: HERO "Герой дня" 20');
+      }
+      
+      const [, code, title, maxActivations] = match;
+      const maxNum = Number(maxActivations);
+      
+      if (!code || !title || isNaN(maxNum) || maxNum <= 0) {
+        return ctx.reply('❌ Неверные данные! Проверьте формат.');
+      }
+      
+      const existingPromo = await promocodes.findOne({ code: code.toUpperCase() });
+      if (existingPromo) {
+        return ctx.reply(`❌ Промокод ${code.toUpperCase()} уже существует!`);
+      }
+      
+      await promocodes.insertOne({
+        code: code.toUpperCase(),
+        rewardType: 'title',
+        title: title,
+        max: maxNum,
+        used: 0,
+        created: now()
+      });
+      
+      ctx.reply(`✅ Промокод создан успешно!\n\n` +
+                `🏷️ **Код:** ${code.toUpperCase()}\n` +
+                `🏆 **Награда:** Титул "${title}"\n` +
+                `🔢 **Лимит активаций:** ${maxNum}\n` +
+                `📅 **Создан:** ${new Date().toLocaleString('ru-RU')}`, 
+                { parse_mode: 'Markdown' });
+                
+    } else {
+      // Для остальных типов стандартный парсинг
+      const parts = text.trim().split(/\s+/);
+      
+      if (parts.length !== 3) {
+        return ctx.reply('❌ Неверный формат! Используйте: НАЗВАНИЕ КОЛИЧЕСТВО/СТАТУС ЛИМИТ');
+      }
+      
+      const [code, reward, maxActivations] = parts;
+      const maxNum = Number(maxActivations);
+      
+      if (!code || isNaN(maxNum) || maxNum <= 0) {
+        return ctx.reply('❌ Неверные данные! Проверьте формат.');
+      }
+      
+      const existingPromo = await promocodes.findOne({ code: code.toUpperCase() });
+      if (existingPromo) {
+        return ctx.reply(`❌ Промокод ${code.toUpperCase()} уже существует!`);
+      }
+      
+      let promoData = {
+        code: code.toUpperCase(),
+        rewardType: rewardType,
+        max: maxNum,
+        used: 0,
+        created: now()
+      };
+      
+      let rewardText = '';
+      
+      if (rewardType === 'stars') {
+        const starsNum = Number(reward);
+        if (isNaN(starsNum) || starsNum <= 0) {
+          return ctx.reply('❌ Количество звёзд должно быть положительным числом!');
+        }
+        promoData.stars = starsNum;
+        rewardText = `⭐ **Награда:** ${starsNum} звёзд`;
+        
+      } else if (rewardType === 'magnum') {
+        const magnumNum = Number(reward);
+        if (isNaN(magnumNum) || magnumNum <= 0) {
+          return ctx.reply('❌ Количество Magnum Coin должно быть положительным числом!');
+        }
+        promoData.magnumCoins = magnumNum;
+        rewardText = `🪙 **Награда:** ${magnumNum} Magnum Coin`;
+        
+      } else if (rewardType === 'status') {
+        const validStatuses = ['vip', 'moderator', 'elite'];
+        if (!validStatuses.includes(reward.toLowerCase())) {
+          return ctx.reply(`❌ Неверный статус! Доступные: ${validStatuses.join(', ')}`);
+        }
+        promoData.status = reward.toLowerCase();
+        rewardText = `💫 **Награда:** Статус "${reward.toUpperCase()}"`;
+      }
+      
+      await promocodes.insertOne(promoData);
+      
+      ctx.reply(`✅ Промокод создан успешно!\n\n` +
+                `🏷️ **Код:** ${code.toUpperCase()}\n` +
+                rewardText + `\n` +
+                `🔢 **Лимит активаций:** ${maxNum}\n` +
+                `📅 **Создан:** ${new Date().toLocaleString('ru-RU')}`, 
+                { parse_mode: 'Markdown' });
+    }
+    
+    userStates.delete(ctx.from.id);
+    
+  } catch (error) {
+    console.error('Ошибка создания промокода:', error);
+    ctx.reply('❌ Произошла ошибка при создании промокода. Попробуйте снова.');
+    userStates.delete(ctx.from.id);
+  }
+}
+
 // Магазин
 bot.action('shop', async (ctx) => {
   const user = await getUserDirectFromDB(ctx.from.id);
@@ -3748,41 +3937,9 @@ bot.on('text', async (ctx) => {
       }
 
       // Промокод
-      else if (replyText.includes('Введите данные промокода в формате: НАЗВАНИЕ ЗВЁЗДЫ ЛИМИТ')) {
-        const parts = text.trim().split(/\s+/);
-        
-        if (parts.length !== 3) {
-          return ctx.reply('❌ Неверный формат! Используйте: НАЗВАНИЕ ЗВЁЗДЫ ЛИМИТ\n\nПример: NEWCODE 25 100');
-        }
-        
-        const [code, stars, maxActivations] = parts;
-        const starsNum = Number(stars);
-        const maxNum = Number(maxActivations);
-        
-        if (!code || isNaN(starsNum) || isNaN(maxNum) || starsNum <= 0 || maxNum <= 0) {
-          return ctx.reply('❌ Неверные данные!\n\n✅ Правильный формат:\n• НАЗВАНИЕ - любой текст\n• ЗВЁЗДЫ - положительное число\n• ЛИМИТ - положительное число\n\nПример: NEWCODE 25 100');
-        }
-        
-        // Проверяем, не существует ли уже такой промокод
-        const existingPromo = await promocodes.findOne({ code: code.toUpperCase() });
-        if (existingPromo) {
-          return ctx.reply(`❌ Промокод ${code.toUpperCase()} уже существует!`);
-        }
-        
-        await promocodes.insertOne({
-          code: code.toUpperCase(),
-          stars: starsNum,
-          max: maxNum,
-          used: 0,
-          created: now()
-        });
-        
-        ctx.reply(`✅ Промокод создан успешно!\n\n` +
-                  `🏷️ **Код:** ${code.toUpperCase()}\n` +
-                  `⭐ **Награда:** ${starsNum} звёзд\n` +
-                  `🔢 **Лимит активаций:** ${maxNum}\n` +
-                  `📅 **Создан:** ${new Date().toLocaleString('ru-RU')}`, 
-                  { parse_mode: 'Markdown' });
+      else if (userState.type === 'admin_create_promo') {
+        await handlePromoCodeCreation(ctx, text, userState);
+        return;
       }
 
       // Выдать/забрать звёзды
@@ -4025,12 +4182,49 @@ bot.action('admin_broadcast', async (ctx) => {
 bot.action('admin_addpromo', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
-  // Устанавливаем состояние для создания промокода
-  userStates.set(ctx.from.id, { 
-    type: 'admin_create_promo' 
-  });
+  const promoText = `🎫 **Создание промокода** 🎫\n\n` +
+                   `Выберите тип награды для промокода:\n\n` +
+                   `⭐ **Звёзды** - валюта для покупок\n` +
+                   `🪙 **Magnum Coin** - валюта фарма и уровней\n` +
+                   `🏆 **Титул** - особое звание игрока\n` +
+                   `💫 **Статус** - роль пользователя`;
+
+  await sendMessageWithPhoto(ctx, promoText, Markup.inlineKeyboard([
+    [Markup.button.callback('⭐ Звёзды', 'promo_type_stars')],
+    [Markup.button.callback('🪙 Magnum Coin', 'promo_type_magnum')],
+    [Markup.button.callback('🏆 Титул', 'promo_type_title')],
+    [Markup.button.callback('💫 Статус', 'promo_type_status')],
+    [Markup.button.callback('🔙 Назад', 'admin_panel')]
+  ]));
+});
+
+// Обработчики типов промокодов
+bot.action('promo_type_stars', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
-  await adminForceReply(ctx, '➕ Введите данные промокода в формате: НАЗВАНИЕ МАГНУМ_КОИНЫ ЛИМИТ\n\nПример: NEWCODE 25 100\n(код NEWCODE на 25 Magnum Coin с лимитом 100 активаций)');
+  userStates.set(ctx.from.id, { type: 'admin_create_promo', rewardType: 'stars' });
+  await adminForceReply(ctx, '⭐ **Промокод на звёзды**\n\nВведите данные в формате: НАЗВАНИЕ КОЛИЧЕСТВО ЛИМИТ\n\nПример: STARS100 100 50\n(код STARS100 на 100 звёзд с лимитом 50 активаций)');
+});
+
+bot.action('promo_type_magnum', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_create_promo', rewardType: 'magnum' });
+  await adminForceReply(ctx, '🪙 **Промокод на Magnum Coin**\n\nВведите данные в формате: НАЗВАНИЕ КОЛИЧЕСТВО ЛИМИТ\n\nПример: COIN50 50 100\n(код COIN50 на 50 Magnum Coin с лимитом 100 активаций)');
+});
+
+bot.action('promo_type_title', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_create_promo', rewardType: 'title' });
+  await adminForceReply(ctx, '🏆 **Промокод на титул**\n\nВведите данные в формате: НАЗВАНИЕ ТИТУЛ ЛИМИТ\n\nПример: HERO "Герой дня" 20\n(код HERO дающий титул "Герой дня" с лимитом 20 активаций)');
+});
+
+bot.action('promo_type_status', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_create_promo', rewardType: 'status' });
+  await adminForceReply(ctx, '💫 **Промокод на статус**\n\nВведите данные в формате: НАЗВАНИЕ СТАТУС ЛИМИТ\n\nДоступные статусы: vip, moderator, elite\n\nПример: VIP30 vip 30\n(код VIP30 дающий статус VIP с лимитом 30 активаций)');
 });
 
 // Статистика
