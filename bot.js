@@ -575,6 +575,42 @@ async function getUser(id) {
 
 function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
 
+function createProgressBar(current, total, length = 10) {
+  const filled = Math.floor((current / total) * length);
+  const empty = length - filled;
+  return '▓'.repeat(filled) + '░'.repeat(empty);
+}
+
+async function getDetailedProfile(userId) {
+  const user = await getUser(userId);
+  const balance = user.stars || 0;
+  const friends = user.invited || 0;
+  const rank = getUserMainTitle(user);
+  const nextLevel = getNextLevelInfo(user);
+  
+  // Создаем шкалу прогресса
+  const currentLevelStars = balance;
+  const nextLevelStars = nextLevel.starsNeeded + balance;
+  const prevLevelStars = nextLevelStars - nextLevel.starsNeeded;
+  const progressPercent = nextLevel.starsNeeded === 0 ? 100 : 
+    Math.floor(((balance - prevLevelStars) / (nextLevelStars - prevLevelStars)) * 100);
+  
+  const progressBar = nextLevel.starsNeeded === 0 ? 
+    '▓▓▓▓▓▓▓▓▓▓ 100%' : 
+    createProgressBar(balance - prevLevelStars, nextLevelStars - prevLevelStars) + ` ${progressPercent}%`;
+  
+  return `👑 **Профиль игрока MagnumTap** 👑
+
+💫 **Статус:** VIP-участник  
+💎 **Баланс:** ${balance} ⭐ звёзд  
+👥 **Друзей приглашено:** ${friends}  
+🏆 **Ранг:** ${rank} 🌟
+
+📊 **Прогресс уровня:**  
+${progressBar}
+${nextLevel.starsNeeded === 0 ? '🌟 Максимальный уровень достигнут!' : `До ${nextLevel.nextLevel}: ${nextLevel.starsNeeded} звёзд`}`;
+}
+
 function getWelcomeText(balance, invited) {
   return (
     "👋 Добро пожаловать в *MagnumTapBot*! 🌟\n\n" +
@@ -669,21 +705,19 @@ async function getUserTasks(userId, isDaily = true) {
 
 async function updateMainMenuBalance(ctx) {
   try {
-    const user = await getUser(ctx.from.id);
-    const balance = user.stars || 0;
-    const invited = user.invited || 0;
-    const menu = getMainMenu(ctx, balance, invited);
-    
+    const menu = await getMainMenu(ctx, ctx.from.id);
     await ctx.editMessageText(menu.text, menu.extra);
   } catch (error) {
     console.error('Ошибка обновления баланса в меню:', error);
   }
 }
 
-function getMainMenu(ctx, balance, invited) {
+async function getMainMenu(ctx, userId) {
   const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
+  const profileText = await getDetailedProfile(userId);
+  
   return {
-    text: getWelcomeText(balance, invited),
+    text: profileText,
     extra: {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
@@ -699,51 +733,19 @@ function getMainMenu(ctx, balance, invited) {
 
 bot.start(async (ctx) => {
   const user = await getUser(ctx.from.id);
-  const balance = user.stars || 0;
-  const invited = user.invited || 0;
-  const menu = getMainMenu(ctx, balance, invited);
+  const menu = await getMainMenu(ctx, ctx.from.id);
   await ctx.reply(menu.text, menu.extra);
 });
 
 bot.action('main_menu', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
-  const user = await getUser(ctx.from.id);
-  const balance = user.stars || 0;
-  const invited = user.invited || 0;
-  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
-  ctx.reply(
-    getWelcomeText(balance, invited),
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
-        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
-        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
-        ...adminRow
-      ])
-    }
-  );
+  const menu = await getMainMenu(ctx, ctx.from.id);
+  ctx.reply(menu.text, menu.extra);
 });
 
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
-  // Всегда получаем свежие данные
-  const user = await getUser(ctx.from.id);
-  const balance = user.stars || 0;
-  const friends = user.invited || 0;
-  const rank = getUserMainTitle(user);
-  const nextLevel = getNextLevelInfo(user);
-  
-  const profileText = `👑 **Профиль игрока MagnumTap** 👑
-
-💫 **Статус:** VIP-участник  
-💎 **Баланс:** ${balance} ⭐ звёзд  
-👥 **Друзей приглашено:** ${friends}  
-🏆 **Ранг:** ${rank} 🌟
-
-⚡ **Следующая цель:**  
-— Заработать ещё ${nextLevel.starsNeeded} звёзд до уровня **${nextLevel.nextLevel}** 🏅`;
+  const profileText = await getDetailedProfile(ctx.from.id);
 
   ctx.editMessageText(profileText, {
     parse_mode: 'Markdown',
