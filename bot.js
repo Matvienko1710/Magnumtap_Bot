@@ -111,14 +111,7 @@ const SHOP_ITEMS = {
     icon: '🏷️',
     category: 'cosmetic'
   },
-  'rainbow_name': {
-    name: '🌈 Радужное имя',
-    description: 'Цветное отображение имени в топе на месяц',
-    price: 300,
-    icon: '🌈',
-    duration: 2592000, // 30 дней
-    category: 'cosmetic'
-  }
+
 };
 
 // Система статусов пользователей
@@ -876,16 +869,6 @@ async function purchaseItem(userId, itemId) {
       if (itemId === 'custom_title') {
         result.message = `${item.icon} Кастомный титул готов! Напишите желаемый титул:`;
         result.needInput = true;
-      } else if (itemId === 'rainbow_name') {
-        const expiresAt = now + item.duration;
-        await users.updateOne(
-          { id: userId },
-          { 
-            $inc: { stars: -item.price },
-            $set: { [`cosmetics.rainbow_name`]: { expiresAt, active: true } }
-          }
-        );
-        result.message = `${item.icon} Радужное имя активировано на месяц!`;
       }
       break;
   }
@@ -935,21 +918,7 @@ function calculateLuckyBoxReward(boxType = 'lucky') {
 
 // Функция для получения отображаемого имени пользователя
 function getUserDisplayName(user, userData = null) {
-  // Получаем базовое имя
-  let displayName = user.username || user.first_name || `User${user.id}`;
-  
-  // Проверяем активность радужного имени
-  if (userData && userData.cosmetics && userData.cosmetics.rainbow_name) {
-    const now = Math.floor(Date.now() / 1000);
-    if (userData.cosmetics.rainbow_name.expiresAt > now) {
-      // Применяем радужный эффект (используем эмодзи для цвета)
-      const rainbowChars = ['🔴', '🟠', '🟡', '🟢', '🔵', '🟣'];
-      const colorIndex = Math.floor(Math.random() * rainbowChars.length);
-      return `${rainbowChars[colorIndex]}${displayName}${rainbowChars[(colorIndex + 3) % rainbowChars.length]}`;
-    }
-  }
-  
-  return displayName;
+  return user.username || user.first_name || `User${user.id}`;
 }
 
 // Функции для работы со статусами
@@ -1061,9 +1030,55 @@ const TASK_CHECK_STATUSES = {
 
 // Ежедневные задания
 const dailyTasks = [
-  { id: 'login', name: 'Зайти в бота', reward: 5, description: 'Просто запустите бота!' },
-  { id: 'bonus', name: 'Получить дневной бонус', reward: 10, description: 'Нажмите кнопку "Бонус"' },
-  { id: 'invite', name: 'Пригласить друга', reward: 20, description: 'Пригласите одного друга' }
+  { 
+    id: 'login', 
+    name: '👋 Ежедневный вход', 
+    reward: 5, 
+    description: 'Заходите в бота каждый день для получения награды',
+    type: 'auto',
+    icon: '👋'
+  },
+  { 
+    id: 'farm_10', 
+    name: '⚡ Активный фармер', 
+    reward: 8, 
+    description: 'Соберите звёзды 10 раз за день',
+    type: 'farm',
+    target: 10,
+    icon: '⚡'
+  },
+  { 
+    id: 'bonus', 
+    name: '🎁 Ежедневный бонус', 
+    reward: 12, 
+    description: 'Получите ежедневный бонус звёзд',
+    type: 'bonus',
+    icon: '🎁'
+  },
+  { 
+    id: 'shop_visit', 
+    name: '🛒 Посетить магазин', 
+    reward: 3, 
+    description: 'Откройте магазин и изучите товары',
+    type: 'shop',
+    icon: '🛒'
+  },
+  { 
+    id: 'top_check', 
+    name: '🏆 Изучить топ', 
+    reward: 3, 
+    description: 'Посмотрите на лучших игроков',
+    type: 'top',
+    icon: '🏆'
+  },
+  { 
+    id: 'invite_friend', 
+    name: '🤝 Пригласить друга', 
+    reward: 25, 
+    description: 'Поделитесь рефссылкой с другом',
+    type: 'invite',
+    icon: '🤝'
+  }
 ];
 
 // Задания от спонсора
@@ -1094,8 +1109,22 @@ async function getUserTasks(userId, isDaily = true) {
       userTasks.claimed[task.id] = false;
     });
     await tasks.insertOne(userTasks);
+    
+    // Сбрасываем ежедневный счетчик фармов
+    if (isDaily) {
+      await users.updateOne({ id: userId }, { $set: { dailyFarms: 0 } });
+    }
   }
   return userTasks;
+}
+
+async function markDailyTaskCompleted(userId, taskId) {
+  const today = new Date().toDateString();
+  await tasks.updateOne(
+    { userId, date: today, type: 'daily' },
+    { $set: { [`completed.${taskId}`]: true } },
+    { upsert: true }
+  );
 }
 
 async function updateMainMenuBalance(ctx) {
@@ -1118,7 +1147,7 @@ async function getMainMenu(ctx, userId) {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
         [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
-        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('🎫 Промокод', 'promo')],
         [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
@@ -1135,6 +1164,10 @@ bot.start(async (ctx) => {
   }
   
   const user = await getUser(ctx.from.id, ctx);
+  
+  // Автоматически отмечаем задание "ежедневный вход"
+  await markDailyTaskCompleted(ctx.from.id, 'login');
+  
   const menu = await getMainMenu(ctx, ctx.from.id);
   await ctx.reply(menu.text, menu.extra);
 });
@@ -1166,6 +1199,7 @@ bot.action('profile', async (ctx) => {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
       [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
+      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
       [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
@@ -1198,6 +1232,9 @@ bot.action('my_titles', async (ctx) => {
 });
 
 bot.action('top', async (ctx) => {
+  // Отмечаем задание "изучить топ"
+  await markDailyTaskCompleted(ctx.from.id, 'top_check');
+  
   const topUsers = await users.find({}).sort({ stars: -1 }).limit(10).toArray();
   let msg = '🏆 *Топ-10 игроков по звёздам:*\n\n';
   
@@ -1241,6 +1278,9 @@ bot.action('top', async (ctx) => {
 });
 
 bot.action('invite', async (ctx) => {
+  // Отмечаем задание "пригласить друга"
+  await markDailyTaskCompleted(ctx.from.id, 'invite_friend');
+  
   const user = await getUser(ctx.from.id);
   const refLink = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
   ctx.editMessageText(
@@ -1248,13 +1288,81 @@ bot.action('invite', async (ctx) => {
     `Отправь эту ссылку друзьям и получай звёзды за каждого, кто присоединится!\n\n` +
     `🔗 Твоя ссылка: ${refLink}\n\n` +
     `👥 Приглашено друзей: ${user.invited || 0}`,
-    Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
+    Markup.inlineKeyboard([
+      [Markup.button.callback('👤 Назад в профиль', 'profile')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ])
+  );
+});
+
+// Вывод звёзд
+bot.action('withdraw', async (ctx) => {
+  const user = await getUser(ctx.from.id, ctx);
+  const balance = Math.round((user.stars || 0) * 100) / 100;
+  
+  const message = `💸 **Вывод звёзд** 💸\n\n` +
+                  `💰 **Ваш баланс:** ${balance} ⭐ звёзд\n\n` +
+                  `📋 **Доступные способы вывода:**\n` +
+                  `• Telegram Stars (минимум: 100⭐)\n` +
+                  `• TON Coin (минимум: 500⭐)\n` +
+                  `• USDT TRC-20 (минимум: 1000⭐)\n\n` +
+                  `⚠️ **Комиссия:** 5% с суммы вывода\n` +
+                  `⏰ **Обработка:** 24-48 часов\n\n` +
+                  `💡 Для вывода выберите способ ниже:`;
+  
+  const keyboard = [];
+  if (balance >= 100) {
+    keyboard.push([Markup.button.callback('⭐ Telegram Stars (100⭐)', 'withdraw_tg_stars')]);
+  }
+  if (balance >= 500) {
+    keyboard.push([Markup.button.callback('💎 TON Coin (500⭐)', 'withdraw_ton')]);
+  }
+  if (balance >= 1000) {
+    keyboard.push([Markup.button.callback('💵 USDT TRC-20 (1000⭐)', 'withdraw_usdt')]);
+  }
+  
+  if (keyboard.length === 0) {
+    keyboard.push([Markup.button.callback('❌ Недостаточно звёзд', 'withdraw_info')]);
+  }
+  
+  keyboard.push([Markup.button.callback('👤 Назад в профиль', 'profile')]);
+  
+  ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(keyboard)
+  });
+});
+
+// Обработчики методов вывода
+bot.action('withdraw_tg_stars', async (ctx) => {
+  await adminForceReply(ctx, '⭐ Введите количество звёзд для вывода в Telegram Stars (минимум 100):');
+});
+
+bot.action('withdraw_ton', async (ctx) => {
+  await adminForceReply(ctx, '💎 Введите ваш TON адрес для вывода:');
+});
+
+bot.action('withdraw_usdt', async (ctx) => {
+  await adminForceReply(ctx, '💵 Введите ваш USDT TRC-20 адрес для вывода:');
+});
+
+bot.action('withdraw_info', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const balance = Math.round((user.stars || 0) * 100) / 100;
+  
+  ctx.answerCbQuery(
+    `У вас ${balance}⭐. Нужно: 100⭐ для Telegram Stars, 500⭐ для TON, 1000⭐ для USDT`,
+    { show_alert: true }
   );
 });
 
 // Магазин
 bot.action('shop', async (ctx) => {
   const user = await getUser(ctx.from.id);
+  
+  // Отмечаем задание "посетить магазин"
+  await markDailyTaskCompleted(ctx.from.id, 'shop_visit');
+  
   const activeBoosts = getActiveBoosts(user);
   const categories = getShopCategories();
   
@@ -2136,21 +2244,52 @@ bot.on('text', async (ctx) => {
 
 bot.action('daily_tasks', async (ctx) => {
   const userTasks = await getUserTasks(ctx.from.id, true);
-  let msg = '📋 Ежедневные задания\n\n';
+  const user = await getUser(ctx.from.id, ctx);
+  
+  let msg = '📋 **Ежедневные задания** 📋\n\n';
+  let totalReward = 0;
+  let completedCount = 0;
   
   dailyTasks.forEach(task => {
     const completed = userTasks.completed[task.id];
     const claimed = userTasks.claimed[task.id];
-    const status = claimed ? '✅ Получено' : completed ? '🎁 Забрать' : '⏳ Выполнить';
-    msg += `${status} ${task.name} (+${task.reward} звёзд)\n${task.description}\n\n`;
+    
+    let status = '';
+    let progress = '';
+    
+    if (claimed) {
+      status = '✅';
+      completedCount++;
+    } else if (completed) {
+      status = '🎁';
+      totalReward += task.reward;
+    } else {
+      status = '⏳';
+      
+      // Показываем прогресс для некоторых заданий
+      if (task.type === 'farm' && task.target) {
+        const dailyFarms = user.dailyFarms || 0;
+        progress = ` (${Math.min(dailyFarms, task.target)}/${task.target})`;
+      }
+    }
+    
+    msg += `${status} **${task.name}** ${progress}\n`;
+    msg += `   💰 Награда: ${task.reward}⭐\n`;
+    msg += `   📝 ${task.description}\n\n`;
   });
+  
+  msg += `📊 **Статистика дня:**\n`;
+  msg += `✅ Выполнено: ${completedCount}/${dailyTasks.length}\n`;
+  if (totalReward > 0) {
+    msg += `🎁 К получению: ${totalReward}⭐\n`;
+  }
   
   const buttons = [];
   dailyTasks.forEach(task => {
     const completed = userTasks.completed[task.id];
     const claimed = userTasks.claimed[task.id];
     if (completed && !claimed) {
-      buttons.push([Markup.button.callback(`🎁 ${task.name}`, `claim_daily_${task.id}`)]);
+      buttons.push([Markup.button.callback(`🎁 Забрать ${task.reward}⭐ - ${task.icon}${task.name.split(' ').slice(1).join(' ')}`, `claim_daily_${task.id}`)]);
     }
   });
   buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
@@ -3033,9 +3172,15 @@ bot.action('farm', async (ctx) => {
     const boostedReward = applyBoostMultiplier(baseReward, user, 'farm');
     
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { stars: boostedReward, farmCount: 1 }, 
+      $inc: { stars: boostedReward, farmCount: 1, dailyFarms: 1 }, 
       $set: { lastFarm: now() } 
     });
+    
+    // Проверяем задание активного фармера
+    const updatedUser = await getUser(ctx.from.id);
+    if ((updatedUser.dailyFarms || 0) >= 10) {
+      await markDailyTaskCompleted(ctx.from.id, 'farm_10');
+    }
     
     // Проверяем новые титулы и достижения
     const newTitles = await checkAndAwardTitles(ctx.from.id);
@@ -3090,6 +3235,9 @@ bot.action('bonus', async (ctx) => {
       $inc: { stars: boostedReward, bonusCount: 1 }, 
       $set: { lastBonus: today, dailyStreak: dailyStreak } 
     });
+    
+    // Отмечаем задание "ежедневный бонус"
+    await markDailyTaskCompleted(ctx.from.id, 'bonus');
     
     // Проверяем новые титулы и достижения
     const newTitles = await checkAndAwardTitles(ctx.from.id);
