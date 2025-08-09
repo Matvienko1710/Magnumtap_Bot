@@ -1871,7 +1871,10 @@ bot.action('top', async (ctx) => {
   await markDailyTaskCompleted(ctx.from.id, 'top_check');
   
   const topUsers = await users.find({}).sort({ stars: -1 }).limit(10).toArray();
-  let msg = '🏆 *Топ-10 игроков по звёздам:*\n\n';
+  let msg = '🏆 **ТОП-10 ИГРОКОВ MAGNUMTAP** 🏆\n\n';
+  msg += '┌─────────────────────────────────┐\n';
+  msg += '│  **🏅 РЕЙТИНГ ПО ЗВЁЗДАМ** ⭐    │\n';
+  msg += '└─────────────────────────────────┘\n\n';
   
   for (let i = 0; i < topUsers.length; i++) {
     const user = topUsers[i];
@@ -1884,31 +1887,53 @@ bot.action('top', async (ctx) => {
     }, user);
     
     const stars = Math.round((user.stars || 0) * 100) / 100;
+    const magnumCoins = Math.round((user.magnumCoins || 0) * 100) / 100;
     const status = getUserStatus(user);
     const title = getUserMainTitle(user);
     const rank = getUserRank(user);
     
-    // Медали для топ-3
-    let medal = '';
-    if (i === 0) medal = '🥇';
-    else if (i === 1) medal = '🥈';
-    else if (i === 2) medal = '🥉';
-    else medal = `${i + 1}.`;
+    // Медали и позиции с красивым оформлением
+    let positionIcon = '';
+    let divider = '';
+    if (i === 0) {
+      positionIcon = '👑';
+      divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+    } else if (i === 1) {
+      positionIcon = '🥈';
+      divider = '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓';
+    } else if (i === 2) {
+      positionIcon = '🥉';
+      divider = '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░';
+    } else {
+      positionIcon = `**${i + 1}**`;
+      divider = '┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄';
+    }
     
-    msg += `${medal} *${displayName}*\n`;
-    msg += `   💰 ${stars} ⭐ звёзд\n`;
-    msg += `   ${status.color} ${status.name}\n`;
-    msg += `   🏅 ${rank.name}\n`;
-    msg += `   🏆 ${title}\n\n`;
+    msg += `${positionIcon} **${displayName}**\n`;
+    msg += `├ ⭐ **${stars}** звёзд\n`;
+    msg += `├ 🪙 **${magnumCoins}** Magnum Coin\n`;
+    msg += `├ ${status.color} ${status.name}\n`;
+    msg += `├ 🏅 ${rank.name}\n`;
+    msg += `└ 🏆 ${title}\n`;
+    msg += `${divider}\n\n`;
   }
   
   if (topUsers.length === 0) {
-    msg += '📭 Пока что нет игроков в рейтинге.';
+    msg += '📭 **Пока что нет игроков в рейтинге.**\n\n';
+    msg += '🎯 *Стань первым!*';
+  } else {
+    msg += '💡 **Подсказка:** Зарабатывайте звёзды через обмен Magnum Coin на бирже!';
   }
+  
+  const buttons = [
+    [Markup.button.callback('🔄 Обновить', 'top')],
+    [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🪙 Фармить', 'farm')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ];
   
   ctx.editMessageText(msg, {
     parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
+    ...Markup.inlineKeyboard(buttons)
   });
 });
 
@@ -4480,7 +4505,7 @@ bot.action('farm', async (ctx) => {
   const canFarm = !user.lastFarm || (now() - user.lastFarm) >= 60;
   
   if (canFarm) {
-    const baseReward = 0.01;
+    const baseReward = 1;
     const boostedReward = applyBoostMultiplier(baseReward, user, 'farm');
     
     await users.updateOne({ id: ctx.from.id }, { 
@@ -4501,7 +4526,7 @@ bot.action('farm', async (ctx) => {
     // Обновляем баланс в интерфейсе
     await updateMainMenuBalance(ctx);
     
-    const rewardText = boostedReward > baseReward ? `+${boostedReward.toFixed(3)} Magnum Coin (🔥 БУСТ!)` : `+${boostedReward.toFixed(3)} Magnum Coin`;
+    const rewardText = boostedReward > baseReward ? `+${boostedReward} Magnum Coin (🔥 БУСТ!)` : `+${boostedReward} Magnum Coin`;
     
     if (newTitles.length > 0 && newAchievements.length > 0) {
       ctx.answerCbQuery(`🪙 ${rewardText} 🏆 Новый титул! 🎖️ Достижение!`);
