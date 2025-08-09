@@ -907,7 +907,13 @@ async function purchaseItem(userId, itemId) {
     case 'cosmetic':
       // Косметические предметы
       if (itemId === 'custom_title') {
-        result.message = `${item.icon} Кастомный титул готов! Напишите желаемый титул:`;
+        // Устанавливаем состояние для кастомного титула
+        userStates.set(userId, { 
+          type: 'custom_title_request',
+          itemId: itemId,
+          price: item.price
+        });
+        result.message = `${item.icon} Кастомный титул готов! Заявка будет отправлена на модерацию.`;
         result.needInput = true;
       }
       break;
@@ -959,6 +965,91 @@ function calculateLuckyBoxReward(boxType = 'lucky') {
 // Функция для получения отображаемого имени пользователя
 function getUserDisplayName(user, userData = null) {
   return user.username || user.first_name || `User${user.id}`;
+}
+
+// Обработка заявки на кастомный титул
+async function handleCustomTitleRequest(ctx, text, userState) {
+  const userId = ctx.from.id;
+  
+  try {
+    console.log('🏷️ Обрабатываем заявку на кастомный титул:', text);
+    
+    const customTitle = text.trim();
+    
+    if (!customTitle || customTitle.length > 20) {
+      await ctx.reply('❌ Титул должен содержать от 1 до 20 символов!');
+      return;
+    }
+    
+    // Проверяем на недопустимые символы или слова
+    const forbiddenWords = ['админ', 'модер', 'бот', 'официал', 'staff', 'admin', 'mod'];
+    const lowerTitle = customTitle.toLowerCase();
+    
+    if (forbiddenWords.some(word => lowerTitle.includes(word))) {
+      await ctx.reply('❌ Титул содержит недопустимые слова!');
+      userStates.delete(userId);
+      return;
+    }
+    
+    // Создаем заявку на кастомный титул (отправляем в канал поддержки)
+    const user = await getUser(userId, ctx);
+    const ticketId = new Date().getTime().toString();
+    
+    const ticketData = {
+      id: ticketId,
+      userId: userId,
+      username: user.username || '',
+      firstName: user.first_name || '',
+      type: 'custom_title',
+      content: customTitle,
+      status: 'pending',
+      createdAt: Math.floor(Date.now() / 1000)
+    };
+    
+    // Сохраняем заявку в базу
+    await supportTickets.insertOne(ticketData);
+    
+    // Отправляем в канал поддержки
+    if (SUPPORT_CHANNEL) {
+      const message = `🏷️ **Заявка на кастомный титул** 🏷️\n\n` +
+                     `👤 **Пользователь:** ${user.first_name || user.username || `ID: ${userId}`}\n` +
+                     `🆔 **ID пользователя:** ${userId}\n` +
+                     `📝 **Желаемый титул:** "${customTitle}"\n` +
+                     `⏰ **Время:** ${new Date().toLocaleString('ru-RU')}\n\n` +
+                     `🏷️ **ID заявки:** \`${ticketId}\``;
+      
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Одобрить', `approve_title_${ticketId}`)],
+        [Markup.button.callback('❌ Отклонить', `reject_title_${ticketId}`)]
+      ]);
+      
+      try {
+        await bot.telegram.sendMessage(`@${SUPPORT_CHANNEL}`, message, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      } catch (error) {
+        console.error('Ошибка отправки заявки на титул в канал:', error);
+      }
+    }
+    
+    // Очищаем состояние
+    userStates.delete(userId);
+    
+    await ctx.reply(`✅ **Заявка на кастомный титул отправлена!**\n\n` +
+                    `🏷️ **Желаемый титул:** "${customTitle}"\n` +
+                    `🏷️ **ID заявки:** \`${ticketId}\`\n` +
+                    `⏰ **Статус:** ⏳ На рассмотрении\n\n` +
+                    `Администраторы рассмотрят вашу заявку в течение 24 часов.`, 
+                    { parse_mode: 'Markdown' });
+    
+    console.log('✅ Заявка на кастомный титул создана:', ticketId);
+    
+  } catch (error) {
+    console.error('❌ Ошибка создания заявки на титул:', error);
+    userStates.delete(userId);
+    await ctx.reply('❌ Произошла ошибка при создании заявки');
+  }
 }
 
 // Обработка активации промокода
@@ -1148,13 +1239,19 @@ async function handleWithdrawalState(ctx, text, userState) {
       // Очищаем состояние
       userStates.delete(userId);
       
-      await ctx.reply(`✅ **Заявка создана!**\n\n` +
+      const confirmationMsg = await ctx.reply(`✅ **Заявка создана!**\n\n` +
                     `🏷️ **ID заявки:** \`${request.id}\`\n` +
                     `💰 **Сумма:** ${amount}⭐\n` +
                     `💸 **К получению:** ${request.netAmount}⭐\n` +
                     `⏰ **Статус:** ⏳ На рассмотрении\n\n` +
                     `Заявка отправлена администраторам. Ожидайте обработки в течение 24-48 часов.`, 
                     { parse_mode: 'Markdown' });
+      
+      // Сохраняем ID сообщения для удаления после одобрения
+      await withdrawalRequests.updateOne(
+        { id: request.id },
+        { $set: { confirmationMessageId: confirmationMsg.message_id } }
+      );
     }
     
   } catch (error) {
@@ -1262,6 +1359,16 @@ async function notifyUserWithdrawalUpdate(request, isApproved, reason = null) {
                   statusText;
   
   try {
+    // Удаляем сообщение о создании заявки при одобрении
+    if (isApproved && request.confirmationMessageId) {
+      try {
+        await bot.telegram.deleteMessage(request.userId, request.confirmationMessageId);
+        console.log('🗑️ Удалено сообщение о создании заявки:', request.confirmationMessageId);
+      } catch (deleteError) {
+        console.log('⚠️ Не удалось удалить сообщение о создании заявки:', deleteError.message);
+      }
+    }
+    
     await bot.telegram.sendMessage(request.userId, message, { parse_mode: 'Markdown' });
   } catch (error) {
     console.error('Ошибка уведомления пользователя:', error);
@@ -1495,7 +1602,7 @@ async function getMainMenu(ctx, userId) {
         [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
         [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
         [Markup.button.callback('🎫 Промокод', 'promo')],
-        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
+        [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -1925,6 +2032,97 @@ bot.action(/^back_to_withdrawal_(.+)$/, async (ctx) => {
   await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
 });
 
+// Обработчики кастомных титулов
+bot.action(/^approve_title_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) {
+    return ctx.answerCbQuery('❌ Нет доступа!');
+  }
+  
+  const ticketId = ctx.match[1];
+  const ticket = await supportTickets.findOne({ id: ticketId });
+  
+  if (!ticket) {
+    return ctx.answerCbQuery('❌ Заявка не найдена!');
+  }
+  
+  // Выдаем кастомный титул пользователю
+  await users.updateOne(
+    { id: ticket.userId },
+    { $set: { customTitle: ticket.content } }
+  );
+  
+  // Обновляем статус заявки
+  await supportTickets.updateOne(
+    { id: ticketId },
+    { $set: { status: 'approved', processedBy: ctx.from.id, processedAt: Math.floor(Date.now() / 1000) } }
+  );
+  
+  // Уведомляем пользователя
+  try {
+    await bot.telegram.sendMessage(ticket.userId, 
+      `✅ **Кастомный титул одобрен!**\n\n` +
+      `🏷️ **Ваш новый титул:** "${ticket.content}"\n` +
+      `🎉 Поздравляем! Титул активирован в вашем профиле.`, 
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Ошибка уведомления о титуле:', error);
+  }
+  
+  const updatedMessage = ctx.callbackQuery.message.text + 
+    `\n\n✅ **ОДОБРЕНО** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
+    `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  await ctx.answerCbQuery('✅ Кастомный титул одобрен!');
+});
+
+bot.action(/^reject_title_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) {
+    return ctx.answerCbQuery('❌ Нет доступа!');
+  }
+  
+  const ticketId = ctx.match[1];
+  const ticket = await supportTickets.findOne({ id: ticketId });
+  
+  if (!ticket) {
+    return ctx.answerCbQuery('❌ Заявка не найдена!');
+  }
+  
+  // Обновляем статус заявки
+  await supportTickets.updateOne(
+    { id: ticketId },
+    { $set: { status: 'rejected', processedBy: ctx.from.id, processedAt: Math.floor(Date.now() / 1000) } }
+  );
+  
+  // Возвращаем звёзды пользователю (стоимость кастомного титула)
+  await users.updateOne(
+    { id: ticket.userId },
+    { $inc: { stars: 500 } } // Предполагаем что кастомный титул стоит 500 звёзд
+  );
+  
+  // Уведомляем пользователя
+  try {
+    await bot.telegram.sendMessage(ticket.userId, 
+      `❌ **Заявка на кастомный титул отклонена**\n\n` +
+      `🏷️ **Титул:** "${ticket.content}"\n` +
+      `📋 **Причина:** Не соответствует правилам сообщества\n` +
+      `💰 **Возврат:** 500⭐ возвращены на ваш баланс`, 
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Ошибка уведомления об отклонении титула:', error);
+  }
+  
+  const updatedMessage = ctx.callbackQuery.message.text + 
+    `\n\n❌ **ОТКЛОНЕНО** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
+    `\n💰 **Средства возвращены пользователю**` +
+    `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  await ctx.answerCbQuery('❌ Заявка на титул отклонена');
+});
+
 // Обработчик кнопки отмены
 bot.action('admin_cancel', async (ctx) => {
   // Очищаем состояние пользователя
@@ -2190,6 +2388,12 @@ bot.on('text', async (ctx) => {
   if (userState && userState.type === 'activate_promo') {
     console.log('🎫 Обрабатываем активацию промокода через состояние');
     await handlePromoActivation(ctx, text, userState);
+    return;
+  }
+  
+  if (userState && userState.type === 'custom_title_request') {
+    console.log('🏷️ Обрабатываем заявку на кастомный титул через состояние');
+    await handleCustomTitleRequest(ctx, text, userState);
     return;
   }
   
@@ -2984,59 +3188,168 @@ bot.action('admin_user_titles', async (ctx) => {
 
 
 
-bot.action('daily_tasks', async (ctx) => {
-  const userTasks = await getUserTasks(ctx.from.id, true);
+// Биржа
+bot.action('exchange', async (ctx) => {
   const user = await getUser(ctx.from.id, ctx);
+  const balance = Math.round((user.stars || 0) * 100) / 100;
   
-  let msg = '📋 **Ежедневные задания** 📋\n\n';
-  let totalReward = 0;
-  let completedCount = 0;
+  const exchangeText = `📈 **БИРЖА MAGNUMTAP** 📈\n\n` +
+                      `💰 **Ваш баланс:** ${balance}⭐ звёзд\n\n` +
+                      `🔄 **Доступные операции:**\n\n` +
+                      `💎 **Обмен звёзд:**\n` +
+                      `• 1000⭐ → 1 USDT TRC-20\n` +
+                      `• 500⭐ → 0.01 TON\n` +
+                      `• 100⭐ → 10 Telegram Stars\n\n` +
+                      `📊 **P2P торговля:**\n` +
+                      `• Обмен с другими пользователями\n` +
+                      `• Безопасные сделки через эскроу\n` +
+                      `• Создание собственных предложений\n\n` +
+                      `💹 **Инвестиции:**\n` +
+                      `• Стейкинг звёзд (5% в месяц)\n` +
+                      `• Пулы ликвидности\n` +
+                      `• Торговые боты\n\n` +
+                      `⚠️ **Скоро:** Биржа находится в разработке!`;
   
-  dailyTasks.forEach(task => {
-    const completed = userTasks.completed[task.id];
-    const claimed = userTasks.claimed[task.id];
-    
-    let status = '';
-    let progress = '';
-    
-    if (claimed) {
-      status = '✅';
-      completedCount++;
-    } else if (completed) {
-      status = '🎁';
-      totalReward += task.reward;
-    } else {
-      status = '⏳';
-      
-      // Показываем прогресс для некоторых заданий
-      if (task.type === 'farm' && task.target) {
-        const dailyFarms = user.dailyFarms || 0;
-        progress = ` (${Math.min(dailyFarms, task.target)}/${task.target})`;
-      }
-    }
-    
-    msg += `${status} **${task.name}** ${progress}\n`;
-    msg += `   💰 Награда: ${task.reward}⭐\n`;
-    msg += `   📝 ${task.description}\n\n`;
-  });
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('💎 Обмен валют', 'exchange_currency')],
+    [Markup.button.callback('👥 P2P Торговля', 'exchange_p2p')],
+    [Markup.button.callback('💹 Инвестиции', 'exchange_invest')],
+    [Markup.button.callback('📊 Мои ордера', 'exchange_orders')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]);
   
-  msg += `📊 **Статистика дня:**\n`;
-  msg += `✅ Выполнено: ${completedCount}/${dailyTasks.length}\n`;
-  if (totalReward > 0) {
-    msg += `🎁 К получению: ${totalReward}⭐\n`;
-  }
+  ctx.editMessageText(exchangeText, { parse_mode: 'Markdown', ...keyboard });
+});
+
+// Обмен валют
+bot.action('exchange_currency', async (ctx) => {
+  const user = await getUser(ctx.from.id, ctx);
+  const balance = Math.round((user.stars || 0) * 100) / 100;
   
-  const buttons = [];
-  dailyTasks.forEach(task => {
-    const completed = userTasks.completed[task.id];
-    const claimed = userTasks.claimed[task.id];
-    if (completed && !claimed) {
-      buttons.push([Markup.button.callback(`🎁 Забрать ${task.reward}⭐ - ${task.icon}${task.name.split(' ').slice(1).join(' ')}`, `claim_daily_${task.id}`)]);
-    }
-  });
-  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
+  const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
+                      `💰 **Ваш баланс:** ${balance}⭐ звёзд\n\n` +
+                      `🔄 **Курсы обмена:**\n\n` +
+                      `💵 **USDT TRC-20:**\n` +
+                      `• Курс: 1000⭐ = 1 USDT\n` +
+                      `• Минимум: 1000⭐\n` +
+                      `• Комиссия: 2%\n\n` +
+                      `💎 **TON Coin:**\n` +
+                      `• Курс: 500⭐ = 0.01 TON\n` +
+                      `• Минимум: 500⭐\n` +
+                      `• Комиссия: 2%\n\n` +
+                      `⭐ **Telegram Stars:**\n` +
+                      `• Курс: 100⭐ = 10 TG Stars\n` +
+                      `• Минимум: 100⭐\n` +
+                      `• Комиссия: 1%\n\n` +
+                      `⚠️ **Функция в разработке!**`;
   
-  ctx.editMessageText(msg, Markup.inlineKeyboard(buttons));
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('💵 Купить USDT', 'buy_usdt'), Markup.button.callback('💎 Купить TON', 'buy_ton')],
+    [Markup.button.callback('⭐ Купить TG Stars', 'buy_tg_stars')],
+    [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
+  ]);
+  
+  ctx.editMessageText(currencyText, { parse_mode: 'Markdown', ...keyboard });
+});
+
+// P2P торговля
+bot.action('exchange_p2p', async (ctx) => {
+  const p2pText = `👥 **P2P ТОРГОВЛЯ** 👥\n\n` +
+                  `🤝 **Что такое P2P:**\n` +
+                  `Прямой обмен между пользователями с гарантией безопасности через систему эскроу.\n\n` +
+                  `📋 **Как это работает:**\n` +
+                  `1️⃣ Создаете предложение\n` +
+                  `2️⃣ Другой пользователь откликается\n` +
+                  `3️⃣ Средства блокируются в эскроу\n` +
+                  `4️⃣ Подтверждаете получение\n` +
+                  `5️⃣ Сделка завершается автоматически\n\n` +
+                  `💰 **Популярные пары:**\n` +
+                  `• ⭐/USDT TRC-20\n` +
+                  `• ⭐/TON\n` +
+                  `• ⭐/Telegram Stars\n\n` +
+                  `⚠️ **Скоро:** P2P торговля в разработке!`;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('💰 Создать предложение', 'create_p2p_offer')],
+    [Markup.button.callback('📋 Все предложения', 'view_p2p_offers')],
+    [Markup.button.callback('📊 Мои сделки', 'my_p2p_deals')],
+    [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
+  ]);
+  
+  ctx.editMessageText(p2pText, { parse_mode: 'Markdown', ...keyboard });
+});
+
+// Инвестиции
+bot.action('exchange_invest', async (ctx) => {
+  const investText = `💹 **ИНВЕСТИЦИИ** 💹\n\n` +
+                    `📈 **Доступные продукты:**\n\n` +
+                    `🏦 **Стейкинг звёзд:**\n` +
+                    `• Доходность: 5% в месяц\n` +
+                    `• Минимум: 1000⭐\n` +
+                    `• Срок: от 30 дней\n\n` +
+                    `💧 **Пулы ликвидности:**\n` +
+                    `• Пара: ⭐/USDT\n` +
+                    `• APY: до 12%\n` +
+                    `• Риск: средний\n\n` +
+                    `🤖 **Торговые боты:**\n` +
+                    `• Grid-бот: 2-8% в месяц\n` +
+                    `• DCA-бот: стабильный рост\n` +
+                    `• Копи-трейдинг: следуйте за профи\n\n` +
+                    `⚠️ **Важно:** Инвестиции связаны с рисками!`;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('🏦 Стейкинг', 'staking'), Markup.button.callback('💧 Пулы', 'liquidity_pools')],
+    [Markup.button.callback('🤖 Торговые боты', 'trading_bots')],
+    [Markup.button.callback('📊 Мои инвестиции', 'my_investments')],
+    [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
+  ]);
+  
+  ctx.editMessageText(investText, { parse_mode: 'Markdown', ...keyboard });
+});
+
+// Заглушки для остальных функций
+bot.action('exchange_orders', async (ctx) => {
+  ctx.answerCbQuery('📊 Мои ордера - функция в разработке!', { show_alert: true });
+});
+
+bot.action('buy_usdt', async (ctx) => {
+  ctx.answerCbQuery('💵 Покупка USDT - скоро будет доступна!', { show_alert: true });
+});
+
+bot.action('buy_ton', async (ctx) => {
+  ctx.answerCbQuery('💎 Покупка TON - скоро будет доступна!', { show_alert: true });
+});
+
+bot.action('buy_tg_stars', async (ctx) => {
+  ctx.answerCbQuery('⭐ Покупка TG Stars - скоро будет доступна!', { show_alert: true });
+});
+
+bot.action('create_p2p_offer', async (ctx) => {
+  ctx.answerCbQuery('💰 Создание P2P предложения - в разработке!', { show_alert: true });
+});
+
+bot.action('view_p2p_offers', async (ctx) => {
+  ctx.answerCbQuery('📋 Просмотр предложений - в разработке!', { show_alert: true });
+});
+
+bot.action('my_p2p_deals', async (ctx) => {
+  ctx.answerCbQuery('📊 Мои P2P сделки - в разработке!', { show_alert: true });
+});
+
+bot.action('staking', async (ctx) => {
+  ctx.answerCbQuery('🏦 Стейкинг - скоро будет доступен!', { show_alert: true });
+});
+
+bot.action('liquidity_pools', async (ctx) => {
+  ctx.answerCbQuery('💧 Пулы ликвидности - в разработке!', { show_alert: true });
+});
+
+bot.action('trading_bots', async (ctx) => {
+  ctx.answerCbQuery('🤖 Торговые боты - скоро!', { show_alert: true });
+});
+
+bot.action('my_investments', async (ctx) => {
+  ctx.answerCbQuery('📊 Мои инвестиции - в разработке!', { show_alert: true });
 });
 
 bot.action('sponsor_tasks', async (ctx) => {
