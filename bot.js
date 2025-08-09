@@ -58,9 +58,73 @@ const userStates = new Map();
 const userCache = new Map();
 const USER_CACHE_TTL = 30000;
 
+// Кеш статистики бота (время жизни 5 минут)
+let botStatsCache = null;
+let botStatsCacheTime = 0;
+const BOT_STATS_CACHE_TTL = 300000; // 5 минут
+
 // Функция для инвалидации кеша пользователя
 function invalidateUserCache(userId) {
   userCache.delete(userId.toString());
+}
+
+// Функция для получения общей статистики бота с кешированием
+async function getBotStatistics() {
+  // Проверяем кеш
+  const now = Date.now();
+  if (botStatsCache && (now - botStatsCacheTime) < BOT_STATS_CACHE_TTL) {
+    return botStatsCache;
+  }
+
+  try {
+    // Общее количество пользователей
+    const totalUsers = await users.countDocuments();
+    
+    // Общее количество заработанных Magnum Coin
+    const totalMagnumCoinsResult = await users.aggregate([
+      { $group: { _id: null, total: { $sum: '$magnumCoins' } } }
+    ]).toArray();
+    const totalMagnumCoins = totalMagnumCoinsResult.length > 0 ? totalMagnumCoinsResult[0].total : 0;
+    
+    // Общее количество заработанных звёзд
+    const totalStarsResult = await users.aggregate([
+      { $group: { _id: null, total: { $sum: '$stars' } } }
+    ]).toArray();
+    const totalStars = totalStarsResult.length > 0 ? totalStarsResult[0].total : 0;
+    
+    // Количество выполненных выводов
+    let totalWithdrawn = 0;
+    try {
+      const withdrawnResult = await withdrawalRequests.aggregate([
+        { $match: { status: 'approved' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]).toArray();
+      totalWithdrawn = withdrawnResult.length > 0 ? withdrawnResult[0].total : 0;
+    } catch {
+      totalWithdrawn = 0;
+    }
+    
+    const stats = {
+      totalUsers: totalUsers,
+      totalMagnumCoins: Math.round(totalMagnumCoins * 100) / 100,
+      totalStars: Math.round(totalStars * 100) / 100,
+      totalWithdrawn: Math.round(totalWithdrawn * 100) / 100
+    };
+    
+    // Обновляем кеш
+    botStatsCache = stats;
+    botStatsCacheTime = now;
+    
+    return stats;
+  } catch (error) {
+    console.error('Ошибка получения статистики бота:', error);
+    return {
+      totalUsers: 0,
+      totalMagnumCoins: 0,
+      totalStars: 0,
+      totalWithdrawn: 0
+    };
+  }
 }
 
 // Периодическая очистка устаревшего кеша (каждые 5 минут)
@@ -1519,7 +1583,7 @@ function createProgressBar(current, total, length = 10) {
 
 async function getDetailedProfile(userId, ctx) {
   const user = await getUser(userId);
-  const starsBalance = Math.round((user.stars || 0) * 100) / 100; // Округляем до 2 знаков
+  const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   const friends = user.invited || 0;
   const title = getUserMainTitle(user);
@@ -1541,6 +1605,9 @@ ${progressBar}
     progressText = '🏆 **Максимальный ранг достигнут!**';
   }
   
+  // Получаем общую статистику бота
+  const botStats = await getBotStatistics();
+  
   return `👑 **Профиль игрока MagnumTap** 👑
 
 👋 **Приветствую, ${userInfo}!**
@@ -1552,7 +1619,13 @@ ${progressBar}
 [${rank.color} ${rank.name}]  
 [${title}]
 
-${progressText}`;
+${progressText}
+
+📊 **Статистика MagnumTap:**
+[👥 ${botStats.totalUsers}] пользователей в боте  
+[🪙 ${botStats.totalMagnumCoins}] Magnum Coin заработано  
+[💎 ${botStats.totalStars}] звёзд заработано  
+[💸 ${botStats.totalWithdrawn}] звёзд выведено`;
 }
 
 function getWelcomeText(magnumCoins, stars, invited) {
