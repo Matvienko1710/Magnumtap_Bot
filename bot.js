@@ -13,7 +13,7 @@ if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
 
 const bot = new Telegraf(BOT_TOKEN);
 const mongo = new MongoClient(MONGODB_URI);
-let users, promocodes;
+let users, promocodes, taskChecks;
 
 // Система титулов
 const TITLES = {
@@ -87,6 +87,150 @@ const TICKET_STATUSES = {
   'rejected': { name: '❌ Отклонена', color: '🔴', emoji: '❌' },
   'closed': { name: '🔒 Закрыта', color: '⚫', emoji: '🔒' }
 };
+
+async function createTaskCheck(userId, username, taskId, taskTitle, photo = null) {
+  const taskCheck = {
+    userId: userId,
+    username: username || 'Неизвестно',
+    taskId: taskId,
+    taskTitle: taskTitle,
+    photo: photo,
+    status: 'pending',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    adminResponse: null
+  };
+  
+  const result = await taskChecks.insertOne(taskCheck);
+  taskCheck._id = result.insertedId;
+  return taskCheck;
+}
+
+async function updateTaskCheckStatus(checkId, status, adminResponse = null) {
+  const updateData = { 
+    status: status, 
+    updatedAt: new Date() 
+  };
+  
+  if (adminResponse) {
+    updateData.adminResponse = adminResponse;
+  }
+  
+  await taskChecks.updateOne(
+    { _id: checkId },
+    { $set: updateData }
+  );
+}
+
+async function sendTaskCheckToChannel(taskCheck) {
+  const supportChannelId = SUPPORT_CHANNEL;
+  if (!supportChannelId) return;
+
+  const statusInfo = TASK_CHECK_STATUSES[taskCheck.status];
+  
+  try {
+    const messageText = formatTaskCheckMessage(taskCheck);
+    
+    let message;
+    if (taskCheck.photo) {
+      message = await bot.telegram.sendPhoto(`@${supportChannelId}`, taskCheck.photo, {
+        caption: messageText,
+        parse_mode: 'Markdown',
+        reply_markup: getTaskCheckKeyboard(taskCheck._id, taskCheck.status, taskCheck.taskId)
+      });
+    } else {
+      message = await bot.telegram.sendMessage(`@${supportChannelId}`, messageText, {
+        parse_mode: 'Markdown',
+        reply_markup: getTaskCheckKeyboard(taskCheck._id, taskCheck.status, taskCheck.taskId)
+      });
+    }
+    
+    await updateTaskCheckStatus(taskCheck._id, taskCheck.status, null, message.message_id);
+  } catch (error) {
+    console.error('Ошибка отправки проверки задания в канал:', error);
+  }
+}
+
+function formatTaskCheckMessage(taskCheck) {
+  const statusInfo = TASK_CHECK_STATUSES[taskCheck.status];
+  let message = `📋 *Проверка задания #${taskCheck._id.toString().slice(-6)}*\n\n` +
+    `👤 *Пользователь:* ${taskCheck.username || 'Неизвестно'} (ID: \`${taskCheck.userId}\`)\n` +
+    `📝 *Задание:* ${taskCheck.taskTitle}\n` +
+    `📅 *Отправлено:* ${taskCheck.createdAt.toLocaleString('ru-RU')}\n` +
+    `📊 *Статус:* ${statusInfo.emoji} ${statusInfo.name}`;
+  
+  if (taskCheck.adminResponse) {
+    message += `\n\n💬 *Ответ администратора:*\n${taskCheck.adminResponse}`;
+  }
+  
+  if (taskCheck.updatedAt && taskCheck.updatedAt.getTime() !== taskCheck.createdAt.getTime()) {
+    message += `\n🔄 *Обновлено:* ${taskCheck.updatedAt.toLocaleString('ru-RU')}`;
+  }
+  
+  return message;
+}
+
+function getTaskCheckKeyboard(checkId, status, taskId) {
+  const keyboards = {
+    'pending': [
+      [
+        { text: '✅ Одобрить', callback_data: `task_approve_${checkId}` },
+        { text: '❌ Отклонить', callback_data: `task_reject_${checkId}` }
+      ],
+      [
+        { text: '💬 Ответить', callback_data: `task_reply_${checkId}` }
+      ]
+    ],
+    'approved': [
+      [
+        { text: '❌ Отменить одобрение', callback_data: `task_reject_${checkId}` }
+      ]
+    ],
+    'rejected': [
+      [
+        { text: '✅ Одобрить', callback_data: `task_approve_${checkId}` }
+      ]
+    ]
+  };
+  
+  return { inline_keyboard: keyboards[status] || keyboards['pending'] };
+}
+
+async function updateTaskCheckInChannel(checkId) {
+  try {
+    const taskCheck = await taskChecks.findOne({ _id: checkId });
+    if (!taskCheck || !taskCheck.channelMessageId) return;
+    
+    const messageText = formatTaskCheckMessage(taskCheck);
+    const keyboard = getTaskCheckKeyboard(taskCheck._id, taskCheck.status, taskCheck.taskId);
+    
+    if (taskCheck.photo) {
+      await bot.telegram.editMessageCaption(
+        `@${SUPPORT_CHANNEL}`,
+        taskCheck.channelMessageId,
+        null,
+        messageText,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }
+      );
+    } else {
+      await bot.telegram.editMessageText(
+        `@${SUPPORT_CHANNEL}`,
+        taskCheck.channelMessageId,
+        null,
+        messageText,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }
+      );
+    }
+  } catch (error) {
+    console.error('Ошибка обновления проверки задания в канале:', error);
+  }
+}
 
 async function createSupportTicket(userId, username, message) {
   const ticket = {
@@ -388,6 +532,7 @@ async function connectDB() {
   tasks = db.collection('tasks');
   titles = db.collection('titles');
   supportTickets = db.collection('supportTickets'); // добавляем коллекцию заявок
+  taskChecks = db.collection('taskChecks'); // коллекция проверок заданий
 }
 
 function now() { return Math.floor(Date.now() / 1000); }
@@ -431,6 +576,41 @@ function getWelcomeText(balance, invited) {
     "Выбери действие и стань звездой MagnumTapBot! 🌟"
   );
 }
+
+// Задания от спонсоров
+const SPONSOR_TASKS = [
+  {
+    id: 'telegram_channel',
+    title: '📱 Подписаться на Telegram канал',
+    description: 'Подпишитесь на наш официальный канал @example_channel',
+    reward: 50,
+    instruction: 'Сделайте скриншот подписки на канал',
+    link: 'https://t.me/example_channel'
+  },
+  {
+    id: 'youtube_subscribe',
+    title: '🎬 Подписаться на YouTube канал',
+    description: 'Подпишитесь и поставьте лайк последнему видео',
+    reward: 75,
+    instruction: 'Сделайте скриншот подписки и лайка',
+    link: 'https://youtube.com/@example'
+  },
+  {
+    id: 'instagram_follow',
+    title: '📸 Подписаться в Instagram',
+    description: 'Подпишитесь и поставьте лайк последнему посту',
+    reward: 60,
+    instruction: 'Сделайте скриншот подписки и лайка в Instagram',
+    link: 'https://instagram.com/example'
+  }
+];
+
+// Статусы проверки заданий
+const TASK_CHECK_STATUSES = {
+  'pending': { name: '⏳ На проверке', emoji: '⏳' },
+  'approved': { name: '✅ Одобрено', emoji: '✅' },
+  'rejected': { name: '❌ Отклонено', emoji: '❌' }
+};
 
 // Ежедневные задания
 const dailyTasks = [
@@ -634,6 +814,60 @@ bot.on('text', async (ctx) => {
       return;
     }
 
+    // Отправка скриншота для проверки задания
+    if (replyText.includes('Подтверждение выполнения задания')) {
+      // Извлекаем название задания из текста
+      const taskTitleMatch = replyText.match(/Задание:\*\s*(.+)/);
+      if (!taskTitleMatch) {
+        return ctx.reply('❌ Не удалось определить задание');
+      }
+      
+      const taskTitle = taskTitleMatch[1];
+      const task = SPONSOR_TASKS.find(t => t.title === taskTitle);
+      
+      if (!task) {
+        return ctx.reply('❌ Задание не найдено');
+      }
+      
+      // Проверяем, есть ли скриншот
+      const photo = ctx.message.photo ? ctx.message.photo[ctx.message.photo.length - 1].file_id : null;
+      
+      if (!photo) {
+        return ctx.reply(
+          '❌ *Необходим скриншот*\n\nПожалуйста, отправьте скриншот выполнения задания.',
+          { parse_mode: 'Markdown' }
+        );
+      }
+      
+      // Создаем проверку задания
+      const taskCheck = await createTaskCheck(
+        ctx.from.id,
+        ctx.from.username,
+        task.id,
+        task.title,
+        photo
+      );
+      
+      // Отправляем в канал поддержки
+      await sendTaskCheckToChannel(taskCheck);
+      
+      ctx.reply(
+        `✅ *Задание отправлено на проверку!*\n\n` +
+        `📋 *Задание:* ${task.title}\n` +
+        `🎫 *ID проверки:* \`${taskCheck._id.toString().slice(-6)}\`\n` +
+        `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n\n` +
+        `⏳ Ожидайте результата проверки администратором в течение 24 часов.`,
+        { 
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('📋 Задания спонсоров', 'sponsor_tasks')],
+            [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+          ])
+        }
+      );
+      return;
+    }
+
     // Админские команды
     if (isAdmin(ctx.from.id)) {
       if (replyText.includes('Ответ пользователю по заявке')) {
@@ -680,6 +914,46 @@ bot.on('text', async (ctx) => {
       if (replyText.includes('Поиск заявки')) {
         // Функция поиска заявок временно отключена
         return ctx.reply('❌ Функция поиска заявок временно недоступна.');
+      }
+
+      if (replyText.includes('Ответ по проверке задания')) {
+        const checkIdMatch = replyText.match(/#([a-f0-9]{6})/);
+        if (!checkIdMatch) {
+          return ctx.reply('❌ Не удалось найти ID проверки!');
+        }
+        
+        const shortCheckId = checkIdMatch[1];
+        
+        // Ищем проверку по короткому ID
+        const taskChecks_list = await taskChecks.find({}).toArray();
+        const taskCheck = taskChecks_list.find(tc => tc._id.toString().slice(-6) === shortCheckId);
+        
+        if (!taskCheck) {
+          return ctx.reply('❌ Проверка задания не найдена!');
+        }
+
+        // Обновляем проверку с ответом админа
+        await updateTaskCheckStatus(taskCheck._id, taskCheck.status, text);
+
+        // Отправляем ответ пользователю
+        try {
+          await bot.telegram.sendMessage(taskCheck.userId,
+            `💬 *Комментарий по проверке задания*\n\n` +
+            `🎫 *По проверке #${shortCheckId}:*\n` +
+            `📋 *Задание:* ${taskCheck.taskTitle}\n\n` +
+            `💬 *Комментарий администратора:*\n${text}`,
+            { parse_mode: 'Markdown' }
+          );
+          
+          // Обновляем сообщение в канале
+          await updateTaskCheckInChannel(taskCheck._id);
+          
+          ctx.reply(`✅ Комментарий отправлен пользователю ${taskCheck.username || taskCheck.userId}`);
+        } catch (error) {
+          console.error('Ошибка отправки комментария:', error);
+          ctx.reply('❌ Ошибка отправки комментария пользователю');
+        }
+        return;
       }
       
       // Временная команда для тестирования бонуса
@@ -1083,29 +1357,91 @@ bot.action('daily_tasks', async (ctx) => {
 });
 
 bot.action('sponsor_tasks', async (ctx) => {
-  const userTasks = await getUserTasks(ctx.from.id, false);
-  let msg = '🎯 Задания от спонсора\n\n';
-  
-  const buttons = [];
-  sponsorTasks.forEach(task => {
-    const completed = userTasks.completed[task.id];
-    const claimed = userTasks.claimed[task.id];
-    const status = claimed ? '✅ Получено' : completed ? '🎁 Забрать' : '⏳ Выполнить';
-    msg += `${status} ${task.name} (+${task.reward} звёзд)\n${task.description}\n\n`;
-    
-    if (!completed) {
-      buttons.push([
-        Markup.button.url('🔗 Перейти', task.url),
-        Markup.button.callback('✅ Проверить', `check_sponsor_${task.id}`)
-      ]);
-    } else if (!claimed) {
-      buttons.push([Markup.button.callback(`🎁 ${task.name}`, `claim_sponsor_${task.id}`)]);
-    }
-  });
-  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
-  
-  ctx.editMessageText(msg, Markup.inlineKeyboard(buttons));
+  // Показываем первое задание
+  showSponsorTask(ctx, 0);
 });
+
+async function showSponsorTask(ctx, taskIndex) {
+  if (taskIndex >= SPONSOR_TASKS.length) {
+    return ctx.editMessageText(
+      '🎉 *Все задания от спонсоров выполнены!*\n\nВы прошли все доступные задания. Следите за обновлениями!',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+        ])
+      }
+    );
+  }
+
+  const task = SPONSOR_TASKS[taskIndex];
+  const user = await getUser(ctx.from.id);
+  
+  // Проверяем, есть ли активная проверка этого задания
+  const pendingCheck = await taskChecks.findOne({
+    userId: ctx.from.id,
+    taskId: task.id,
+    status: 'pending'
+  });
+  
+  // Проверяем, выполнено ли задание
+  const completedTask = await taskChecks.findOne({
+    userId: ctx.from.id,
+    taskId: task.id,
+    status: 'approved'
+  });
+
+  let taskText = `📋 *Задание ${taskIndex + 1}/${SPONSOR_TASKS.length}*\n\n`;
+  taskText += `${task.title}\n\n`;
+  taskText += `📝 *Описание:* ${task.description}\n`;
+  taskText += `🎁 *Награда:* ${task.reward} звёзд\n\n`;
+  
+  if (completedTask) {
+    taskText += `✅ *Задание выполнено!*\n\n`;
+  } else if (pendingCheck) {
+    taskText += `⏳ *Задание на проверке*\nОжидайте результата проверки администратором.\n\n`;
+  } else {
+    taskText += `📋 *Инструкция:* ${task.instruction}\n\n`;
+  }
+
+  const buttons = [];
+  
+  if (completedTask) {
+    // Задание выполнено
+    if (taskIndex < SPONSOR_TASKS.length - 1) {
+      buttons.push([Markup.button.callback('➡️ Следующее задание', `sponsor_task_${taskIndex + 1}`)]);
+    }
+  } else if (pendingCheck) {
+    // На проверке - только навигация
+    if (taskIndex > 0) {
+      buttons.push([Markup.button.callback('⬅️ Предыдущее', `sponsor_task_${taskIndex - 1}`)]);
+    }
+    if (taskIndex < SPONSOR_TASKS.length - 1) {
+      buttons.push([Markup.button.callback('➡️ Следующее', `sponsor_task_${taskIndex + 1}`)]);
+    }
+  } else {
+    // Можно выполнять
+    buttons.push([
+      Markup.button.url('🔗 Перейти', task.link),
+      Markup.button.callback('✅ Я выполнил', `task_complete_${task.id}`)
+    ]);
+    
+    // Навигация
+    if (taskIndex > 0) {
+      buttons.push([Markup.button.callback('⬅️ Предыдущее', `sponsor_task_${taskIndex - 1}`)]);
+    }
+    if (taskIndex < SPONSOR_TASKS.length - 1) {
+      buttons.push([Markup.button.callback('➡️ Следующее', `sponsor_task_${taskIndex + 1}`)]);
+    }
+  }
+  
+  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
+
+  ctx.editMessageText(taskText, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+}
 
 bot.action('faq', async (ctx) => {
   const faqText = `❓ FAQ и помощь\n\n` +
@@ -1436,6 +1772,140 @@ bot.action(/^ticket_close_(.+)$/, async (ctx) => {
   await updateTicketInChannel(objectId);
   
   ctx.answerCbQuery('🔒 Заявка закрыта');
+});
+
+// Навигация по заданиям спонсоров
+bot.action(/^sponsor_task_(\d+)$/, async (ctx) => {
+  const taskIndex = parseInt(ctx.match[1]);
+  showSponsorTask(ctx, taskIndex);
+});
+
+// Выполнение задания
+bot.action(/^task_complete_(.+)$/, async (ctx) => {
+  const taskId = ctx.match[1];
+  const task = SPONSOR_TASKS.find(t => t.id === taskId);
+  
+  if (!task) {
+    return ctx.answerCbQuery('❌ Задание не найдено');
+  }
+
+  await ctx.deleteMessage();
+  
+  ctx.reply(
+    `📷 *Подтверждение выполнения задания*\n\n` +
+    `📋 *Задание:* ${task.title}\n` +
+    `📝 *Инструкция:* ${task.instruction}\n\n` +
+    `Отправьте скриншот выполнения:`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: 'Отправьте скриншот...'
+      }
+    }
+  );
+});
+
+// Обработчики проверки заданий в канале
+bot.action(/^task_approve_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const checkId = ctx.match[1];
+  const objectId = new ObjectId(checkId);
+  
+  const taskCheck = await taskChecks.findOne({ _id: objectId });
+  if (!taskCheck) {
+    return ctx.answerCbQuery('❌ Проверка не найдена');
+  }
+  
+  const task = SPONSOR_TASKS.find(t => t.id === taskCheck.taskId);
+  if (!task) {
+    return ctx.answerCbQuery('❌ Задание не найдено');
+  }
+  
+  // Обновляем статус
+  await updateTaskCheckStatus(objectId, 'approved');
+  
+  // Начисляем награду
+  await users.updateOne(
+    { id: taskCheck.userId },
+    { $inc: { stars: task.reward } }
+  );
+  
+  // Уведомляем пользователя
+  try {
+    await bot.telegram.sendMessage(
+      taskCheck.userId,
+      `✅ *Задание одобрено!*\n\n` +
+      `📋 *Задание:* ${task.title}\n` +
+      `🎁 *Получено:* +${task.reward} звёзд\n\n` +
+      `Поздравляем с успешным выполнением!`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Ошибка уведомления пользователя:', error);
+  }
+  
+  await updateTaskCheckInChannel(objectId);
+  ctx.answerCbQuery('✅ Задание одобрено');
+});
+
+bot.action(/^task_reject_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const checkId = ctx.match[1];
+  const objectId = new ObjectId(checkId);
+  
+  const taskCheck = await taskChecks.findOne({ _id: objectId });
+  if (!taskCheck) {
+    return ctx.answerCbQuery('❌ Проверка не найдена');
+  }
+  
+  const task = SPONSOR_TASKS.find(t => t.id === taskCheck.taskId);
+  
+  // Обновляем статус
+  await updateTaskCheckStatus(objectId, 'rejected');
+  
+  // Уведомляем пользователя
+  try {
+    await bot.telegram.sendMessage(
+      taskCheck.userId,
+      `❌ *Задание отклонено*\n\n` +
+      `📋 *Задание:* ${task ? task.title : 'Неизвестно'}\n\n` +
+      `Попробуйте выполнить задание снова согласно инструкции.`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.error('Ошибка уведомления пользователя:', error);
+  }
+  
+  await updateTaskCheckInChannel(objectId);
+  ctx.answerCbQuery('❌ Задание отклонено');
+});
+
+bot.action(/^task_reply_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const checkId = ctx.match[1];
+  
+  try {
+    await bot.telegram.sendMessage(
+      ctx.from.id,
+      `💬 *Ответ по проверке задания #${checkId.slice(-6)}*\n\nВведите ваш комментарий:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          force_reply: true,
+          input_field_placeholder: 'Введите комментарий для пользователя...'
+        }
+      }
+    );
+    
+    ctx.answerCbQuery('💬 Проверьте личные сообщения для ответа');
+  } catch (error) {
+    console.error('Ошибка отправки приглашения к ответу:', error);
+    ctx.answerCbQuery('❌ Ошибка! Убедитесь, что бот может писать в личные сообщения');
+  }
 });
 
 bot.action(/^ticket_reply_(.+)$/, async (ctx) => {
