@@ -3360,17 +3360,26 @@ async function handlePostButtonInput(ctx, text, userState) {
     // Парсим данные кнопки
     const buttonMatch = text.match(/^(.+?):(.+)$/);
     if (!buttonMatch) {
-      await ctx.reply('❌ Неверный формат! Используйте: ТЕКСТ_КНОПКИ:ССЫЛКА\n\nПример: 🎮 Играть:https://t.me/bot?start=game');
+      await ctx.reply('❌ Неверный формат! Используйте: ТЕКСТ_КНОПКИ:ССЫЛКА\n\n⚠️ **Важно:** Не добавляйте пробелы перед ссылкой!\n\nПример: 🎮 Играть:https://t.me/bot?start=game');
       return;
     }
     
     const [, buttonText, buttonUrl] = buttonMatch;
     
-    console.log(`🔘 Создаем кнопку: "${buttonText}" → ${buttonUrl}`);
+    // Очищаем URL от лишних пробелов
+    const cleanButtonUrl = buttonUrl.trim();
+    
+    // Проверяем валидность URL
+    if (!cleanButtonUrl.startsWith('http://') && !cleanButtonUrl.startsWith('https://') && !cleanButtonUrl.startsWith('tg://')) {
+      await ctx.reply('❌ Неверный формат ссылки! Ссылка должна начинаться с http://, https:// или tg://\n\nПример: https://t.me/+Poy0ZtUoux1hMTMy');
+      return;
+    }
+    
+    console.log(`🔘 Создаем кнопку: "${buttonText}" → ${cleanButtonUrl}`);
     
     // Создаем клавиатуру
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.url(buttonText, buttonUrl)]
+      [Markup.button.url(buttonText, cleanButtonUrl)]
     ]);
     
     const channelChatId = REQUIRED_CHANNEL ? `@${REQUIRED_CHANNEL}` : '@magnumtap';
@@ -4487,7 +4496,7 @@ bot.action('post_add_button', async (ctx) => {
   
   console.log(`💾 Новое состояние: ${JSON.stringify(userStates.get(ctx.from.id))}`);
   
-  await adminForceReply(ctx, '🔘 **Добавление кнопки**\n\nВведите данные кнопки в формате:\n\nТЕКСТ_КНОПКИ:ССЫЛКА\n\nПримеры:\n🎮 Играть:https://t.me/bot?start=game\n💬 Чат:https://t.me/+Poy0ZtUoux1hMTMy\n🌐 Сайт:https://magnumtap.com');
+  await adminForceReply(ctx, '🔘 **Добавление кнопки**\n\nВведите данные кнопки в формате:\n\nТЕКСТ_КНОПКИ:ССЫЛКА\n\n⚠️ **Важно:** Не добавляйте пробелы перед ссылкой!\n\nПримеры:\n🎮 Играть:https://t.me/bot?start=game\n💬 Чат:https://t.me/+Poy0ZtUoux1hMTMy\n🌐 Сайт:https://magnumtap.com');
   
   console.log(`✅ Запрос на ввод кнопки отправлен`);
 });
