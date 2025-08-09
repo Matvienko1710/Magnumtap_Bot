@@ -104,11 +104,44 @@ async function getBotStatistics() {
       totalWithdrawn = 0;
     }
     
+    // Общее количество потраченных звёзд (покупки в магазине)
+    let totalStarsSpent = 0;
+    try {
+      const spentStarsResult = await shopPurchases.aggregate([
+        { $group: { _id: null, total: { $sum: '$cost' } } }
+      ]).toArray();
+      totalStarsSpent = spentStarsResult.length > 0 ? spentStarsResult[0].total : 0;
+    } catch {
+      totalStarsSpent = 0;
+    }
+    
+    // Общее количество потраченных Magnum Coin (обмен на звёзды + кастомные титулы)
+    let totalMagnumCoinsSpent = 0;
+    try {
+      // Обмен на звёзды (каждая выведенная звезда = 10 потраченных Magnum Coin)
+      const exchangedMagnumCoins = totalWithdrawn * 10;
+      
+      // Кастомные титулы (обычно стоят 100 Magnum Coin)
+      let customTitlesSpent = 0;
+      const customTitlesResult = await supportTickets.aggregate([
+        { $match: { type: 'custom_title', status: 'approved' } },
+        { $count: 'total' }
+      ]).toArray();
+      const customTitlesCount = customTitlesResult.length > 0 ? customTitlesResult[0].total : 0;
+      customTitlesSpent = customTitlesCount * 100; // 100 Magnum Coin за титул
+      
+      totalMagnumCoinsSpent = exchangedMagnumCoins + customTitlesSpent;
+    } catch {
+      totalMagnumCoinsSpent = 0;
+    }
+    
     const stats = {
       totalUsers: totalUsers,
       totalMagnumCoins: Math.round(totalMagnumCoins * 100) / 100,
       totalStars: Math.round(totalStars * 100) / 100,
-      totalWithdrawn: Math.round(totalWithdrawn * 100) / 100
+      totalWithdrawn: Math.round(totalWithdrawn * 100) / 100,
+      totalStarsSpent: Math.round(totalStarsSpent * 100) / 100,
+      totalMagnumCoinsSpent: Math.round(totalMagnumCoinsSpent * 100) / 100
     };
     
     // Обновляем кеш
@@ -122,7 +155,9 @@ async function getBotStatistics() {
       totalUsers: 0,
       totalMagnumCoins: 0,
       totalStars: 0,
-      totalWithdrawn: 0
+      totalWithdrawn: 0,
+      totalStarsSpent: 0,
+      totalMagnumCoinsSpent: 0
     };
   }
 }
@@ -1632,7 +1667,9 @@ ${progressText}
 [👥 ${botStats.totalUsers}] пользователей в боте  
 [🪙 ${botStats.totalMagnumCoins}] Magnum Coin заработано  
 [💎 ${botStats.totalStars}] звёзд заработано  
-[💸 ${botStats.totalWithdrawn}] звёзд выведено`;
+[💸 ${botStats.totalWithdrawn}] звёзд выведено  
+[🛒 ${botStats.totalStarsSpent}] звёзд потрачено  
+[💰 ${botStats.totalMagnumCoinsSpent}] Magnum Coin потрачено`;
 }
 
 function getWelcomeText(magnumCoins, stars, invited) {
