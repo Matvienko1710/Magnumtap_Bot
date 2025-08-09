@@ -1134,9 +1134,9 @@ async function handlePromoActivation(ctx, text, userState) {
     const newBalance = Math.round((user.magnumCoins + promo.stars) * 100) / 100;
     
     await ctx.reply(`✅ **Промокод активирован!**\n\n` +
-                    `🎫 **Код:** \`${code}\`\n` +
-                    `🪙 **Получено:** ${promo.stars} Magnum Coin\n` +
-                    `💰 **Новый баланс:** ${newBalance}🪙\n\n` +
+                    `[🎫 ${code}]\n` +
+                    `[🪙 +${promo.stars}] Magnum Coin получено\n` +
+                    `[💰 ${newBalance}] новый баланс\n\n` +
                     `🎉 Поздравляем с успешной активацией!`, 
                     { parse_mode: 'Markdown' });
     
@@ -1447,12 +1447,12 @@ ${progressBar}
 
 👋 **Приветствую, ${userInfo}!**
 
-💫 **Статус:** ${getStatusDisplayName(user)}  
-🪙 **Magnum Coin:** ${magnumCoinsBalance}  
-💎 **Баланс звёзд:** ${starsBalance} ⭐  
-👥 **Друзей приглашено:** ${friends}  
-🏅 **Ранг:** ${rank.name}  
-🏆 **Титул:** ${title}
+[💫 ${getStatusDisplayName(user)}]  
+[🪙 ${magnumCoinsBalance}] Magnum Coin  
+[💎 ${starsBalance}] звёзд  
+[👥 ${friends}] друзей приглашено  
+[🏅 ${rank.name}]  
+[🏆 ${title}]
 
 ${progressText}`;
 }
@@ -1461,9 +1461,9 @@ function getWelcomeText(magnumCoins, stars, invited) {
   return (
     "👋 Добро пожаловать в *MagnumTapBot*! 🌟\n\n" +
     "Ты в игре, где можно зарабатывать Magnum Coin 🪙, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n" +
-    "🪙 Magnum Coin: " + magnumCoins + "\n" +
-    "💎 Звёзды: " + stars + " ⭐\n" +
-    "👥 Приглашено друзей: " + invited + "\n\n" +
+    "[🪙 " + magnumCoins + "] Magnum Coin\n" +
+    "[💎 " + stars + "] звёзд\n" +
+    "[👥 " + invited + "] друзей приглашено\n\n" +
     "Выбери действие и стань звездой MagnumTapBot! 🌟"
   );
 }
@@ -1620,7 +1620,7 @@ async function updateMainMenuBalance(ctx) {
 }
 
 async function getMainMenu(ctx, userId) {
-  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
+  const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('[⚙️ Админ-панель]', 'admin_panel')]] : [];
   const profileText = await getDetailedProfile(userId, ctx);
   
   return {
@@ -1628,10 +1628,10 @@ async function getMainMenu(ctx, userId) {
     extra: {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('🪙 Фармить Magnum Coin', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
-        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
-        [Markup.button.callback('🎫 Промокод', 'promo')],
-        [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
+        [Markup.button.callback('[🪙 Фармить] Magnum Coin', 'farm'), Markup.button.callback('[🎁 Бонус]', 'bonus')],
+        [Markup.button.callback('[👤 Профиль]', 'profile'), Markup.button.callback('[🏆 Топ]', 'top'), Markup.button.callback('[🛒 Магазин]', 'shop')],
+        [Markup.button.callback('[🎫 Промокод]', 'promo')],
+        [Markup.button.callback('[📈 Биржа]', 'exchange'), Markup.button.callback('[🎯 Задания] от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -1910,11 +1910,11 @@ bot.action('top', async (ctx) => {
     }
     
     msg += `${positionIcon} **${displayName}**\n`;
-    msg += `├ ⭐ **${stars}** звёзд\n`;
-    msg += `├ 🪙 **${magnumCoins}** Magnum Coin\n`;
-    msg += `├ ${status.color} ${status.name}\n`;
-    msg += `├ 🏅 ${rank.name}\n`;
-    msg += `└ 🏆 ${title}\n`;
+    msg += `├ [⭐ ${stars}] звёзд\n`;
+    msg += `├ [🪙 ${magnumCoins}] Magnum Coin\n`;
+    msg += `├ [${status.color} ${status.name}]\n`;
+    msg += `├ [🏅 ${rank.name}]\n`;
+    msg += `└ [🏆 ${title}]\n`;
     msg += `${divider}\n\n`;
   }
   
@@ -1926,9 +1926,9 @@ bot.action('top', async (ctx) => {
   }
   
   const buttons = [
-    [Markup.button.callback('🔄 Обновить', 'top')],
-    [Markup.button.callback('📈 Биржа', 'exchange'), Markup.button.callback('🪙 Фармить', 'farm')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    [Markup.button.callback('[🔄 Обновить]', 'top')],
+    [Markup.button.callback('[📈 Биржа]', 'exchange'), Markup.button.callback('[🪙 Фармить]', 'farm')],
+    [Markup.button.callback('[🏠 Главное меню]', 'main_menu')]
   ];
   
   ctx.editMessageText(msg, {
@@ -3402,11 +3402,11 @@ bot.action('exchange', async (ctx) => {
   
   const exchangeText = `📈 **БИРЖА MAGNUMTAP** 📈\n\n` +
                       `💰 **Ваши балансы:**\n` +
-                      `🪙 Magnum Coin: ${magnumCoinsBalance}\n` +
-                      `⭐ Звёзды: ${starsBalance}\n\n` +
+                      `[🪙 ${magnumCoinsBalance}] Magnum Coin\n` +
+                      `[⭐ ${starsBalance}] звёзд\n\n` +
                       `🔄 **Доступные операции:**\n\n` +
                       `💎 **Обмен валют:**\n` +
-                      `• 100 🪙 → 10 ⭐ Telegram Stars\n` +
+                      `• [🪙 100] → [⭐ 10] Telegram Stars\n` +
                       `• Другие валюты (скоро)\n\n` +
                       `📊 **P2P торговля:**\n` +
                       `• Обмен с другими пользователями\n` +
@@ -3437,12 +3437,12 @@ bot.action('exchange_currency', async (ctx) => {
   
   const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
                       `💰 **Ваши балансы:**\n` +
-                      `🪙 Magnum Coin: ${magnumCoinsBalance}\n` +
-                      `⭐ Звёзды: ${starsBalance}\n\n` +
+                      `[🪙 ${magnumCoinsBalance}] Magnum Coin\n` +
+                      `[⭐ ${starsBalance}] звёзд\n\n` +
                       `🔄 **Доступные курсы:**\n\n` +
                       `⭐ **Telegram Stars:**\n` +
-                      `• Курс: 100 🪙 = 10 ⭐ TG Stars\n` +
-                      `• Минимум: 100 🪙\n` +
+                      `• Курс: [🪙 100] = [⭐ 10] TG Stars\n` +
+                      `• Минимум: [🪙 100]\n` +
                       `• Комиссия: 0%\n\n` +
                       `💵 **USDT TRC-20:**\n` +
                       `• Курс: скоро\n` +
@@ -3455,14 +3455,14 @@ bot.action('exchange_currency', async (ctx) => {
   
   // Добавляем кнопку обмена TG Stars только если достаточно монет
   if (magnumCoinsBalance >= 100) {
-    buttons.push([Markup.button.callback('⭐ Купить TG Stars (100🪙→10⭐)', 'buy_tg_stars')]);
+    buttons.push([Markup.button.callback('[⭐ Купить TG Stars] (100🪙→10⭐)', 'buy_tg_stars')]);
   } else {
-    buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
+    buttons.push([Markup.button.callback('[❌ Недостаточно] Magnum Coin', 'insufficient_funds')]);
   }
   
   buttons.push(
-    [Markup.button.callback('💵 Купить USDT (скоро)', 'buy_usdt'), Markup.button.callback('💎 Купить TON (скоро)', 'buy_ton')],
-    [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
+    [Markup.button.callback('[💵 Купить USDT] (скоро)', 'buy_usdt'), Markup.button.callback('[💎 Купить TON] (скоро)', 'buy_ton')],
+    [Markup.button.callback('[🔙 Назад] на биржу', 'exchange')]
   );
   
   const keyboard = Markup.inlineKeyboard(buttons);
@@ -4529,13 +4529,13 @@ bot.action('farm', async (ctx) => {
     const rewardText = boostedReward > baseReward ? `+${boostedReward} Magnum Coin (🔥 БУСТ!)` : `+${boostedReward} Magnum Coin`;
     
     if (newTitles.length > 0 && newAchievements.length > 0) {
-      ctx.answerCbQuery(`🪙 ${rewardText} 🏆 Новый титул! 🎖️ Достижение!`);
+      ctx.answerCbQuery(`[🪙 ${rewardText}] [🏆 Новый титул!] [🎖️ Достижение!]`);
     } else if (newTitles.length > 0) {
-      ctx.answerCbQuery(`🪙 ${rewardText} 🏆 Новый титул получен!`);
+      ctx.answerCbQuery(`[🪙 ${rewardText}] [🏆 Новый титул получен!]`);
     } else if (newAchievements.length > 0) {
-      ctx.answerCbQuery(`🪙 ${rewardText} 🎖️ ${newAchievements[0].name}!`);
+      ctx.answerCbQuery(`[🪙 ${rewardText}] [🎖️ ${newAchievements[0].name}!]`);
     } else {
-      ctx.answerCbQuery(`🪙 ${rewardText}`);
+      ctx.answerCbQuery(`[🪙 ${rewardText}]`);
     }
   } else {
     const timeLeft = 60 - (now() - user.lastFarm);
@@ -4586,13 +4586,13 @@ bot.action('bonus', async (ctx) => {
     const rewardText = boostedReward > baseReward ? `+${boostedReward} Magnum Coin (🔥 БУСТ!)` : `+${boostedReward} Magnum Coin`;
     
     if (newTitles.length > 0 && newAchievements.length > 0) {
-      ctx.answerCbQuery(`🎁 ${rewardText} 🏆 Новый титул! 🎖️ Достижение!`);
+      ctx.answerCbQuery(`[🎁 ${rewardText}] [🏆 Новый титул!] [🎖️ Достижение!]`);
     } else if (newTitles.length > 0) {
-      ctx.answerCbQuery(`🎁 ${rewardText} 🏆 Новый титул!`);
+      ctx.answerCbQuery(`[🎁 ${rewardText}] [🏆 Новый титул!]`);
     } else if (newAchievements.length > 0) {
-      ctx.answerCbQuery(`🎁 ${rewardText} 🎖️ ${newAchievements[0].name}!`);
+      ctx.answerCbQuery(`[🎁 ${rewardText}] [🎖️ ${newAchievements[0].name}!]`);
     } else {
-      ctx.answerCbQuery(`🎁 ${rewardText} Ежедневный бонус получен!`);
+      ctx.answerCbQuery(`[🎁 ${rewardText}] Ежедневный бонус получен!`);
     }
   } else {
     // Расчет времени до следующего дня (00:00)
@@ -4627,7 +4627,7 @@ bot.action(/^claim_daily_(.+)$/, async (ctx) => {
   );
   await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward } });
   
-  ctx.answerCbQuery(`🎁 Получено ${task.reward} Magnum Coin!`);
+  ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
   ctx.action('daily_tasks')(ctx);
 });
 
@@ -4642,7 +4642,7 @@ bot.action(/^claim_sponsor_(.+)$/, async (ctx) => {
   );
   await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward } });
   
-  ctx.answerCbQuery(`🎁 Получено ${task.reward} Magnum Coin!`);
+  ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
   ctx.action('sponsor_tasks')(ctx);
 });
 
