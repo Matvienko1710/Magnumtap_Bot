@@ -42,20 +42,20 @@ const TITLES = {
 
 // Система достижений
 const ACHIEVEMENTS = {
-  'first_fifty': { 
-    name: '⭐ Первые звёзды', 
-    description: 'Накопить 50 звёзд', 
+  'first_hundred': { 
+    name: '💰 Сотка', 
+    description: 'Накопить 100 звёзд', 
     condition: 'stars', 
-    requirement: 50,
-    reward: 5,
-    icon: '⭐'
+    requirement: 100,
+    reward: 10,
+    icon: '💰'
   },
   'social_butterfly': { 
     name: '🤝 Социальная бабочка', 
-    description: 'Пригласить 3 друзей', 
+    description: 'Пригласить 5 друзей', 
     condition: 'invited', 
-    requirement: 3,
-    reward: 8,
+    requirement: 5,
+    reward: 25,
     icon: '🤝'
   },
   'week_warrior': { 
@@ -63,23 +63,23 @@ const ACHIEVEMENTS = {
     description: 'Получить бонус 7 дней подряд', 
     condition: 'daily_streak', 
     requirement: 7,
-    reward: 15,
+    reward: 50,
     icon: '⚡'
   },
   'farm_master': { 
     name: '🌾 Мастер фарма', 
-    description: 'Сфармить 100 раз', 
+    description: 'Сфармить 200 раз', 
     condition: 'farm_count', 
-    requirement: 100,
-    reward: 10,
+    requirement: 200,
+    reward: 30,
     icon: '🌾'
   },
   'promo_hunter': { 
     name: '🎫 Охотник за промо', 
-    description: 'Активировать 5 промокодов', 
+    description: 'Активировать 10 промокодов', 
     condition: 'promo_count', 
-    requirement: 5,
-    reward: 12,
+    requirement: 10,
+    reward: 40,
     icon: '🎫'
   }
 };
@@ -513,12 +513,12 @@ function getUserMainTitle(user) {
 function getNextLevelInfo(user) {
   const stars = user.stars || 0;
   const levels = [
-    { name: 'Bronze Star', requirement: 25 },
-    { name: 'Silver Star', requirement: 75 },
-    { name: 'Gold Star', requirement: 150 },
-    { name: 'Platinum Star', requirement: 250 },
-    { name: 'Diamond Star', requirement: 400 },
-    { name: 'Master Star', requirement: 600 }
+    { name: 'Bronze Star', requirement: 50 },
+    { name: 'Silver Star', requirement: 150 },
+    { name: 'Gold Star', requirement: 300 },
+    { name: 'Platinum Star', requirement: 500 },
+    { name: 'Diamond Star', requirement: 1000 },
+    { name: 'Master Star', requirement: 2000 }
   ];
 
   for (const level of levels) {
