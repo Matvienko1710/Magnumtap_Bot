@@ -1810,10 +1810,7 @@ bot.action('my_titles', async (ctx) => {
     [Markup.button.callback('🏠 Главное меню', 'main_menu')]
   );
 
-  ctx.editMessageText(titlesText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard(buttons)
-  });
+  await sendMessageWithPhoto(ctx, titlesText, Markup.inlineKeyboard(buttons));
 });
 
 // Выбор титула
@@ -1856,10 +1853,7 @@ bot.action('select_title', async (ctx) => {
     msg += '📝 У вас пока нет доступных титулов.\n\nВыполняйте задания и достижения, чтобы заработать титулы!';
   }
   
-  ctx.editMessageText(msg, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard(buttons)
-  });
+  await sendMessageWithPhoto(ctx, msg, Markup.inlineKeyboard(buttons));
 });
 
 // Установка титула
@@ -1942,10 +1936,7 @@ bot.action(/^set_title_(.+)$/, async (ctx) => {
       msg += '📝 У вас пока нет доступных титулов.\n\nВыполняйте задания и достижения, чтобы заработать титулы!';
     }
     
-    ctx.editMessageText(msg, {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard(buttons)
-    });
+    await sendMessageWithPhoto(ctx, msg, Markup.inlineKeyboard(buttons));
   }, 500);
 });
 
@@ -3226,15 +3217,12 @@ bot.action('admin_statuses', async (ctx) => {
     statusText += `└ ${status.description}\n\n`;
   });
 
-  ctx.editMessageText(statusText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('➕ Выдать статус', 'admin_give_status')],
-      [Markup.button.callback('➖ Убрать статус', 'admin_remove_status')],
-      [Markup.button.callback('👤 Статус пользователя', 'admin_user_status')],
-      [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, statusText, Markup.inlineKeyboard([
+    [Markup.button.callback('➕ Выдать статус', 'admin_give_status')],
+    [Markup.button.callback('➖ Убрать статус', 'admin_remove_status')],
+    [Markup.button.callback('👤 Статус пользователя', 'admin_user_status')],
+    [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+  ]));
 });
 
 bot.action('admin_give_status', async (ctx) => {
@@ -3329,12 +3317,9 @@ bot.action('admin_faq', async (ctx) => {
 - Будьте осторожны с массовыми операциями
 - Используйте "Отмена" для возврата в админку`;
 
-  ctx.editMessageText(adminFaqText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, adminFaqText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+  ]));
 });
 
 // Добавляем недостающие обработчики админских команд
@@ -3381,7 +3366,7 @@ bot.action('admin_stats', async (ctx) => {
   const totalStars = await users.aggregate([{ $group: { _id: null, total: { $sum: '$stars' } } }]).toArray();
   const totalInvited = await users.aggregate([{ $group: { _id: null, total: { $sum: '$invited' } } }]).toArray();
   
-  ctx.editMessageText(
+  await sendMessageWithPhoto(ctx,
     `📊 Статистика бота:\n\n` +
     `👥 Всего пользователей: ${totalUsers}\n` +
     `⭐ Всего звёзд: ${totalStars[0]?.total || 0}\n` +
@@ -3420,15 +3405,12 @@ bot.action('admin_titles', async (ctx) => {
     }
   });
 
-  ctx.editMessageText(titlesList, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('➕ Выдать титул', 'admin_give_title')],
-      [Markup.button.callback('➖ Забрать титул', 'admin_remove_title')],
-      [Markup.button.callback('📋 Титулы пользователя', 'admin_user_titles')],
-      [Markup.button.callback('⚙️ Назад в админ-панель', 'admin_panel')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, titlesList, Markup.inlineKeyboard([
+    [Markup.button.callback('➕ Выдать титул', 'admin_give_title')],
+    [Markup.button.callback('➖ Забрать титул', 'admin_remove_title')],
+    [Markup.button.callback('📋 Титулы пользователя', 'admin_user_titles')],
+    [Markup.button.callback('⚙️ Назад в админ-панель', 'admin_panel')]
+  ]));
 });
 
 bot.action('admin_give_title', async (ctx) => {
@@ -3802,17 +3784,14 @@ bot.action('faq', async (ctx) => {
 
 🎯 **Выберите раздел для подробной информации:**`;
 
-  ctx.editMessageText(faqText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🌟 Как фармить звёзды', 'faq_farming'), Markup.button.callback('🎁 Ежедневный бонус', 'faq_bonus')],
-      [Markup.button.callback('🎯 Задания', 'faq_tasks'), Markup.button.callback('👥 Приглашение друзей', 'faq_referrals')],
-      [Markup.button.callback('🏆 Титулы и ранги', 'faq_titles'), Markup.button.callback('🎖️ Достижения', 'faq_achievements')],
-      [Markup.button.callback('📊 Уровни игрока', 'faq_levels'), Markup.button.callback('🎫 Промокоды', 'faq_promocodes')],
-      [Markup.button.callback('💫 Статусы', 'faq_statuses'), Markup.button.callback('🛠️ Техподдержка', 'faq_support')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, faqText, Markup.inlineKeyboard([
+    [Markup.button.callback('🌟 Как фармить звёзды', 'faq_farming'), Markup.button.callback('🎁 Ежедневный бонус', 'faq_bonus')],
+    [Markup.button.callback('🎯 Задания', 'faq_tasks'), Markup.button.callback('👥 Приглашение друзей', 'faq_referrals')],
+    [Markup.button.callback('🏆 Титулы и ранги', 'faq_titles'), Markup.button.callback('🎖️ Достижения', 'faq_achievements')],
+    [Markup.button.callback('📊 Уровни игрока', 'faq_levels'), Markup.button.callback('🎫 Промокоды', 'faq_promocodes')],
+    [Markup.button.callback('💫 Статусы', 'faq_statuses'), Markup.button.callback('🛠️ Техподдержка', 'faq_support')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]));
 });
 
 // Детальные FAQ разделы
@@ -3845,12 +3824,9 @@ bot.action('faq_farming', async (ctx) => {
 • Не забывайте про ежедневный бонус!
 • Приглашайте друзей для дополнительных звёзд`;
 
-  ctx.editMessageText(farmingText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, farmingText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_bonus', async (ctx) => {
@@ -3886,12 +3862,9 @@ bot.action('faq_bonus', async (ctx) => {
 • Совмещайте с фармом для быстрого роста
 • 3 звезды в день = 90 звёзд в месяц!`;
 
-  ctx.editMessageText(bonusText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, bonusText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_tasks', async (ctx) => {
