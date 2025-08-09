@@ -58,10 +58,16 @@ const userStates = new Map();
 const userCache = new Map();
 const USER_CACHE_TTL = 30000;
 
-// Кеш статистики бота (время жизни 5 минут)
+// Кеш статистики бота (время жизни 30 секунд для быстрого обновления)
 let botStatsCache = null;
 let botStatsCacheTime = 0;
-const BOT_STATS_CACHE_TTL = 300000; // 5 минут
+const BOT_STATS_CACHE_TTL = 30000; // 30 секунд
+
+// Функция для инвалидации кеша статистики
+function invalidateBotStatsCache() {
+  botStatsCache = null;
+  botStatsCacheTime = 0;
+}
 
 // Настройки кулдауна фарма
 let farmCooldownEnabled = true;
@@ -84,9 +90,9 @@ async function getBotStatistics() {
     // Общее количество пользователей
     const totalUsers = await users.countDocuments();
     
-    // Общее количество заработанных Magnum Coin
+    // Общее количество заработанных Magnum Coin (реальная статистика)
     const totalMagnumCoinsResult = await users.aggregate([
-      { $group: { _id: null, total: { $sum: '$magnumCoins' } } }
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$totalEarnedMagnumCoins', '$magnumCoins'] } } } }
     ]).toArray();
     const totalMagnumCoins = totalMagnumCoinsResult.length > 0 ? totalMagnumCoinsResult[0].total : 0;
     
@@ -780,9 +786,11 @@ async function checkAndAwardAchievements(userId) {
         { id: userId },
         { 
           $addToSet: { achievements: achievementId },
-          $inc: { magnumCoins: achievement.reward }
+          $inc: { magnumCoins: achievement.reward, totalEarnedMagnumCoins: achievement.reward }
         }
       );
+      invalidateUserCache(userId);
+      invalidateBotStatsCache();
       newAchievements.push(achievement);
     }
   }
@@ -962,6 +970,7 @@ async function getUser(id, ctx = null) {
       first_name: ctx ? (ctx.from.first_name || '') : '',
       stars: 0,
       magnumCoins: 0,
+      totalEarnedMagnumCoins: 0, // Отслеживаем общую сумму заработанных монет
       lastFarm: 0,
       lastBonus: 0,
       created: now(),
@@ -983,6 +992,12 @@ async function getUser(id, ctx = null) {
     if (user.magnumCoins === undefined) {
       await users.updateOne({ id }, { $set: { magnumCoins: 0 } });
       user.magnumCoins = 0;
+    }
+    
+    if (user.totalEarnedMagnumCoins === undefined) {
+      // Инициализируем как текущий баланс для существующих пользователей
+      await users.updateOne({ id }, { $set: { totalEarnedMagnumCoins: user.magnumCoins || 0 } });
+      user.totalEarnedMagnumCoins = user.magnumCoins || 0;
     }
     
     if (ctx) {
@@ -1383,10 +1398,12 @@ async function handlePromoActivation(ctx, text, userState) {
     await users.updateOne(
       { id: userId },
       { 
-        $inc: { magnumCoins: promo.stars, promoCount: 1 },
+        $inc: { magnumCoins: promo.stars, promoCount: 1, totalEarnedMagnumCoins: promo.stars },
         $addToSet: { promoCodes: code }
       }
     );
+    invalidateUserCache(userId);
+    invalidateBotStatsCache();
     
     // Обновляем промокод
     await promocodes.updateOne(
@@ -1690,7 +1707,7 @@ function createProgressBar(current, total, length = 10) {
 }
 
 async function getDetailedProfile(userId, ctx) {
-  const user = await getUser(userId);
+  const user = await getUser(userId, ctx);
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   const friends = user.invited || 0;
@@ -1893,10 +1910,32 @@ async function markDailyTaskCompleted(userId, taskId) {
 
 async function updateMainMenuBalance(ctx) {
   try {
+    // Принудительно обновляем кеш пользователя
+    invalidateUserCache(ctx.from.id);
     const menu = await getMainMenu(ctx, ctx.from.id);
     await sendMessageWithPhoto(ctx, menu.text, menu.keyboard);
   } catch (error) {
     console.error('Ошибка обновления баланса в меню:', error);
+  }
+}
+
+// Функция для обновления профиля в реальном времени
+async function updateProfileRealtime(ctx) {
+  try {
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
+    const profileText = await getDetailedProfile(ctx.from.id, ctx);
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
+      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
+      [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ]);
+
+    await sendMessageWithPhoto(ctx, profileText, keyboard);
+  } catch (error) {
+    console.error('Ошибка обновления профиля:', error);
   }
 }
 
@@ -1990,6 +2029,10 @@ bot.start(async (ctx) => {
   // Автоматически отмечаем задание "ежедневный вход"
   await markDailyTaskCompleted(ctx.from.id, 'login');
   
+  // Принудительно обновляем кеш для новых пользователей
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
+  
   const menu = await getMainMenu(ctx, ctx.from.id);
   await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
@@ -2009,22 +2052,16 @@ bot.action('check_subscription', async (ctx) => {
 
 bot.action('main_menu', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
+  // Принудительно обновляем кеш для актуальных данных
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   const menu = await getMainMenu(ctx, ctx.from.id);
   await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
 
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
-  const profileText = await getDetailedProfile(ctx.from.id, ctx);
-
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
-    [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
-    [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-  ]);
-
-  await sendMessageWithPhoto(ctx, profileText, keyboard);
+  await updateProfileRealtime(ctx);
 });
 
 bot.action('my_titles', async (ctx) => {
@@ -2199,6 +2236,9 @@ bot.action(/^set_title_(.+)$/, async (ctx) => {
 });
 
 bot.action('top', async (ctx) => {
+  // Принудительно обновляем статистику
+  invalidateBotStatsCache();
+  
   // Отмечаем задание "изучить топ"
   await markDailyTaskCompleted(ctx.from.id, 'top_check');
   
@@ -3867,6 +3907,8 @@ bot.action('buy_tg_stars', async (ctx) => {
       $set: { lastExchange: Math.floor(Date.now() / 1000) }
     }
   );
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   
   await ctx.answerCbQuery('✅ Успешно! 100🪙 → 10⭐ TG Stars', { show_alert: true });
   
@@ -4592,10 +4634,11 @@ bot.action('farm', async (ctx) => {
     const boostedReward = applyBoostMultiplier(baseReward, user, 'farm');
     
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { magnumCoins: boostedReward, farmCount: 1, dailyFarms: 1 }, 
+      $inc: { magnumCoins: boostedReward, farmCount: 1, dailyFarms: 1, totalEarnedMagnumCoins: boostedReward }, 
       $set: { lastFarm: now() } 
     });
     invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
     // Проверяем задание активного фармера
     const updatedUser = await getUser(ctx.from.id);
@@ -4653,10 +4696,11 @@ bot.action('bonus', async (ctx) => {
     const boostedReward = applyBoostMultiplier(baseReward, user, 'bonus');
     
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { magnumCoins: boostedReward, bonusCount: 1 }, 
+      $inc: { magnumCoins: boostedReward, bonusCount: 1, totalEarnedMagnumCoins: boostedReward }, 
       $set: { lastBonus: today, dailyStreak: dailyStreak } 
     });
     invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
     // Отмечаем задание "ежедневный бонус"
     await markDailyTaskCompleted(ctx.from.id, 'bonus');
@@ -4710,7 +4754,9 @@ bot.action(/^claim_daily_(.+)$/, async (ctx) => {
     { userId: ctx.from.id, type: 'daily' },
     { $set: { [`claimed.${taskId}`]: true } }
   );
-  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward } });
+  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward, totalEarnedMagnumCoins: task.reward } });
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   
   ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
   ctx.action('daily_tasks')(ctx);
@@ -4725,7 +4771,9 @@ bot.action(/^claim_sponsor_(.+)$/, async (ctx) => {
     { userId: ctx.from.id, type: 'sponsor' },
     { $set: { [`claimed.${taskId}`]: true } }
   );
-  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward } });
+  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward, totalEarnedMagnumCoins: task.reward } });
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   
   ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
   ctx.action('sponsor_tasks')(ctx);
