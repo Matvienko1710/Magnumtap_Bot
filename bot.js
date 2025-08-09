@@ -1602,11 +1602,28 @@ bot.action(/^approve_withdrawal_(.+)$/, async (ctx) => {
   await updateWithdrawalStatus(requestId, 'approved', ctx.from.id);
   await notifyUserWithdrawalUpdate(request, true);
   
-  const updatedMessage = ctx.callbackQuery.message.text + 
+  // Получаем исходное сообщение без добавленных статусов
+  const originalMessageLines = ctx.callbackQuery.message.text.split('\n');
+  const cutOffIndex = originalMessageLines.findIndex(line => 
+    line.includes('**ОДОБРЕНО**') || 
+    line.includes('**ОТКЛОНЕНО**') || 
+    line.includes('**В ОБРАБОТКЕ**')
+  );
+  
+  const originalMessage = cutOffIndex > -1 ? 
+    originalMessageLines.slice(0, cutOffIndex).join('\n') : 
+    ctx.callbackQuery.message.text;
+  
+  const updatedMessage = originalMessage + 
                         `\n\n✅ **ОДОБРЕНО** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
                         `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
   
-  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  // Оставляем только кнопку главного меню для одобренных заявок
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]);
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown', ...keyboard });
   await ctx.answerCbQuery('✅ Заявка одобрена!');
 });
 
@@ -1665,13 +1682,32 @@ bot.action(/^reject_reason_(.+)_(.+)$/, async (ctx) => {
   await notifyUserWithdrawalUpdate(request, false, reason);
   
   const reasonInfo = REJECTION_REASONS[reason];
-  const updatedMessage = ctx.callbackQuery.message.text.split('\n\n❌')[0] + 
+  
+  // Получаем исходное сообщение без добавленных статусов
+  const originalMessageLines = ctx.callbackQuery.message.text.split('\n');
+  const cutOffIndex = originalMessageLines.findIndex(line => 
+    line.includes('**ОДОБРЕНО**') || 
+    line.includes('**ОТКЛОНЕНО**') || 
+    line.includes('**В ОБРАБОТКЕ**') ||
+    line.includes('**Выберите причину отклонения**')
+  );
+  
+  const originalMessage = cutOffIndex > -1 ? 
+    originalMessageLines.slice(0, cutOffIndex).join('\n') : 
+    ctx.callbackQuery.message.text.split('\n\n❌')[0];
+  
+  const updatedMessage = originalMessage + 
                         `\n\n❌ **ОТКЛОНЕНО** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
                         `\n📋 **Причина:** ${reasonInfo.name}` +
                         `\n💰 **Звёзды возвращены пользователю**` +
                         `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
   
-  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  // Оставляем только кнопку главного меню для отклоненных заявок
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]);
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown', ...keyboard });
   await ctx.answerCbQuery(`✅ Заявка отклонена: ${reasonInfo.name}`);
 });
 
@@ -1689,11 +1725,30 @@ bot.action(/^process_withdrawal_(.+)$/, async (ctx) => {
   
   await updateWithdrawalStatus(requestId, 'processing', ctx.from.id);
   
-  const updatedMessage = ctx.callbackQuery.message.text + 
+  // Получаем исходное сообщение без добавленных статусов
+  const originalMessageLines = ctx.callbackQuery.message.text.split('\n');
+  const cutOffIndex = originalMessageLines.findIndex(line => 
+    line.includes('**ОДОБРЕНО**') || 
+    line.includes('**ОТКЛОНЕНО**') || 
+    line.includes('**В ОБРАБОТКЕ**')
+  );
+  
+  const originalMessage = cutOffIndex > -1 ? 
+    originalMessageLines.slice(0, cutOffIndex).join('\n') : 
+    ctx.callbackQuery.message.text;
+  
+  const updatedMessage = originalMessage + 
                         `\n\n🔄 **В ОБРАБОТКЕ** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
                         `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
   
-  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  // Оставляем все кнопки
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('✅ Одобрить', `approve_withdrawal_${request.id}`)],
+    [Markup.button.callback('❌ Отклонить', `reject_withdrawal_${request.id}`)],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]);
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown', ...keyboard });
   await ctx.answerCbQuery('🔄 Заявка взята в обработку!');
 });
 
