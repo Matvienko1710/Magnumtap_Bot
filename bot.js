@@ -51,6 +51,9 @@ const bot = new Telegraf(BOT_TOKEN);
 const mongo = new MongoClient(MONGODB_URI);
 let users, promocodes, taskChecks, withdrawalRequests;
 
+// Состояния пользователей для обработки ввода
+const userStates = new Map();
+
 // Система титулов
 const TITLES = {
   // Обычные титулы (10)
@@ -958,6 +961,77 @@ function getUserDisplayName(user, userData = null) {
   return user.username || user.first_name || `User${user.id}`;
 }
 
+// Обработка состояний для вывода
+async function handleWithdrawalState(ctx, text, userState) {
+  const userId = ctx.from.id;
+  
+  try {
+    if (userState.method === 'tg_stars' && userState.step === 'amount') {
+      console.log('📊 Обрабатываем ввод суммы для Telegram Stars:', text);
+      
+      const amount = parseFloat(text);
+      if (isNaN(amount) || amount < 100) {
+        await ctx.reply('❌ Неверная сумма! Минимум для вывода: 100⭐');
+        return;
+      }
+      
+      const user = await getUser(userId, ctx);
+      console.log('💰 Баланс пользователя:', user.stars, 'Запрашивает:', amount);
+      
+      if (user.stars < amount) {
+        await ctx.reply(`❌ Недостаточно звёзд! У вас: ${Math.round(user.stars * 100) / 100}⭐`);
+        userStates.delete(userId);
+        return;
+      }
+      
+      // Переходим к следующему шагу
+      userStates.set(userId, { 
+        type: 'withdrawal', 
+        method: 'tg_stars', 
+        step: 'address',
+        amount: amount
+      });
+      
+      await adminForceReply(ctx, `Введите ваш Telegram ID для получения ${amount} Telegram Stars:`);
+      console.log('🔄 Переход к вводу Telegram ID');
+      
+    } else if (userState.method === 'tg_stars' && userState.step === 'address') {
+      console.log('📋 Обрабатываем ввод Telegram ID:', text);
+      
+      const telegramId = text.trim();
+      const amount = userState.amount;
+      
+      console.log('💳 Создаем заявку на сумму:', amount, 'для ID:', telegramId);
+      const request = await createWithdrawalRequest(userId, 'tg_stars', amount, telegramId);
+      console.log('✅ Заявка создана:', request.id);
+      
+      // Списываем звёзды
+      await users.updateOne({ id: userId }, { $inc: { stars: -amount } });
+      console.log('💸 Звёзды списаны с баланса');
+      
+      console.log('📤 Отправляем заявку в канал...');
+      await sendWithdrawalToChannel(request);
+      console.log('✅ Заявка отправлена в канал');
+      
+      // Очищаем состояние
+      userStates.delete(userId);
+      
+      await ctx.reply(`✅ **Заявка создана!**\n\n` +
+                    `🏷️ **ID заявки:** \`${request.id}\`\n` +
+                    `💰 **Сумма:** ${amount}⭐\n` +
+                    `💸 **К получению:** ${request.netAmount}⭐\n` +
+                    `⏰ **Статус:** ⏳ На рассмотрении\n\n` +
+                    `Заявка отправлена администраторам. Ожидайте обработки в течение 24-48 часов.`, 
+                    { parse_mode: 'Markdown' });
+    }
+    
+  } catch (error) {
+    console.error('❌ Ошибка обработки состояния вывода:', error);
+    userStates.delete(userId);
+    await ctx.reply('❌ Произошла ошибка при обработке заявки');
+  }
+}
+
 // Функции для работы с заявками на вывод
 async function createWithdrawalRequest(userId, method, amount, address) {
   const user = await getUser(userId);
@@ -1477,6 +1551,15 @@ bot.action('withdraw', async (ctx) => {
 // Обработчики методов вывода
 bot.action('withdraw_tg_stars', async (ctx) => {
   console.log('🎯 Пользователь нажал кнопку withdraw_tg_stars, ID:', ctx.from.id);
+  
+  // Устанавливаем состояние пользователя
+  userStates.set(ctx.from.id, { 
+    type: 'withdrawal', 
+    method: 'tg_stars', 
+    step: 'amount' 
+  });
+  console.log('🔄 Установлено состояние:', userStates.get(ctx.from.id));
+  
   await adminForceReply(ctx, 'Введите количество звёзд для вывода в Telegram Stars (минимум 100):');
   console.log('💬 Force reply отправлен для Telegram Stars');
 });
@@ -1647,6 +1730,16 @@ bot.action(/^back_to_withdrawal_(.+)$/, async (ctx) => {
   ]);
   
   await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+});
+
+// Обработчик кнопки отмены
+bot.action('admin_cancel', async (ctx) => {
+  // Очищаем состояние пользователя
+  userStates.delete(ctx.from.id);
+  console.log('🗑️ Состояние пользователя очищено:', ctx.from.id);
+  
+  await ctx.deleteMessage();
+  await ctx.answerCbQuery('❌ Операция отменена');
 });
 
 // Магазин
@@ -1864,15 +1957,40 @@ bot.on('photo', async (ctx) => {
 });
 
 bot.on('text', async (ctx) => {
-  const replyMsg = ctx.message.reply_to_message;
-  if (!replyMsg) return;
+  console.log('📨 Получено текстовое сообщение от:', ctx.from.id, ctx.from.first_name);
+  console.log('📝 Текст сообщения:', ctx.message.text);
+  console.log('🔗 Есть ли reply_to_message:', !!ctx.message.reply_to_message);
+  
+  if (ctx.message.reply_to_message) {
+    console.log('💬 Reply to text:', ctx.message.reply_to_message.text);
+  }
 
   const text = ctx.message.text;
-  const replyText = replyMsg.text;
+  const userId = ctx.from.id;
   
-  console.log('Text handler triggered:');
-  console.log('Text:', text);
-  console.log('Reply text:', replyText);
+  console.log('✅ Text handler triggered:');
+  console.log('📝 Text:', text);
+  
+  // Проверяем состояние пользователя
+  const userState = userStates.get(userId);
+  console.log('🔄 Состояние пользователя:', userState);
+  
+  // Если есть состояние, обрабатываем через него
+  if (userState && userState.type === 'withdrawal') {
+    console.log('💳 Обрабатываем вывод через состояние');
+    await handleWithdrawalState(ctx, text, userState);
+    return;
+  }
+  
+  // Если нет состояния, проверяем reply_to_message (старый способ)
+  const replyMsg = ctx.message.reply_to_message;
+  if (!replyMsg) {
+    console.log('❌ Нет reply_to_message и состояния, пропускаем обработку');
+    return;
+  }
+
+  const replyText = replyMsg.text;
+  console.log('💬 Reply text:', replyText);
 
   try {
     // Обработка заявок на вывод
@@ -2506,9 +2624,11 @@ function adminForceReply(ctx, text) {
   console.log('📝 Отправляем force reply:', text);
   console.log('👤 Пользователю:', ctx.from.id, ctx.from.first_name || ctx.from.username);
   
-  return ctx.reply(text, {
+  return ctx.reply(text + '\n\n👆 Ответьте на это сообщение', {
     reply_markup: {
       force_reply: true,
+      selective: true,
+      input_field_placeholder: 'Введите ответ...',
       inline_keyboard: [[
         { text: '🏠 Главное меню', callback_data: 'main_menu' },
         { text: '❌ Отмена', callback_data: 'admin_cancel' }
@@ -3704,6 +3824,19 @@ bot.action(/^check_sponsor_(.+)$/, async (ctx) => {
 
 connectDB().then(() => {
   console.log('🚀 Запускаем бота...');
+  
+  // Добавляем глобальное логирование всех событий
+  bot.use(async (ctx, next) => {
+    console.log('🔄 Событие:', ctx.updateType, 'от пользователя:', ctx.from?.id, ctx.from?.first_name);
+    if (ctx.message) {
+      console.log('📨 Тип сообщения:', ctx.message.text ? 'text' : 'other');
+    }
+    if (ctx.callbackQuery) {
+      console.log('🔘 Callback data:', ctx.callbackQuery.data);
+    }
+    return next();
+  });
+  
   bot.launch();
   console.log('✅ Бот запущен успешно!');
   console.log('📱 Готов к обработке сообщений');
