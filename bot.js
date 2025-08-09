@@ -3247,24 +3247,29 @@ async function handlePostCreation(ctx, text, userState) {
     
     console.log(`📸 Используем фото бота: ${botPhotoUrl}`);
     
-    // Парсим текст и кнопку для обычного поста
-    let postText = text;
+    // Для обычного поста - сохраняем текст и предлагаем добавить кнопку
+    if (postType === 'normal') {
+      userStates.set(ctx.from.id, { 
+        type: 'admin_post_add_button', 
+        postType: 'normal',
+        postText: text 
+      });
+      
+      const previewText = `📝 **Текст поста готов!**\n\n${text.substring(0, 200)}${text.length > 200 ? '...' : ''}\n\n💡 Хотите добавить кнопку к посту?`;
+      
+      await sendMessageWithPhoto(ctx, previewText, Markup.inlineKeyboard([
+        [Markup.button.callback('🔘 Добавить кнопку', 'post_add_button')],
+        [Markup.button.callback('📢 Опубликовать без кнопки', 'post_publish_now')],
+        [Markup.button.callback('❌ Отменить', 'admin_panel')]
+      ]));
+      
+      return;
+    }
+    
+    // Для остальных типов постов - сразу публикуем
     let keyboard = null;
     
-    if (postType === 'normal') {
-      // Проверяем, есть ли кнопка в тексте
-      const buttonMatch = text.match(/КНОПКА:(.+?):(.+?)$/);
-      if (buttonMatch) {
-        const [, buttonText, buttonUrl] = buttonMatch;
-        postText = text.replace(/КНОПКА:.+?$/, '').trim(); // Убираем строку с кнопкой из текста
-        
-        keyboard = Markup.inlineKeyboard([
-          [Markup.button.url(buttonText, buttonUrl)]
-        ]);
-        
-        console.log(`🔘 Добавляем кнопку: "${buttonText}" → ${buttonUrl}`);
-      }
-    } else if (postType === 'game') {
+    if (postType === 'game') {
       keyboard = Markup.inlineKeyboard([
         [Markup.button.url('🎮 Играть', `https://t.me/${ctx.botInfo.username}?start=game`)]
       ]);
@@ -3278,54 +3283,99 @@ async function handlePostCreation(ctx, text, userState) {
       ]);
     }
     
-    // Отправляем пост в канал
-    try {
-      const messageOptions = {
-        caption: postText,
-        parse_mode: 'Markdown'
-      };
-      
-      if (keyboard) {
-        messageOptions.reply_markup = keyboard.reply_markup;
-      }
-      
-      await bot.telegram.sendPhoto(channelChatId, botPhotoUrl, messageOptions);
-      
-      console.log(`✅ Пост успешно отправлен в канал ${channelChatId}`);
-      
-      // Отправляем подтверждение админу
-      let confirmText = `✅ **Пост создан успешно!**\n\n`;
-      confirmText += `📢 **Тип:** ${postType === 'normal' ? 'Обычный' : postType === 'game' ? 'Игровой' : postType === 'chat' ? 'Чат' : 'Промокод'}\n`;
-      confirmText += `📝 **Текст:** ${postText.substring(0, 100)}${postText.length > 100 ? '...' : ''}\n`;
-      confirmText += `📸 **Фото:** ${botPhotoUrl.substring(0, 50)}...\n`;
-      
-      if (keyboard) {
-        confirmText += `🔘 **Кнопка:** Добавлена\n`;
-      }
-      
-      confirmText += `\n📢 Пост опубликован в канале!`;
-      
-      await ctx.reply(confirmText, { parse_mode: 'Markdown' });
-      
-    } catch (channelError) {
-      console.error('❌ Ошибка отправки в канал:', channelError);
-      
-      if (channelError.message.includes('chat not found')) {
-        await ctx.reply('❌ Канал не найден! Проверьте переменную REQUIRED_CHANNEL');
-      } else if (channelError.message.includes('Forbidden')) {
-        await ctx.reply('❌ Бот не имеет прав для отправки в канал! Добавьте бота как администратора');
-      } else if (channelError.message.includes('wrong file identifier')) {
-        await ctx.reply('❌ Ошибка с фото бота! Проверьте переменную BOT_PHOTO_URL - должна быть прямая ссылка на изображение');
-      } else {
-        await ctx.reply(`❌ Ошибка отправки в канал: ${channelError.message}`);
-      }
-    }
-    
-    userStates.delete(ctx.from.id);
+    // Публикуем пост
+    await publishPostToChannel(ctx, text, keyboard, postType, channelChatId, botPhotoUrl);
     
   } catch (error) {
     console.error('❌ Ошибка создания поста:', error);
     await ctx.reply('❌ Произошла ошибка при создании поста. Попробуйте снова.');
+    userStates.delete(ctx.from.id);
+  }
+}
+
+// Функция публикации поста в канал
+async function publishPostToChannel(ctx, postText, keyboard, postType, channelChatId, botPhotoUrl) {
+  try {
+    const messageOptions = {
+      caption: postText,
+      parse_mode: 'Markdown'
+    };
+    
+    if (keyboard) {
+      messageOptions.reply_markup = keyboard.reply_markup;
+    }
+    
+    await bot.telegram.sendPhoto(channelChatId, botPhotoUrl, messageOptions);
+    
+    console.log(`✅ Пост успешно отправлен в канал ${channelChatId}`);
+    
+    // Отправляем подтверждение админу
+    let confirmText = `✅ **Пост создан успешно!**\n\n`;
+    confirmText += `📢 **Тип:** ${postType === 'normal' ? 'Обычный' : postType === 'game' ? 'Игровой' : postType === 'chat' ? 'Чат' : 'Промокод'}\n`;
+    confirmText += `📝 **Текст:** ${postText.substring(0, 100)}${postText.length > 100 ? '...' : ''}\n`;
+    confirmText += `📸 **Фото:** ${botPhotoUrl.substring(0, 50)}...\n`;
+    
+    if (keyboard) {
+      confirmText += `🔘 **Кнопка:** Добавлена\n`;
+    }
+    
+    confirmText += `\n📢 Пост опубликован в канале!`;
+    
+    await ctx.reply(confirmText, { parse_mode: 'Markdown' });
+    
+  } catch (channelError) {
+    console.error('❌ Ошибка отправки в канал:', channelError);
+    
+    if (channelError.message.includes('chat not found')) {
+      await ctx.reply('❌ Канал не найден! Проверьте переменную REQUIRED_CHANNEL');
+    } else if (channelError.message.includes('Forbidden')) {
+      await ctx.reply('❌ Бот не имеет прав для отправки в канал! Добавьте бота как администратора');
+    } else if (channelError.message.includes('wrong file identifier')) {
+      await ctx.reply('❌ Ошибка с фото бота! Проверьте переменную BOT_PHOTO_URL - должна быть прямая ссылка на изображение');
+    } else {
+      await ctx.reply(`❌ Ошибка отправки в канал: ${channelError.message}`);
+    }
+  }
+  
+  userStates.delete(ctx.from.id);
+}
+
+// Функция обработки ввода кнопки для поста
+async function handlePostButtonInput(ctx, text, userState) {
+  try {
+    const { postText } = userState;
+    
+    // Парсим данные кнопки
+    const buttonMatch = text.match(/^(.+?):(.+)$/);
+    if (!buttonMatch) {
+      await ctx.reply('❌ Неверный формат! Используйте: ТЕКСТ_КНОПКИ:ССЫЛКА\n\nПример: 🎮 Играть:https://t.me/bot?start=game');
+      return;
+    }
+    
+    const [, buttonText, buttonUrl] = buttonMatch;
+    
+    console.log(`🔘 Создаем кнопку: "${buttonText}" → ${buttonUrl}`);
+    
+    // Создаем клавиатуру
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.url(buttonText, buttonUrl)]
+    ]);
+    
+    const channelChatId = REQUIRED_CHANNEL ? `@${REQUIRED_CHANNEL}` : '@magnumtap';
+    const botPhotoUrl = process.env.BOT_PHOTO_URL;
+    
+    if (!botPhotoUrl) {
+      await ctx.reply('❌ Фото бота не настроено! Добавьте переменную BOT_PHOTO_URL');
+      userStates.delete(ctx.from.id);
+      return;
+    }
+    
+    // Публикуем пост с кнопкой
+    await publishPostToChannel(ctx, postText, keyboard, 'normal', channelChatId, botPhotoUrl);
+    
+  } catch (error) {
+    console.error('❌ Ошибка добавления кнопки к посту:', error);
+    await ctx.reply('❌ Произошла ошибка при добавлении кнопки. Попробуйте снова.');
     userStates.delete(ctx.from.id);
   }
 }
@@ -4248,6 +4298,12 @@ bot.on('text', async (ctx) => {
         await handlePostCreation(ctx, text, userState);
         return;
       }
+      
+      // Добавление кнопки к посту
+      else if (userState.type === 'admin_post_button_input') {
+        await handlePostButtonInput(ctx, text, userState);
+        return;
+      }
 
       // Выдать/забрать звёзды
       else if (replyText.includes('ID пользователя и количество звёзд')) {
@@ -4376,7 +4432,7 @@ bot.action('post_type_normal', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   userStates.set(ctx.from.id, { type: 'admin_create_post', postType: 'normal' });
-  await adminForceReply(ctx, '📢 **Обычный пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 Поддерживается Markdown разметка\n\n💡 После текста можно добавить кнопку, написав:\n\nКНОПКА:ТЕКСТ_КНОПКИ:ССЫЛКА\n\nПример:\nКНОПКА:🎮 Играть:https://t.me/bot?start=game');
+  await adminForceReply(ctx, '📢 **Обычный пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 Поддерживается Markdown разметка');
 });
 
 bot.action('post_type_game', async (ctx) => {
@@ -4398,6 +4454,42 @@ bot.action('post_type_promo', async (ctx) => {
   
   userStates.set(ctx.from.id, { type: 'admin_create_post', postType: 'promo' });
   await adminForceReply(ctx, '🎫 **Промокод пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 К посту автоматически добавится кнопка "🎫 Получить промокод"');
+});
+
+// Обработчики для создания постов
+bot.action('post_add_button', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { 
+    type: 'admin_post_button_input',
+    postType: 'normal',
+    postText: userStates.get(ctx.from.id)?.postText || ''
+  });
+  
+  await adminForceReply(ctx, '🔘 **Добавление кнопки**\n\nВведите данные кнопки в формате:\n\nТЕКСТ_КНОПКИ:ССЫЛКА\n\nПримеры:\n🎮 Играть:https://t.me/bot?start=game\n💬 Чат:https://t.me/+Poy0ZtUoux1hMTMy\n🌐 Сайт:https://magnumtap.com');
+});
+
+bot.action('post_publish_now', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const userState = userStates.get(ctx.from.id);
+  if (!userState || !userState.postText) {
+    await ctx.reply('❌ Ошибка: текст поста не найден');
+    userStates.delete(ctx.from.id);
+    return;
+  }
+  
+  const channelChatId = REQUIRED_CHANNEL ? `@${REQUIRED_CHANNEL}` : '@magnumtap';
+  const botPhotoUrl = process.env.BOT_PHOTO_URL;
+  
+  if (!botPhotoUrl) {
+    await ctx.reply('❌ Фото бота не настроено! Добавьте переменную BOT_PHOTO_URL');
+    userStates.delete(ctx.from.id);
+    return;
+  }
+  
+  // Публикуем пост без кнопки
+  await publishPostToChannel(ctx, userState.postText, null, 'normal', channelChatId, botPhotoUrl);
 });
 
 // Управление статусами
