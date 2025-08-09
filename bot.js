@@ -104,11 +104,12 @@ async function getBotStatistics() {
       totalWithdrawn = 0;
     }
     
-    // Общее количество потраченных звёзд (покупки в магазине)
+    // Общее количество потраченных звёзд (покупки у всех пользователей)
     let totalStarsSpent = 0;
     try {
-      const spentStarsResult = await shopPurchases.aggregate([
-        { $group: { _id: null, total: { $sum: '$cost' } } }
+      const spentStarsResult = await users.aggregate([
+        { $unwind: '$purchases' },
+        { $group: { _id: null, total: { $sum: '$purchases.price' } } }
       ]).toArray();
       totalStarsSpent = spentStarsResult.length > 0 ? spentStarsResult[0].total : 0;
     } catch {
@@ -1098,6 +1099,18 @@ async function purchaseItem(userId, itemId) {
   const now = Math.floor(Date.now() / 1000);
   let result = { success: true, message: '' };
   
+  // Записываем трату звёзд для всех покупок (кроме кастомных титулов)
+  if (item.category !== 'cosmetic' || itemId !== 'custom_title') {
+    await users.updateOne(
+      { id: userId },
+      { 
+        $inc: { stars: -item.price },
+        $push: { purchases: { itemId, price: item.price, timestamp: now } }
+      }
+    );
+    invalidateUserCache(userId);
+  }
+
   // Обрабатываем разные типы товаров
   switch (item.category) {
     case 'boosts':
@@ -1107,10 +1120,7 @@ async function purchaseItem(userId, itemId) {
       const expiresAt = now + item.duration;
       await users.updateOne(
         { id: userId },
-        { 
-          $inc: { stars: -item.price },
-          $set: { [`boosts.${itemId}`]: { expiresAt, active: true } }
-        }
+        { $set: { [`boosts.${itemId}`]: { expiresAt, active: true } } }
       );
       result.message = `${item.icon} ${item.name} активирован!`;
       break;
@@ -1124,12 +1134,11 @@ async function purchaseItem(userId, itemId) {
         reward = calculateLuckyBoxReward('mega');
       }
       
-      const netGain = reward - item.price;
-      const profitText = netGain > 0 ? ` (прибыль: +${netGain}⭐)` : netGain < 0 ? ` (убыток: ${netGain}⭐)` : ` (в ноль)`;
+      const profitText = reward > 0 ? ` (выигрыш: +${reward}⭐)` : ` (пустая коробка)`;
       
       await users.updateOne(
         { id: userId },
-        { $inc: { stars: netGain } }
+        { $inc: { stars: reward } }
       );
       result.message = `${item.icon} Получено ${reward} звёзд!${profitText}`;
       break;
@@ -1148,12 +1157,6 @@ async function purchaseItem(userId, itemId) {
       }
       break;
   }
-  
-  // Добавляем покупку в историю
-  await users.updateOne(
-    { id: userId },
-    { $push: { purchases: { itemId, price: item.price, timestamp: now } } }
-  );
   
   return result;
 }
@@ -1221,8 +1224,28 @@ async function handleCustomTitleRequest(ctx, text, userState) {
       return;
     }
     
-    // Создаем заявку на кастомный титул (отправляем в канал поддержки)
+    // Проверяем баланс и списываем звёзды
     const user = await getUser(userId, ctx);
+    const itemPrice = userState.price || 100; // Цена кастомного титула
+    
+    if (user.stars < itemPrice) {
+      await ctx.reply(`❌ Недостаточно звёзд для покупки кастомного титула! Нужно: ${itemPrice}⭐`);
+      userStates.delete(userId);
+      return;
+    }
+    
+    // Списываем звёзды и записываем покупку
+    const now = Math.floor(Date.now() / 1000);
+    await users.updateOne(
+      { id: userId },
+      { 
+        $inc: { stars: -itemPrice },
+        $push: { purchases: { itemId: 'custom_title', price: itemPrice, timestamp: now } }
+      }
+    );
+    invalidateUserCache(userId);
+    
+    // Создаем заявку на кастомный титул (отправляем в канал поддержки)
     const ticketId = new Date().getTime().toString();
     
     const ticketData = {
@@ -1233,7 +1256,8 @@ async function handleCustomTitleRequest(ctx, text, userState) {
       type: 'custom_title',
       content: customTitle,
       status: 'pending',
-      createdAt: Math.floor(Date.now() / 1000)
+      createdAt: now,
+      price: itemPrice
     };
     
     // Сохраняем заявку в базу
