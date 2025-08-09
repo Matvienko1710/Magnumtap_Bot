@@ -35,6 +35,50 @@ const TITLES = {
   'vip_elite': { name: '💫 VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only' }
 };
 
+// Система достижений
+const ACHIEVEMENTS = {
+  'first_hundred': { 
+    name: '💰 Сотка', 
+    description: 'Накопить 100 звёзд', 
+    condition: 'stars', 
+    requirement: 100,
+    reward: 10,
+    icon: '💰'
+  },
+  'social_butterfly': { 
+    name: '🤝 Социальная бабочка', 
+    description: 'Пригласить 5 друзей', 
+    condition: 'invited', 
+    requirement: 5,
+    reward: 25,
+    icon: '🤝'
+  },
+  'week_warrior': { 
+    name: '⚡ Недельный воин', 
+    description: 'Получить бонус 7 дней подряд', 
+    condition: 'daily_streak', 
+    requirement: 7,
+    reward: 50,
+    icon: '⚡'
+  },
+  'farm_master': { 
+    name: '🌾 Мастер фарма', 
+    description: 'Сфармить 200 раз', 
+    condition: 'farm_count', 
+    requirement: 200,
+    reward: 30,
+    icon: '🌾'
+  },
+  'promo_hunter': { 
+    name: '🎫 Охотник за промо', 
+    description: 'Активировать 10 промокодов', 
+    condition: 'promo_count', 
+    requirement: 10,
+    reward: 40,
+    icon: '🎫'
+  }
+};
+
 // Система техподдержки
 const TICKET_STATUSES = {
   'new': { name: '🆕 Новая', color: '🔵', emoji: '🔵' },
@@ -201,6 +245,50 @@ async function updateTicketInChannel(ticketId) {
 }
 
 // Функции для работы с титулами
+async function checkAndAwardAchievements(userId) {
+  const user = await getUser(userId);
+  const newAchievements = [];
+  
+  for (const [achievementId, achievement] of Object.entries(ACHIEVEMENTS)) {
+    // Проверяем, есть ли уже это достижение
+    if (user.achievements && user.achievements.includes(achievementId)) continue;
+    
+    let earned = false;
+    
+    switch (achievement.condition) {
+      case 'stars':
+        earned = user.stars >= achievement.requirement;
+        break;
+      case 'invited':
+        earned = user.invited >= achievement.requirement;
+        break;
+      case 'daily_streak':
+        earned = (user.dailyStreak || 0) >= achievement.requirement;
+        break;
+      case 'farm_count':
+        earned = (user.farmCount || 0) >= achievement.requirement;
+        break;
+      case 'promo_count':
+        earned = (user.promoCount || 0) >= achievement.requirement;
+        break;
+    }
+    
+    if (earned) {
+      // Добавляем достижение и награду
+      await users.updateOne(
+        { id: userId },
+        { 
+          $addToSet: { achievements: achievementId },
+          $inc: { stars: achievement.reward }
+        }
+      );
+      newAchievements.push(achievement);
+    }
+  }
+  
+  return newAchievements;
+}
+
 async function checkAndAwardTitles(userId) {
   const user = await getUser(userId);
   const userTitles = user.titles || [];
@@ -318,6 +406,7 @@ async function getUser(id) {
       invited: 0,
       invitedBy: null,
       titles: [],
+      achievements: [],
       farmCount: 0,
       bonusCount: 0,
       promoCount: 0,
@@ -443,24 +532,14 @@ bot.action('profile', async (ctx) => {
 👥 **Друзей приглашено:** ${friends}  
 🏆 **Ранг:** ${rank} 🌟
 
-✨ **Твои достижения:**  
-1. 🌠 Первые шаги — зарегистрирован в MagnumTap  
-2. 🎯 Путь к успеху — первые заработанные звёзды  
-3. 🤝 Амбассадор — приглашай друзей и расти в рейтинге  
-
 ⚡ **Следующая цель:**  
-— Заработать ещё ${nextLevel.starsNeeded} звёзд до уровня **${nextLevel.nextLevel}** 🏅  
-
-💼 **Функции профиля:**  
-- 📊 Статистика в реальном времени  
-- 🎁 Ежедневные бонусы  
-- 🔐 Поддержка 24/7`;
+— Заработать ещё ${nextLevel.starsNeeded} звёзд до уровня **${nextLevel.nextLevel}** 🏅`;
 
   ctx.editMessageText(profileText, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('❓ FAQ', 'faq')],
-      [Markup.button.callback('🛠️ Тех поддержка', 'support_menu')],
+      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
+      [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   });
@@ -743,10 +822,16 @@ bot.on('text', async (ctx) => {
       );
       await promocodes.updateOne({ code }, { $inc: { used: 1 } });
 
-      // Проверяем новые титулы
+      // Проверяем новые титулы и достижения
       const newTitles = await checkAndAwardTitles(ctx.from.id);
-      if (newTitles.length > 0) {
+      const newAchievements = await checkAndAwardAchievements(ctx.from.id);
+      
+      if (newTitles.length > 0 && newAchievements.length > 0) {
+        ctx.reply(`🎉 Промокод активирован! Получено ${promo.stars} звёзд! 🏆 Новый титул! 🎖️ Достижение!`);
+      } else if (newTitles.length > 0) {
         ctx.reply(`🎉 Промокод активирован! Получено ${promo.stars} звёзд! 🏆 Новый титул получен!`);
+      } else if (newAchievements.length > 0) {
+        ctx.reply(`🎉 Промокод активирован! Получено ${promo.stars} звёзд! 🎖️ ${newAchievements[0].name}!`);
       } else {
         ctx.reply(`🎉 Промокод активирован! Получено ${promo.stars} звёзд!`);
       }
@@ -1037,6 +1122,59 @@ bot.action('faq', async (ctx) => {
   ctx.editMessageText(faqText, Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]]));
 });
 
+// Достижения
+bot.action('achievements', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const userAchievements = user.achievements || [];
+  
+  let achievementsText = `🎖️ *ДОСТИЖЕНИЯ* 🎖️\n\n`;
+  
+  for (const [achievementId, achievement] of Object.entries(ACHIEVEMENTS)) {
+    const isEarned = userAchievements.includes(achievementId);
+    const progress = getUserProgress(user, achievement);
+    const progressPercent = Math.min(100, Math.floor((progress / achievement.requirement) * 100));
+    
+    if (isEarned) {
+      achievementsText += `✅ ${achievement.icon} *${achievement.name}*\n`;
+      achievementsText += `📝 ${achievement.description}\n`;
+      achievementsText += `🎁 Награда: +${achievement.reward} звёзд *(получено)*\n\n`;
+    } else {
+      achievementsText += `⬜ ${achievement.icon} *${achievement.name}*\n`;
+      achievementsText += `📝 ${achievement.description}\n`;
+      achievementsText += `📊 Прогресс: ${progress}/${achievement.requirement} (${progressPercent}%)\n`;
+      achievementsText += `🎁 Награда: +${achievement.reward} звёзд\n\n`;
+    }
+  }
+  
+  const earnedCount = userAchievements.length;
+  const totalCount = Object.keys(ACHIEVEMENTS).length;
+  achievementsText += `📈 *Получено: ${earnedCount}/${totalCount} достижений*`;
+  
+  ctx.editMessageText(achievementsText, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('👤 Назад к профилю', 'profile')]
+    ])
+  });
+});
+
+function getUserProgress(user, achievement) {
+  switch (achievement.condition) {
+    case 'stars':
+      return user.stars || 0;
+    case 'invited':
+      return user.invited || 0;
+    case 'daily_streak':
+      return user.dailyStreak || 0;
+    case 'farm_count':
+      return user.farmCount || 0;
+    case 'promo_count':
+      return user.promoCount || 0;
+    default:
+      return 0;
+  }
+}
+
 // Меню техподдержки
 bot.action('support_menu', async (ctx) => {
   const supportText = `🛠️ *ТЕХНИЧЕСКАЯ ПОДДЕРЖКА* 🛠️
@@ -1128,10 +1266,16 @@ bot.action('farm', async (ctx) => {
       $set: { lastFarm: now() } 
     });
     
-    // Проверяем новые титулы
+    // Проверяем новые титулы и достижения
     const newTitles = await checkAndAwardTitles(ctx.from.id);
-    if (newTitles.length > 0) {
+    const newAchievements = await checkAndAwardAchievements(ctx.from.id);
+    
+    if (newTitles.length > 0 && newAchievements.length > 0) {
+      ctx.answerCbQuery('🌟 +1 звезда! 🏆 Новый титул! 🎖️ Достижение!');
+    } else if (newTitles.length > 0) {
       ctx.answerCbQuery('🌟 +1 звезда! 🏆 Новый титул получен!');
+    } else if (newAchievements.length > 0) {
+      ctx.answerCbQuery(`🌟 +1 звезда! 🎖️ ${newAchievements[0].name}!`);
     } else {
       ctx.answerCbQuery('🌟 +1 звезда!');
     }
@@ -1161,10 +1305,16 @@ bot.action('bonus', async (ctx) => {
       $set: { lastBonus: today, dailyStreak: dailyStreak } 
     });
     
-    // Проверяем новые титулы
+    // Проверяем новые титулы и достижения
     const newTitles = await checkAndAwardTitles(ctx.from.id);
-    if (newTitles.length > 0) {
+    const newAchievements = await checkAndAwardAchievements(ctx.from.id);
+    
+    if (newTitles.length > 0 && newAchievements.length > 0) {
+      ctx.answerCbQuery('🎁 +10 звёзд! 🏆 Новый титул! 🎖️ Достижение!');
+    } else if (newTitles.length > 0) {
       ctx.answerCbQuery('🎁 +10 звёзд бонус! 🏆 Новый титул!');
+    } else if (newAchievements.length > 0) {
+      ctx.answerCbQuery(`🎁 +10 звёзд! 🎖️ ${newAchievements[0].name}!`);
     } else {
       ctx.answerCbQuery('🎁 +10 звёзд! Ежедневный бонус получен!');
     }
