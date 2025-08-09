@@ -459,8 +459,8 @@ bot.action('profile', async (ctx) => {
   ctx.editMessageText(profileText, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎫 Мои заявки', 'my_tickets')],
-      [Markup.button.callback('🛠️ Тех поддержка', 'support_create'), Markup.button.callback('❓ FAQ', 'faq')],
+      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('❓ FAQ', 'faq')],
+      [Markup.button.callback('🛠️ Тех поддержка', 'support_menu')],
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   });
@@ -548,7 +548,7 @@ bot.on('text', async (ctx) => {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
             [Markup.button.callback('📋 Мои заявки', 'my_tickets')],
-            [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+            [Markup.button.callback('🛠️ Меню поддержки', 'support_menu')]
           ])
         }
       );
@@ -1037,6 +1037,27 @@ bot.action('faq', async (ctx) => {
   ctx.editMessageText(faqText, Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]]));
 });
 
+// Меню техподдержки
+bot.action('support_menu', async (ctx) => {
+  const supportText = `🛠️ *ТЕХНИЧЕСКАЯ ПОДДЕРЖКА* 🛠️
+
+💬 *Выберите действие:*
+
+🆕 *Создать заявку* — описать новую проблему
+📋 *Мои заявки* — посмотреть статус заявок
+
+⚡ Наша команда ответит в течение 24 часов!`;
+
+  ctx.editMessageText(supportText, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🆕 Создать заявку', 'support_create')],
+      [Markup.button.callback('📋 Мои заявки', 'my_tickets')],
+      [Markup.button.callback('👤 Назад к профилю', 'profile')]
+    ])
+  });
+});
+
 // Создание заявки в техподдержку
 bot.action('support_create', async (ctx) => {
   const supportText = `🛠️ **ТЕХНИЧЕСКАЯ ПОДДЕРЖКА** 🛠️
@@ -1071,27 +1092,27 @@ bot.action('my_tickets', async (ctx) => {
   if (userTickets.length === 0) {
     ticketsText += '📭 У вас пока нет заявок в техподдержку.';
   } else {
-    userTickets.forEach(ticket => {
-      const statusInfo = TICKET_STATUSES[ticket.status];
-      const date = ticket.createdAt.toLocaleDateString('ru-RU');
-      const shortId = ticket._id.toString().slice(-6);
-      
-      ticketsText += `${statusInfo.emoji} *#${shortId}* — ${statusInfo.name}\n`;
-      ticketsText += `📅 ${date} | 💬 ${ticket.message.substring(0, 50)}${ticket.message.length > 50 ? '...' : ''}\n`;
-      
-      if (ticket.adminResponse) {
-        ticketsText += `💬 *Ответ:* ${ticket.adminResponse.substring(0, 50)}${ticket.adminResponse.length > 50 ? '...' : ''}\n`;
-      }
-      
-      ticketsText += `\n`;
-    });
+      userTickets.forEach(ticket => {
+    const statusInfo = TICKET_STATUSES[ticket.status];
+    const date = ticket.createdAt ? ticket.createdAt.toLocaleDateString('ru-RU') : 'Неизвестно';
+    const shortId = ticket._id.toString().slice(-6);
+    
+    ticketsText += `${statusInfo.emoji} *#${shortId}* — ${statusInfo.name}\n`;
+    ticketsText += `📅 ${date} | 💬 ${ticket.message.substring(0, 50)}${ticket.message.length > 50 ? '...' : ''}\n`;
+    
+    if (ticket.adminResponse) {
+      ticketsText += `💬 *Ответ:* ${ticket.adminResponse.substring(0, 50)}${ticket.adminResponse.length > 50 ? '...' : ''}\n`;
+    }
+    
+    ticketsText += `\n`;
+  });
   }
 
   ctx.editMessageText(ticketsText, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('🛠️ Создать заявку', 'support_create')],
-      [Markup.button.callback('👤 Назад к профилю', 'profile')]
+      [Markup.button.callback('🆕 Создать заявку', 'support_create')],
+      [Markup.button.callback('🛠️ Назад в поддержку', 'support_menu')]
     ])
   });
 });
