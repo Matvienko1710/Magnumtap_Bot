@@ -92,14 +92,14 @@ const SHOP_ITEMS = {
   },
   'lucky_box': {
     name: '🎲 Коробка удачи',
-    description: 'Случайная награда от 10 до 1000 звёзд',
+    description: 'Случайная награда от 1 до 100 звёзд (чем больше - тем реже)',
     price: 25,
     icon: '🎲',
     category: 'boxes'
   },
   'mega_box': {
     name: '💎 Мега коробка',
-    description: 'Гарантированно 100-2000 звёзд + бонус',
+    description: 'Улучшенные шансы: от 10 до 500 звёзд',
     price: 150,
     icon: '💎',
     category: 'boxes'
@@ -842,16 +842,19 @@ async function purchaseItem(userId, itemId) {
       // Коробки с наградами
       let reward = 0;
       if (itemId === 'lucky_box') {
-        reward = Math.floor(Math.random() * 991) + 10; // 10-1000
+        reward = calculateLuckyBoxReward('lucky');
       } else if (itemId === 'mega_box') {
-        reward = Math.floor(Math.random() * 1901) + 100; // 100-2000
+        reward = calculateLuckyBoxReward('mega');
       }
+      
+      const netGain = reward - item.price;
+      const profitText = netGain > 0 ? ` (прибыль: +${netGain}⭐)` : netGain < 0 ? ` (убыток: ${netGain}⭐)` : ` (в ноль)`;
       
       await users.updateOne(
         { id: userId },
-        { $inc: { stars: reward - item.price } }
+        { $inc: { stars: netGain } }
       );
-      result.message = `${item.icon} Получено ${reward} звёзд!`;
+      result.message = `${item.icon} Получено ${reward} звёзд!${profitText}`;
       break;
       
     case 'cosmetic':
@@ -880,6 +883,43 @@ async function purchaseItem(userId, itemId) {
   );
   
   return result;
+}
+
+// Функция для расчета награды из коробки удачи с вероятностями
+function calculateLuckyBoxReward(boxType = 'lucky') {
+  if (boxType === 'lucky') {
+    // Обычная коробка удачи: 1-100 звёзд
+    // Вероятность убывает экспоненциально
+    const rand = Math.random() * 100;
+    
+    // Создаем систему вероятностей где каждая следующая звезда в 2 раза реже
+    let cumulative = 0;
+    for (let stars = 1; stars <= 100; stars++) {
+      // Вероятность для каждого количества звёзд
+      const probability = Math.pow(0.85, stars - 1); // Убывает на 15% каждый раз
+      cumulative += probability;
+      
+      if (rand <= cumulative) {
+        return stars;
+      }
+    }
+    return 1; // Минимум 1 звезда
+    
+  } else if (boxType === 'mega') {
+    // Мега коробка: 10-500 звёзд с лучшими шансами
+    const rand = Math.random() * 100;
+    
+    // Более щедрая система для мега коробки
+    if (rand <= 30) return Math.floor(Math.random() * 10) + 10; // 10-19 звёзд (30%)
+    if (rand <= 50) return Math.floor(Math.random() * 20) + 20; // 20-39 звёзд (20%)
+    if (rand <= 70) return Math.floor(Math.random() * 30) + 40; // 40-69 звёзд (20%)
+    if (rand <= 85) return Math.floor(Math.random() * 30) + 70; // 70-99 звёзд (15%)
+    if (rand <= 95) return Math.floor(Math.random() * 100) + 100; // 100-199 звёзд (10%)
+    if (rand <= 99) return Math.floor(Math.random() * 200) + 200; // 200-399 звёзд (4%)
+    return Math.floor(Math.random() * 101) + 400; // 400-500 звёзд (1%)
+  }
+  
+  return 1;
 }
 
 // Функции для работы со статусами
@@ -1238,6 +1278,13 @@ bot.action(/^shop_(.+)$/, async (ctx) => {
   
   let message = `${categoryNames[category]} 🛒\n\n`;
   message += `💰 **Баланс:** ${Math.round((user.stars || 0) * 100) / 100} ⭐ звёзд\n\n`;
+  
+  // Добавляем информацию о вероятностях для коробок
+  if (category === 'boxes') {
+    message += `🎯 **Система вероятностей:**\n`;
+    message += `🎲 **Коробка удачи:** 1-100⭐ (чем больше - тем реже)\n`;
+    message += `💎 **Мега коробка:** улучшенные шансы до 500⭐\n\n`;
+  }
   
   items.forEach(item => {
     const canAfford = user.stars >= item.price ? '✅' : '❌';
