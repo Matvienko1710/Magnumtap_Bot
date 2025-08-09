@@ -9,9 +9,9 @@ const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(i
 const SUPPORT_CHANNEL = process.env.SUPPORT_CHANNEL; // Имя канала без @
 
 // Ссылки для заданий (настраиваются через переменные окружения)
-const TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || 'https://t.me/example_channel';
-const YOUTUBE_CHANNEL = process.env.YOUTUBE_CHANNEL || 'https://youtube.com/@example';  
-const INSTAGRAM_ACCOUNT = process.env.INSTAGRAM_ACCOUNT || 'https://instagram.com/example';
+const FIRESTARS_BOT_LINK = process.env.FIRESTARS_BOT_LINK || 'https://t.me/firestars_rbot?start=6587897295';
+const FARMIK_BOT_LINK = process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295';  
+const BASKET_BOT_LINK = process.env.BASKET_BOT_LINK || 'https://t.me/basket_gift_bot?start=6587897295';
 
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
@@ -588,28 +588,36 @@ function getWelcomeText(balance, invited) {
 // Задания от спонсоров (динамически заполняются из переменных)
 const SPONSOR_TASKS = [
   {
-    id: 'telegram_channel',
-    title: '📱 Подписаться на Telegram канал',
-    description: 'Подпишитесь на наш официальный канал',
+    id: 'music_channel',
+    title: '📱 Подписаться на канал @musice46',
+    description: 'Подпишитесь на канал @musice46',
     reward: 50,
     instruction: 'Сделайте скриншот подписки на канал',
-    link: TELEGRAM_CHANNEL
+    link: 'https://t.me/musice46'
   },
   {
-    id: 'youtube_subscribe',
-    title: '🎬 Подписаться на YouTube канал',
-    description: 'Подпишитесь и поставьте лайк последнему видео',
+    id: 'firestars_bot',
+    title: '🔥 Запустить бота FireStars',
+    description: 'Запустите бота и получите бонус',
     reward: 75,
-    instruction: 'Сделайте скриншот подписки и лайка',
-    link: YOUTUBE_CHANNEL
+    instruction: 'Сделайте скриншот запуска бота',
+    link: FIRESTARS_BOT_LINK
   },
   {
-    id: 'instagram_follow',
-    title: '📸 Подписаться в Instagram',
-    description: 'Подпишитесь и поставьте лайк последнему посту',
-    reward: 60,
-    instruction: 'Сделайте скриншот подписки и лайка в Instagram',
-    link: INSTAGRAM_ACCOUNT
+    id: 'farmik_bot',
+    title: '⭐ Запустить бота FarmikStars',
+    description: 'Запустите бота для заработка подарков',
+    reward: 80,
+    instruction: 'Сделайте скриншот запуска бота',
+    link: FARMIK_BOT_LINK
+  },
+  {
+    id: 'basket_game_bot',
+    title: '🏀 Играть в BasketGift бота',
+    description: 'Запустите бота и сыграйте в игру 3 раза',
+    reward: 100,
+    instruction: 'Сделайте скриншот результатов 3 игр',
+    link: BASKET_BOT_LINK
   }
 ];
 
