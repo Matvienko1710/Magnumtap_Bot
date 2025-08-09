@@ -961,6 +961,77 @@ function getUserDisplayName(user, userData = null) {
   return user.username || user.first_name || `User${user.id}`;
 }
 
+// Обработка активации промокода
+async function handlePromoActivation(ctx, text, userState) {
+  const userId = ctx.from.id;
+  
+  try {
+    console.log('🎫 Активация промокода:', text);
+    
+    const code = text.trim().toUpperCase();
+    const promo = await promocodes.findOne({ code });
+    
+    if (!promo) {
+      await ctx.reply('❌ Промокод не найден!');
+      userStates.delete(userId);
+      return;
+    }
+    
+    if (promo.used >= promo.max) {
+      await ctx.reply('❌ Промокод исчерпан!');
+      userStates.delete(userId);
+      return;
+    }
+    
+    const user = await getUser(userId, ctx);
+    if (user.promoCodes && user.promoCodes.includes(code)) {
+      await ctx.reply('❌ Вы уже использовали этот промокод!');
+      userStates.delete(userId);
+      return;
+    }
+    
+    console.log('✅ Промокод валиден, выдаем награду:', promo.stars, 'звёзд');
+    
+    // Обновляем пользователя
+    await users.updateOne(
+      { id: userId },
+      { 
+        $inc: { stars: promo.stars, promoCount: 1 },
+        $addToSet: { promoCodes: code }
+      }
+    );
+    
+    // Обновляем промокод
+    await promocodes.updateOne(
+      { code },
+      { $inc: { used: 1 } }
+    );
+    
+    // Проверяем достижения
+    await checkAndAwardAchievements(userId);
+    await checkAndAwardTitles(userId);
+    
+    // Очищаем состояние
+    userStates.delete(userId);
+    
+    const newBalance = Math.round((user.stars + promo.stars) * 100) / 100;
+    
+    await ctx.reply(`✅ **Промокод активирован!**\n\n` +
+                    `🎫 **Код:** \`${code}\`\n` +
+                    `⭐ **Получено:** ${promo.stars} звёзд\n` +
+                    `💰 **Новый баланс:** ${newBalance}⭐\n\n` +
+                    `🎉 Поздравляем с успешной активацией!`, 
+                    { parse_mode: 'Markdown' });
+    
+    console.log('✅ Промокод успешно активирован пользователем:', userId);
+    
+  } catch (error) {
+    console.error('❌ Ошибка активации промокода:', error);
+    userStates.delete(userId);
+    await ctx.reply('❌ Произошла ошибка при активации промокода');
+  }
+}
+
 // Обработка создания промокода
 async function handlePromoCreation(ctx, text, userState) {
   const userId = ctx.from.id;
@@ -1998,6 +2069,12 @@ bot.action('promo', async (ctx) => {
     return;
   }
   
+  // Устанавливаем состояние для активации промокода
+  userStates.set(ctx.from.id, { 
+    type: 'activate_promo' 
+  });
+  console.log('🎫 Пользователь начинает активацию промокода:', ctx.from.id);
+  
   await adminForceReply(ctx, '🎫 Введите промокод:');
 });
 
@@ -2101,6 +2178,12 @@ bot.on('text', async (ctx) => {
   if (userState && userState.type === 'admin_create_promo') {
     console.log('🎫 Обрабатываем создание промокода через состояние');
     await handlePromoCreation(ctx, text, userState);
+    return;
+  }
+  
+  if (userState && userState.type === 'activate_promo') {
+    console.log('🎫 Обрабатываем активацию промокода через состояние');
+    await handlePromoActivation(ctx, text, userState);
     return;
   }
   
