@@ -47,7 +47,7 @@ const ACHIEVEMENTS = {
     description: 'Накопить 100 звёзд', 
     condition: 'stars', 
     requirement: 100,
-    reward: 10,
+    reward: 5,
     icon: '💰'
   },
   'social_butterfly': { 
@@ -55,7 +55,7 @@ const ACHIEVEMENTS = {
     description: 'Пригласить 5 друзей', 
     condition: 'invited', 
     requirement: 5,
-    reward: 25,
+    reward: 8,
     icon: '🤝'
   },
   'week_warrior': { 
@@ -63,7 +63,7 @@ const ACHIEVEMENTS = {
     description: 'Получить бонус 7 дней подряд', 
     condition: 'daily_streak', 
     requirement: 7,
-    reward: 50,
+    reward: 12,
     icon: '⚡'
   },
   'farm_master': { 
@@ -71,7 +71,7 @@ const ACHIEVEMENTS = {
     description: 'Сфармить 200 раз', 
     condition: 'farm_count', 
     requirement: 200,
-    reward: 30,
+    reward: 10,
     icon: '🌾'
   },
   'promo_hunter': { 
@@ -79,7 +79,7 @@ const ACHIEVEMENTS = {
     description: 'Активировать 10 промокодов', 
     condition: 'promo_count', 
     requirement: 10,
-    reward: 40,
+    reward: 15,
     icon: '🎫'
   }
 };
