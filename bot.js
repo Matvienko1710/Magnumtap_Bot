@@ -2290,6 +2290,58 @@ async function getMainMenu(ctx, userId) {
   };
 }
 
+// Команда для обновления статуса в чате
+bot.command('updatechat', async (ctx) => {
+  try {
+    const promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
+    if (!promoChatId) {
+      return ctx.reply('❌ Чат для уведомлений не настроен');
+    }
+    
+    let targetChatId = promoChatId;
+    if (promoChatId.startsWith('@')) {
+      targetChatId = promoChatId.substring(1);
+    }
+    
+    // Проверяем, что команда выполнена в нужном чате
+    if (ctx.chat.id.toString() !== targetChatId && ctx.chat.username !== targetChatId) {
+      return ctx.reply('❌ Эта команда работает только в чате уведомлений');
+    }
+    
+    const userId = ctx.from.id;
+    const user = await users.findOne({ id: userId });
+    
+    if (!user) {
+      return ctx.reply('❌ Вы не зарегистрированы в боте');
+    }
+    
+    const { statusText, titleText } = getUserChatInfo(user);
+    
+    let userInfo = `🔄 **Обновление информации**\n\n`;
+    userInfo += `👤 **Игрок:** ${ctx.from.first_name || 'Неизвестно'}\n`;
+    
+    if (statusText) {
+      userInfo += `💫 **Статус:** ${statusText}\n`;
+    } else {
+      userInfo += `💫 **Статус:** Не установлен\n`;
+    }
+    
+    if (titleText) {
+      userInfo += `🏆 **Титул:** ${titleText}\n`;
+    } else {
+      userInfo += `🏆 **Титул:** Не установлен\n`;
+    }
+    
+    userInfo += `\n💡 Теперь ваши сообщения будут отображаться с этой информацией!`;
+    
+    await ctx.reply(userInfo, { parse_mode: 'Markdown' });
+    
+  } catch (error) {
+    console.error('❌ Ошибка при обновлении информации в чате:', error);
+    await ctx.reply('❌ Произошла ошибка при обновлении информации');
+  }
+});
+
 bot.start(async (ctx) => {
   // Обрабатываем реферальный параметр
   const startPayload = ctx.startPayload;
@@ -3099,6 +3151,27 @@ bot.action('admin_cancel', async (ctx) => {
   await ctx.answerCbQuery('❌ Операция отменена');
 });
 
+// Функция получения статуса и титула пользователя для чата
+function getUserChatInfo(user) {
+  const status = getUserStatus(user);
+  const mainTitle = getUserMainTitle(user);
+  
+  let statusText = '';
+  let titleText = '';
+  
+  // Статус пользователя
+  if (status) {
+    statusText = `[${status.icon} ${status.name}]`;
+  }
+  
+  // Главный титул
+  if (mainTitle) {
+    titleText = `[${mainTitle.icon} ${mainTitle.name}]`;
+  }
+  
+  return { statusText, titleText };
+}
+
 // Функция уведомления в чат о активации промокода
 async function notifyPromoActivationToChat(activatorId, activatorName, code, rewardText) {
   try {
@@ -3511,10 +3584,116 @@ bot.on('photo', async (ctx) => {
   }
 });
 
+// Обработка новых участников чата
+bot.on('new_chat_members', async (ctx) => {
+  try {
+    const chatId = ctx.chat.id;
+    const promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
+    
+    // Проверяем, что это нужный чат
+    if (!promoChatId) return;
+    
+    let targetChatId = promoChatId;
+    if (promoChatId.startsWith('@')) {
+      targetChatId = promoChatId.substring(1);
+    }
+    
+    if (chatId.toString() !== targetChatId && ctx.chat.username !== targetChatId) {
+      return;
+    }
+    
+    console.log(`👥 Новый участник в чате уведомлений: ${ctx.message.new_chat_members.length} человек`);
+    
+    for (const newMember of ctx.message.new_chat_members) {
+      // Пропускаем ботов
+      if (newMember.is_bot) continue;
+      
+      const userId = newMember.id;
+      console.log(`🔍 Проверяем пользователя ${userId} (${newMember.first_name})`);
+      
+      // Ищем пользователя в базе данных
+      const user = await users.findOne({ id: userId });
+      
+      if (user) {
+        const { statusText, titleText } = getUserChatInfo(user);
+        
+        // Формируем текст с информацией о пользователе
+        let userInfo = `👋 **Добро пожаловать в чат!**\n\n`;
+        userInfo += `👤 **Игрок:** ${newMember.first_name || 'Неизвестно'}\n`;
+        
+        if (statusText) {
+          userInfo += `💫 **Статус:** ${statusText}\n`;
+        }
+        
+        if (titleText) {
+          userInfo += `🏆 **Титул:** ${titleText}\n`;
+        }
+        
+        userInfo += `\n🎮 Приятной игры в MagnumTap!`;
+        
+        // Отправляем приветственное сообщение
+        await ctx.reply(userInfo, { parse_mode: 'Markdown' });
+        
+        console.log(`✅ Приветствие отправлено для пользователя ${userId}`);
+        
+      } else {
+        console.log(`❌ Пользователь ${userId} не найден в базе данных`);
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Ошибка при обработке новых участников чата:', error);
+  }
+});
+
 bot.on('text', async (ctx) => {
   console.log('📨 Получено текстовое сообщение от:', ctx.from.id, ctx.from.first_name);
   console.log('📝 Текст сообщения:', ctx.message.text);
   console.log('🔗 Есть ли reply_to_message:', !!ctx.message.reply_to_message);
+  
+  // Проверяем, является ли это сообщением в чате уведомлений
+  const promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
+  if (promoChatId) {
+    let targetChatId = promoChatId;
+    if (promoChatId.startsWith('@')) {
+      targetChatId = promoChatId.substring(1);
+    }
+    
+    if (ctx.chat.id.toString() === targetChatId || ctx.chat.username === targetChatId) {
+      // Это сообщение в чате уведомлений
+      try {
+        const userId = ctx.from.id;
+        const user = await users.findOne({ id: userId });
+        
+        if (user) {
+          const { statusText, titleText } = getUserChatInfo(user);
+          
+          // Формируем префикс с информацией о пользователе
+          let userPrefix = '';
+          if (statusText || titleText) {
+            userPrefix = `${statusText} ${titleText}`.trim();
+          }
+          
+          // Если есть префикс, отправляем сообщение с информацией о пользователе
+          if (userPrefix) {
+            const userInfo = `👤 **${ctx.from.first_name || 'Неизвестно'}** ${userPrefix}\n💬 ${ctx.message.text}`;
+            
+            // Удаляем оригинальное сообщение и отправляем новое с информацией
+            try {
+              await ctx.deleteMessage();
+            } catch (deleteError) {
+              console.log('Не удалось удалить оригинальное сообщение:', deleteError.message);
+            }
+            
+            await ctx.reply(userInfo, { parse_mode: 'Markdown' });
+            return; // Прерываем дальнейшую обработку
+          }
+        }
+      } catch (error) {
+        console.error('❌ Ошибка при обработке сообщения в чате уведомлений:', error);
+      }
+    }
+  }
   
   if (ctx.message.reply_to_message) {
     console.log('💬 Reply to text:', ctx.message.reply_to_message.text);
