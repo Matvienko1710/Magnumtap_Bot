@@ -576,14 +576,15 @@ async function getUser(id) {
 function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
 
 function createProgressBar(current, total, length = 10) {
+  if (total <= 0) return '░'.repeat(length); // Избегаем деления на ноль
   const filled = Math.floor((current / total) * length);
-  const empty = length - filled;
-  return '▓'.repeat(filled) + '░'.repeat(empty);
+  const empty = Math.max(0, length - filled);
+  return '▓'.repeat(Math.max(0, filled)) + '░'.repeat(empty);
 }
 
 async function getDetailedProfile(userId) {
   const user = await getUser(userId);
-  const balance = user.stars || 0;
+  const balance = Math.round((user.stars || 0) * 100) / 100; // Округляем до 2 знаков
   const friends = user.invited || 0;
   const rank = getUserMainTitle(user);
   const nextLevel = getNextLevelInfo(user);
@@ -616,14 +617,17 @@ async function getDetailedProfile(userId) {
     nextLevelStars = prevLevelStars;
   }
   
-  const currentProgress = balance - prevLevelStars;
+  const currentProgress = Math.max(0, balance - prevLevelStars);
   const levelRange = nextLevelStars - prevLevelStars;
   const progressPercent = nextLevel.starsNeeded === 0 ? 100 : 
-    Math.floor((currentProgress / levelRange) * 100);
+    levelRange > 0 ? Math.floor((currentProgress / levelRange) * 100) : 0;
   
   const progressBar = nextLevel.starsNeeded === 0 ? 
     '▓▓▓▓▓▓▓▓▓▓ 100%' : 
     createProgressBar(currentProgress, levelRange) + ` ${progressPercent}%`;
+  
+  // Округляем starsNeeded до 2 знаков
+  const starsNeededRounded = Math.round(nextLevel.starsNeeded * 100) / 100;
   
   return `👑 **Профиль игрока MagnumTap** 👑
 
@@ -634,7 +638,7 @@ async function getDetailedProfile(userId) {
 
 📊 **Прогресс уровня:**  
 ${progressBar}
-${nextLevel.starsNeeded === 0 ? '🌟 Максимальный уровень достигнут!' : `До ${nextLevel.nextLevel}: ${nextLevel.starsNeeded} звёзд`}`;
+${nextLevel.starsNeeded === 0 ? '🌟 Максимальный уровень достигнут!' : `До ${nextLevel.nextLevel}: ${starsNeededRounded} звёзд`}`;
 }
 
 function getWelcomeText(balance, invited) {
