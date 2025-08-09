@@ -208,6 +208,11 @@ BOT_TOKEN=ваш_токен_бота_здесь
 MONGODB_URI=строка_подключения_MongoDB
 ADMIN_IDS=ваши_telegram_id_через_запятую
 SUPPORT_CHANNEL=support_channel_name     # Имя канала техподдержки без @
+
+# Ссылки для заданий от спонсоров
+TELEGRAM_CHANNEL=https://t.me/your_channel
+YOUTUBE_CHANNEL=https://youtube.com/@your_channel  
+INSTAGRAM_ACCOUNT=https://instagram.com/your_account
 ```
 
 ### 3. Автоматический деплой
