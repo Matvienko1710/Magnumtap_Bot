@@ -3249,19 +3249,31 @@ async function handlePostCreation(ctx, text, userState) {
     
     // Для обычного поста - сохраняем текст и предлагаем добавить кнопку
     if (postType === 'normal') {
+      console.log(`📝 Создаем обычный пост для пользователя ${ctx.from.id}`);
+      console.log(`📝 Текст поста: ${text.substring(0, 100)}...`);
+      
       userStates.set(ctx.from.id, { 
         type: 'admin_post_add_button', 
         postType: 'normal',
         postText: text 
       });
       
+      console.log(`💾 Состояние сохранено: ${JSON.stringify(userStates.get(ctx.from.id))}`);
+      
       const previewText = `📝 **Текст поста готов!**\n\n${text.substring(0, 200)}${text.length > 200 ? '...' : ''}\n\n💡 Хотите добавить кнопку к посту?`;
       
-      await sendMessageWithPhoto(ctx, previewText, Markup.inlineKeyboard([
-        [Markup.button.callback('🔘 Добавить кнопку', 'post_add_button')],
-        [Markup.button.callback('📢 Опубликовать без кнопки', 'post_publish_now')],
-        [Markup.button.callback('❌ Отменить', 'admin_panel')]
-      ]));
+      console.log(`📤 Отправляем предварительный просмотр с кнопками...`);
+      
+      await ctx.reply(previewText, { 
+        parse_mode: 'Markdown',
+        reply_markup: Markup.inlineKeyboard([
+          [Markup.button.callback('🔘 Добавить кнопку', 'post_add_button')],
+          [Markup.button.callback('📢 Опубликовать без кнопки', 'post_publish_now')],
+          [Markup.button.callback('❌ Отменить', 'admin_panel')]
+        ]).reply_markup
+      });
+      
+      console.log(`✅ Предварительный просмотр отправлен успешно`);
       
       return;
     }
@@ -3892,6 +3904,18 @@ bot.on('text', async (ctx) => {
     return;
   }
   
+  if (userState && userState.type === 'admin_create_post') {
+    console.log('📝 Обрабатываем создание поста через состояние');
+    await handlePostCreation(ctx, text, userState);
+    return;
+  }
+  
+  if (userState && userState.type === 'admin_post_button_input') {
+    console.log('🔘 Обрабатываем ввод кнопки для поста через состояние');
+    await handlePostButtonInput(ctx, text, userState);
+    return;
+  }
+  
   // Если нет состояния, проверяем reply_to_message (старый способ)
   const replyMsg = ctx.message.reply_to_message;
   if (!replyMsg) {
@@ -4293,17 +4317,7 @@ bot.on('text', async (ctx) => {
         return;
       }
       
-      // Создание поста
-      else if (userState.type === 'admin_create_post') {
-        await handlePostCreation(ctx, text, userState);
-        return;
-      }
-      
-      // Добавление кнопки к посту
-      else if (userState.type === 'admin_post_button_input') {
-        await handlePostButtonInput(ctx, text, userState);
-        return;
-      }
+
 
       // Выдать/забрать звёзды
       else if (replyText.includes('ID пользователя и количество звёзд')) {
@@ -4460,13 +4474,22 @@ bot.action('post_type_promo', async (ctx) => {
 bot.action('post_add_button', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
+  console.log(`🔘 Пользователь ${ctx.from.id} нажал "Добавить кнопку"`);
+  
+  const currentState = userStates.get(ctx.from.id);
+  console.log(`📋 Текущее состояние: ${JSON.stringify(currentState)}`);
+  
   userStates.set(ctx.from.id, { 
     type: 'admin_post_button_input',
     postType: 'normal',
-    postText: userStates.get(ctx.from.id)?.postText || ''
+    postText: currentState?.postText || ''
   });
   
+  console.log(`💾 Новое состояние: ${JSON.stringify(userStates.get(ctx.from.id))}`);
+  
   await adminForceReply(ctx, '🔘 **Добавление кнопки**\n\nВведите данные кнопки в формате:\n\nТЕКСТ_КНОПКИ:ССЫЛКА\n\nПримеры:\n🎮 Играть:https://t.me/bot?start=game\n💬 Чат:https://t.me/+Poy0ZtUoux1hMTMy\n🌐 Сайт:https://magnumtap.com');
+  
+  console.log(`✅ Запрос на ввод кнопки отправлен`);
 });
 
 bot.action('post_publish_now', async (ctx) => {
