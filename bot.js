@@ -359,7 +359,7 @@ const TITLES = {
   'vip_elite': { name: 'VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only', icon: '💫' }
 };
 
-// Система рангов (по звёздам)
+// Система уровней (по звёздам)
 const RANKS = [
   { name: 'Новичок', requirement: 0, color: '🆕' },           // Уровень 1
   { name: 'Ученик', requirement: 25, color: '📚' },           // Уровень 2 
@@ -999,7 +999,7 @@ function getNextRankInfo(user) {
   const stars = user.stars || 0;
   const currentRank = getUserRank(user);
   
-  // Найти следующий ранг
+  // Найти следующий уровень
   const currentIndex = RANKS.findIndex(rank => rank.name === currentRank.name);
   if (currentIndex < RANKS.length - 1) {
     const nextRank = RANKS[currentIndex + 1];
@@ -1007,7 +1007,7 @@ function getNextRankInfo(user) {
     const progress = Math.max(0, Math.min(100, (stars - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
     
     // Отладочная информация
-    console.log(`🔍 Ранг пользователя ${user.id}: ${stars} звёзд, ${currentRank.name} -> ${nextRank.name}, прогресс: ${Math.round(progress)}%`);
+    console.log(`🔍 Уровень пользователя ${user.id}: ${stars} звёзд, ${currentRank.name} -> ${nextRank.name}, прогресс: ${Math.round(progress)}%`);
     
     return {
       current: currentRank,
@@ -1919,11 +1919,11 @@ async function getDetailedProfile(userId, ctx) {
   let progressText = '';
   if (nextRankInfo.next && nextRankInfo.starsToNext > 0) {
     const progressBar = createProgressBar(nextRankInfo.progress, 100) + ` ${nextRankInfo.progress}%`;
-    progressText = `📊 **Прогресс ранга:**  
+    progressText = `📊 **Прогресс уровня:**  
 ${progressBar}
 До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} звёзд`;
   } else {
-    progressText = '🏆 **Максимальный ранг достигнут!**';
+    progressText = '🏆 **Максимальный уровень достигнут!**';
   }
   
   // Проверяем статус майнера
@@ -1946,7 +1946,7 @@ ${progressBar}
 [🪙 ${magnumCoinsBalance}] Magnum Coin  
 [💎 ${starsBalance}] звёзд  
 [👥 ${friends}] друзей приглашено  
-**Ранг:** [${rank.color} ${rank.name}]  
+**Уровень:** [${rank.color} ${rank.name}]  
 **Титул:** [${title}]${minerText}
 
 ${progressText}
@@ -2561,7 +2561,7 @@ bot.action('top', async (ctx) => {
     msg += `├ [⭐ ${stars}] звёзд\n`;
     msg += `├ [🪙 ${magnumCoins}] Magnum Coin\n`;
     msg += `├ **Статус:** [${status.color} ${status.name}]\n`;
-    msg += `├ **Ранг:** [${rank.color} ${rank.name}]\n`;
+    msg += `├ **Уровень:** [${rank.color} ${rank.name}]\n`;
     msg += `└ **Титул:** [${title}]\n`;
     msg += `${divider}\n\n`;
   }
@@ -4411,7 +4411,7 @@ bot.action('faq', async (ctx) => {
   await sendMessageWithPhoto(ctx, faqText, Markup.inlineKeyboard([
     [Markup.button.callback('🌟 Как фармить звёзды', 'faq_farming'), Markup.button.callback('🎁 Ежедневный бонус', 'faq_bonus')],
     [Markup.button.callback('🎯 Задания', 'faq_tasks'), Markup.button.callback('👥 Приглашение друзей', 'faq_referrals')],
-    [Markup.button.callback('🏆 Титулы и ранги', 'faq_titles'), Markup.button.callback('🎖️ Достижения', 'faq_achievements')],
+    [Markup.button.callback('🏆 Титулы и уровни', 'faq_titles'), Markup.button.callback('🎖️ Достижения', 'faq_achievements')],
     [Markup.button.callback('📊 Уровни игрока', 'faq_levels'), Markup.button.callback('🎫 Промокоды', 'faq_promocodes')],
     [Markup.button.callback('💫 Статусы', 'faq_statuses'), Markup.button.callback('🛠️ Техподдержка', 'faq_support')],
     [Markup.button.callback('🏠 Главное меню', 'main_menu')]
@@ -4606,9 +4606,9 @@ bot.action('faq_referrals', async (ctx) => {
 });
 
 bot.action('faq_titles', async (ctx) => {
-  const titlesText = `🏆 **Ранги и титулы** 🏆
+  const titlesText = `🏆 **Уровни и титулы** 🏆
 
-📊 **15 рангов (по звёздам):**
+📊 **15 уровней (по звёздам):**
 🆕 Новичок (0) → 📚 Ученик (25) → 🎓 Стажёр (75) → ⚙️ Работник (150) →
 🔧 Специалист (300) → 💼 Эксперт (500) → 🏅 Мастер (800) →
 🥉 Профессионал (1200) → 🥈 Виртуоз (1800) → 🥇 Элита (2500) →
@@ -4664,7 +4664,7 @@ bot.action('faq_achievements', async (ctx) => {
 bot.action('faq_levels', async (ctx) => {
   const levelsText = `📊 **Система уровней** 📊
 
-⭐ **15 рангов (по звёздам):**
+⭐ **15 уровней (по звёздам):**
 🆕 Новичок - 0 | 📚 Ученик - 25 | 🎓 Стажёр - 75
 ⚙️ Работник - 150 | 🔧 Специалист - 300 | 💼 Эксперт - 500
 🏅 Мастер - 800 | 🥉 Профессионал - 1200 | 🥈 Виртуоз - 1800
