@@ -440,7 +440,13 @@ const SHOP_ITEMS = {
     icon: '🏷️',
     category: 'cosmetic'
   },
-
+  'miner': {
+    name: '⛏️ Майнер',
+    description: 'Автоматический майнер Magnum Coin. Работает 24/7',
+    price: 5000,
+    icon: '⛏️',
+    category: 'miner'
+  }
 };
 
 // Система статусов пользователей
@@ -1212,8 +1218,8 @@ async function purchaseItem(userId, itemId) {
   const now = Math.floor(Date.now() / 1000);
   let result = { success: true, message: '' };
   
-  // Записываем трату звёзд для всех покупок (кроме кастомных титулов)
-  if (item.category !== 'cosmetic' || itemId !== 'custom_title') {
+  // Записываем трату звёзд для всех покупок (кроме кастомных титулов и майнера)
+  if ((item.category !== 'cosmetic' || itemId !== 'custom_title') && item.category !== 'miner') {
     await users.updateOne(
       { id: userId },
       { 
@@ -1268,6 +1274,28 @@ async function purchaseItem(userId, itemId) {
         result.message = `${item.icon} Кастомный титул готов! Заявка будет отправлена на модерацию.`;
         result.needInput = true;
       }
+      break;
+      
+    case 'miner':
+      // Проверяем, не куплен ли уже майнер
+      if (user.miner && user.miner.active) {
+        return { success: false, message: 'У вас уже есть активный майнер!' };
+      }
+      
+      // Майнер - активируется и работает постоянно
+      await users.updateOne(
+        { id: userId },
+        { 
+          $inc: { stars: -item.price },
+          $set: { 
+            'miner.active': true,
+            'miner.purchasedAt': now,
+            'miner.lastReward': now
+          },
+          $push: { purchases: { itemId, price: item.price, timestamp: now } }
+        }
+      );
+      result.message = `${item.icon} Майнер активирован! Начинает работать автоматически и приносить Magnum Coin каждый час.`;
       break;
   }
   
@@ -1839,6 +1867,15 @@ ${progressBar}
     progressText = '🏆 **Максимальный ранг достигнут!**';
   }
   
+  // Проверяем статус майнера
+  let minerText = '';
+  if (user.miner && user.miner.active) {
+    const now = Math.floor(Date.now() / 1000);
+    const hoursWorking = Math.floor((now - user.miner.purchasedAt) / 3600);
+    const hoursUntilReward = Math.ceil((3600 - (now - user.miner.lastReward)) / 3600);
+    minerText = `\n⛏️ **Майнер:** Активен (работает ${hoursWorking}ч, следующая награда через ${hoursUntilReward}ч)`;
+  }
+  
   // Получаем общую статистику бота
   const botStats = await getBotStatistics();
   
@@ -1851,7 +1888,7 @@ ${progressBar}
 [💎 ${starsBalance}] звёзд  
 [👥 ${friends}] друзей приглашено  
 **Ранг:** [${rank.color} ${rank.name}]  
-**Титул:** [${title}]
+**Титул:** [${title}]${minerText}
 
 ${progressText}
 
@@ -2029,6 +2066,14 @@ async function updateMainMenuBalance(ctx) {
   try {
     // Принудительно обновляем кеш пользователя
     invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
+    
+    // Получаем свежие данные из базы
+    const freshUser = await users.findOne({ id: ctx.from.id });
+    if (freshUser) {
+      userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
+    }
+    
     const menu = await getMainMenu(ctx, ctx.from.id);
     await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard);
   } catch (error) {
@@ -2039,8 +2084,16 @@ async function updateMainMenuBalance(ctx) {
 // Функция для обновления профиля в реальном времени
 async function updateProfileRealtime(ctx) {
   try {
+    // Принудительно очищаем кеш несколько раз для гарантии
     invalidateUserCache(ctx.from.id);
     invalidateBotStatsCache();
+    
+    // Получаем свежие данные из базы
+    const freshUser = await users.findOne({ id: ctx.from.id });
+    if (freshUser) {
+      userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
+    }
+    
     const profileText = await getDetailedProfile(ctx.from.id, ctx);
 
     const keyboard = Markup.inlineKeyboard([
@@ -5146,6 +5199,65 @@ bot.action(/^ticket_reply_(.+)$/, async (ctx) => {
     ctx.answerCbQuery('❌ Ошибка! Убедитесь, что бот может писать в личные сообщения');
   }
 });
+// Функция автоматической работы майнера
+async function processMinerRewards() {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const oneHour = 3600; // 1 час в секундах
+    
+    // Находим всех пользователей с активными майнерами
+    const usersWithMiners = await users.find({
+      'miner.active': true,
+      'miner.lastReward': { $lt: now - oneHour }
+    }).toArray();
+    
+    console.log(`🔍 Найдено ${usersWithMiners.length} пользователей с активными майнерами для выплаты`);
+    
+    for (const user of usersWithMiners) {
+      const timeSinceLastReward = now - (user.miner.lastReward || 0);
+      const hoursElapsed = Math.floor(timeSinceLastReward / oneHour);
+      
+      if (hoursElapsed > 0) {
+        const rewardPerHour = 2; // 2 Magnum Coin за час
+        const totalReward = hoursElapsed * rewardPerHour;
+        
+        // Выдаем награду
+        await users.updateOne(
+          { id: user.id },
+          {
+            $inc: { 
+              magnumCoins: totalReward,
+              totalEarnedMagnumCoins: totalReward
+            },
+            $set: { 'miner.lastReward': now }
+          }
+        );
+        
+        invalidateUserCache(user.id);
+        console.log(`⛏️ Майнер пользователя ${user.id} выдал ${totalReward} Magnum Coin за ${hoursElapsed} часов`);
+        
+        // Отправляем уведомление пользователю (если возможно)
+        try {
+          await bot.telegram.sendMessage(user.id, 
+            `⛏️ **Майнер принес доход!**\n\n` +
+            `💰 Получено: ${totalReward} 🪙 Magnum Coin\n` +
+            `⏰ За период: ${hoursElapsed} час(ов)\n\n` +
+            `Майнер продолжает работать автоматически!`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (notifyError) {
+          console.log(`⚠️ Не удалось уведомить пользователя ${user.id} о доходе майнера`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка обработки майнеров:', error);
+  }
+}
+
+// Запускаем обработку майнеров каждые 30 минут
+setInterval(processMinerRewards, 30 * 60 * 1000); // 30 минут
+
 // Глобальная обработка ошибок для предотвращения краха бота
 bot.catch(async (err, ctx) => {
   console.error('🚨 Глобальная ошибка бота:', err);
