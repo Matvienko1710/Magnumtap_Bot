@@ -56,6 +56,71 @@ const RANKS = [
   { name: '⭐ Legend', requirement: 5000, color: '⭐' }
 ];
 
+// Система магазина
+const SHOP_ITEMS = {
+  'boost_farm': {
+    name: '⚡ Бустер фарма x2',
+    description: 'Удваивает награду за фарм на 1 час',
+    price: 50,
+    icon: '⚡',
+    duration: 3600, // 1 час в секундах
+    category: 'boosts'
+  },
+  'boost_bonus': {
+    name: '🎁 Бустер бонуса x2', 
+    description: 'Удваивает ежедневный бонус на 3 дня',
+    price: 100,
+    icon: '🎁',
+    duration: 259200, // 3 дня в секундах
+    category: 'boosts'
+  },
+  'multiplier_stars': {
+    name: '✨ Множитель звёзд x3',
+    description: 'Утраивает все награды за звёзды на 30 минут',
+    price: 200,
+    icon: '✨',
+    duration: 1800, // 30 минут
+    category: 'multipliers'
+  },
+  'premium_week': {
+    name: '👑 Премиум статус',
+    description: 'VIP статус на неделю + все бонусы',
+    price: 500,
+    icon: '👑',
+    duration: 604800, // 7 дней
+    category: 'premium'
+  },
+  'lucky_box': {
+    name: '🎲 Коробка удачи',
+    description: 'Случайная награда от 10 до 1000 звёзд',
+    price: 25,
+    icon: '🎲',
+    category: 'boxes'
+  },
+  'mega_box': {
+    name: '💎 Мега коробка',
+    description: 'Гарантированно 100-2000 звёзд + бонус',
+    price: 150,
+    icon: '💎',
+    category: 'boxes'
+  },
+  'custom_title': {
+    name: '🏷️ Кастомный титул',
+    description: 'Создайте свой уникальный титул',
+    price: 1000,
+    icon: '🏷️',
+    category: 'cosmetic'
+  },
+  'rainbow_name': {
+    name: '🌈 Радужное имя',
+    description: 'Цветное отображение имени в топе на месяц',
+    price: 300,
+    icon: '🌈',
+    duration: 2592000, // 30 дней
+    category: 'cosmetic'
+  }
+};
+
 // Система статусов пользователей
 const USER_STATUSES = {
   'owner': { 
@@ -709,6 +774,114 @@ async function showSubscriptionMessage(ctx) {
 
 
 
+// Функции для работы с магазином
+function getShopCategories() {
+  const categories = {};
+  Object.entries(SHOP_ITEMS).forEach(([id, item]) => {
+    if (!categories[item.category]) {
+      categories[item.category] = [];
+    }
+    categories[item.category].push({ id, ...item });
+  });
+  return categories;
+}
+
+function getActiveBoosts(user) {
+  const now = Math.floor(Date.now() / 1000);
+  const boosts = user.boosts || {};
+  const active = {};
+  
+  Object.entries(boosts).forEach(([type, data]) => {
+    if (data.expiresAt && data.expiresAt > now) {
+      active[type] = data;
+    }
+  });
+  
+  return active;
+}
+
+function applyBoostMultiplier(baseReward, user, boostType) {
+  const activeBoosts = getActiveBoosts(user);
+  let multiplier = 1;
+  
+  if (activeBoosts.boost_farm && boostType === 'farm') multiplier *= 2;
+  if (activeBoosts.boost_bonus && boostType === 'bonus') multiplier *= 2;
+  if (activeBoosts.multiplier_stars) multiplier *= 3;
+  
+  return baseReward * multiplier;
+}
+
+async function purchaseItem(userId, itemId) {
+  const user = await getUser(userId);
+  const item = SHOP_ITEMS[itemId];
+  
+  if (!item) return { success: false, message: 'Товар не найден' };
+  if (user.stars < item.price) return { success: false, message: 'Недостаточно звёзд' };
+  
+  const now = Math.floor(Date.now() / 1000);
+  let result = { success: true, message: '' };
+  
+  // Обрабатываем разные типы товаров
+  switch (item.category) {
+    case 'boosts':
+    case 'multipliers':
+    case 'premium':
+      // Временные бусты
+      const expiresAt = now + item.duration;
+      await users.updateOne(
+        { id: userId },
+        { 
+          $inc: { stars: -item.price },
+          $set: { [`boosts.${itemId}`]: { expiresAt, active: true } }
+        }
+      );
+      result.message = `${item.icon} ${item.name} активирован!`;
+      break;
+      
+    case 'boxes':
+      // Коробки с наградами
+      let reward = 0;
+      if (itemId === 'lucky_box') {
+        reward = Math.floor(Math.random() * 991) + 10; // 10-1000
+      } else if (itemId === 'mega_box') {
+        reward = Math.floor(Math.random() * 1901) + 100; // 100-2000
+      }
+      
+      await users.updateOne(
+        { id: userId },
+        { $inc: { stars: reward - item.price } }
+      );
+      result.message = `${item.icon} Получено ${reward} звёзд!`;
+      break;
+      
+    case 'cosmetic':
+      // Косметические предметы
+      if (itemId === 'custom_title') {
+        result.message = `${item.icon} Кастомный титул готов! Напишите желаемый титул:`;
+        result.needInput = true;
+      } else if (itemId === 'rainbow_name') {
+        const expiresAt = now + item.duration;
+        await users.updateOne(
+          { id: userId },
+          { 
+            $inc: { stars: -item.price },
+            $set: { [`cosmetics.rainbow_name`]: { expiresAt, active: true } }
+          }
+        );
+        result.message = `${item.icon} Радужное имя активировано на месяц!`;
+      }
+      break;
+  }
+  
+  // Добавляем покупку в историю
+  await users.updateOne(
+    { id: userId },
+    { $push: { purchases: { itemId, price: item.price, timestamp: now } } }
+  );
+  
+  return result;
+}
+
 // Функции для работы со статусами
 function getUserStatus(user) {
   const userStatus = user.status || 'member';
@@ -875,8 +1048,9 @@ async function getMainMenu(ctx, userId) {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
         [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
-        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
+        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🛒 Магазин', 'shop')],
+        [Markup.button.callback('🎫 Промокод', 'promo'), Markup.button.callback('📋 Ежедневные задания', 'daily_tasks')],
+        [Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -999,6 +1173,129 @@ bot.action('invite', async (ctx) => {
     `👥 Приглашено друзей: ${user.invited || 0}`,
     Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
   );
+});
+
+// Магазин
+bot.action('shop', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const activeBoosts = getActiveBoosts(user);
+  const categories = getShopCategories();
+  
+  let boostInfo = '';
+  if (Object.keys(activeBoosts).length > 0) {
+    boostInfo = '\n🔥 **Активные бусты:**\n';
+    Object.entries(activeBoosts).forEach(([type, data]) => {
+      const item = SHOP_ITEMS[type];
+      if (item) {
+        const timeLeft = data.expiresAt - Math.floor(Date.now() / 1000);
+        const hours = Math.floor(timeLeft / 3600);
+        const minutes = Math.floor((timeLeft % 3600) / 60);
+        boostInfo += `${item.icon} ${item.name} — `;
+        if (hours > 0) boostInfo += `${hours}ч `;
+        boostInfo += `${minutes}мин\n`;
+      }
+    });
+    boostInfo += '\n';
+  }
+  
+  const message = `🛒 **Магазин MagnumTap** 🛒\n\n` +
+                  `💰 **Ваш баланс:** ${Math.round((user.stars || 0) * 100) / 100} ⭐ звёзд\n` +
+                  boostInfo +
+                  `🏪 **Выберите категорию товаров:**`;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('⚡ Бусты и множители', 'shop_boosts')],
+    [Markup.button.callback('🎲 Коробки удачи', 'shop_boxes')],
+    [Markup.button.callback('🌈 Косметика', 'shop_cosmetic')],
+    [Markup.button.callback('👑 Премиум', 'shop_premium')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]);
+  
+  ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+});
+
+// Категории магазина
+bot.action(/^shop_(.+)$/, async (ctx) => {
+  const category = ctx.match[1];
+  const user = await getUser(ctx.from.id);
+  
+  const categoryNames = {
+    'boosts': '⚡ Бусты и множители',
+    'boxes': '🎲 Коробки удачи', 
+    'cosmetic': '🌈 Косметика',
+    'premium': '👑 Премиум товары'
+  };
+  
+  let items = [];
+  Object.entries(SHOP_ITEMS).forEach(([id, item]) => {
+    if ((category === 'boosts' && ['boosts', 'multipliers'].includes(item.category)) ||
+        (category === 'boxes' && item.category === 'boxes') ||
+        (category === 'cosmetic' && item.category === 'cosmetic') ||
+        (category === 'premium' && item.category === 'premium')) {
+      items.push({ id, ...item });
+    }
+  });
+  
+  let message = `${categoryNames[category]} 🛒\n\n`;
+  message += `💰 **Баланс:** ${Math.round((user.stars || 0) * 100) / 100} ⭐ звёзд\n\n`;
+  
+  items.forEach(item => {
+    const canAfford = user.stars >= item.price ? '✅' : '❌';
+    message += `${canAfford} **${item.name}**\n`;
+    message += `   ${item.description}\n`;
+    message += `   💰 Цена: ${item.price} ⭐ звёзд\n\n`;
+  });
+  
+  const keyboard = [];
+  items.forEach(item => {
+    keyboard.push([Markup.button.callback(
+      `${item.icon} ${item.name} — ${item.price}⭐`, 
+      `buy_${item.id}`
+    )]);
+  });
+  keyboard.push([Markup.button.callback('🔙 Назад в магазин', 'shop')]);
+  
+  ctx.editMessageText(message, { 
+    parse_mode: 'Markdown', 
+    ...Markup.inlineKeyboard(keyboard) 
+  });
+});
+
+// Покупка товара
+bot.action(/^buy_(.+)$/, async (ctx) => {
+  const itemId = ctx.match[1];
+  const item = SHOP_ITEMS[itemId];
+  
+  if (!item) {
+    await ctx.answerCbQuery('❌ Товар не найден!');
+    return;
+  }
+  
+  const user = await getUser(ctx.from.id);
+  if (user.stars < item.price) {
+    await ctx.answerCbQuery('❌ Недостаточно звёзд для покупки!', { show_alert: true });
+    return;
+  }
+  
+  const result = await purchaseItem(ctx.from.id, itemId);
+  
+  if (result.success) {
+    await ctx.answerCbQuery(`✅ ${result.message}`, { show_alert: true });
+    
+    if (result.needInput) {
+      // Для кастомного титула запрашиваем ввод
+      await adminForceReply(ctx, `🏷️ Введите желаемый титул (максимум 20 символов):`);
+      return;
+    }
+    
+    // Обновляем отображение магазина
+    setTimeout(() => {
+      ctx.editMessageText('🛒 Покупка завершена! Возвращаемся в магазин...', 
+        Markup.inlineKeyboard([[Markup.button.callback('🛒 Открыть магазин', 'shop')]]));
+    }, 1000);
+  } else {
+    await ctx.answerCbQuery(`❌ ${result.message}`, { show_alert: true });
+  }
 });
 
 // Промокоды (минималистично, если не нужны — удалить этот блок)
@@ -2653,8 +2950,11 @@ bot.action('farm', async (ctx) => {
   const canFarm = !user.lastFarm || (now() - user.lastFarm) >= 60;
   
   if (canFarm) {
+    const baseReward = 0.01;
+    const boostedReward = applyBoostMultiplier(baseReward, user, 'farm');
+    
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { stars: 0.01, farmCount: 1 }, 
+      $inc: { stars: boostedReward, farmCount: 1 }, 
       $set: { lastFarm: now() } 
     });
     
@@ -2665,14 +2965,16 @@ bot.action('farm', async (ctx) => {
     // Обновляем баланс в интерфейсе
     await updateMainMenuBalance(ctx);
     
+    const rewardText = boostedReward > baseReward ? `+${boostedReward.toFixed(3)} звёзд (🔥 БУСТ!)` : `+${boostedReward.toFixed(3)} звёзд`;
+    
     if (newTitles.length > 0 && newAchievements.length > 0) {
-      ctx.answerCbQuery('⭐ +0.01 звезды! 🏆 Новый титул! 🎖️ Достижение!');
+      ctx.answerCbQuery(`⭐ ${rewardText} 🏆 Новый титул! 🎖️ Достижение!`);
     } else if (newTitles.length > 0) {
-      ctx.answerCbQuery('⭐ +0.01 звезды! 🏆 Новый титул получен!');
+      ctx.answerCbQuery(`⭐ ${rewardText} 🏆 Новый титул получен!`);
     } else if (newAchievements.length > 0) {
-      ctx.answerCbQuery(`⭐ +0.01 звезды! 🎖️ ${newAchievements[0].name}!`);
+      ctx.answerCbQuery(`⭐ ${rewardText} 🎖️ ${newAchievements[0].name}!`);
     } else {
-      ctx.answerCbQuery('⭐ +0.01 звезды!');
+      ctx.answerCbQuery(`⭐ ${rewardText}`);
     }
   } else {
     const timeLeft = 60 - (now() - user.lastFarm);
@@ -2702,8 +3004,11 @@ bot.action('bonus', async (ctx) => {
       dailyStreak = (user.dailyStreak || 0) + 1;
     }
     
+    const baseReward = 3;
+    const boostedReward = applyBoostMultiplier(baseReward, user, 'bonus');
+    
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { stars: 3, bonusCount: 1 }, 
+      $inc: { stars: boostedReward, bonusCount: 1 }, 
       $set: { lastBonus: today, dailyStreak: dailyStreak } 
     });
     
@@ -2714,14 +3019,16 @@ bot.action('bonus', async (ctx) => {
     // Обновляем баланс в интерфейсе
     await updateMainMenuBalance(ctx);
     
+    const rewardText = boostedReward > baseReward ? `+${boostedReward} звёзд (🔥 БУСТ!)` : `+${boostedReward} звёзд`;
+    
     if (newTitles.length > 0 && newAchievements.length > 0) {
-      ctx.answerCbQuery('🎁 +3 звезды! 🏆 Новый титул! 🎖️ Достижение!');
+      ctx.answerCbQuery(`🎁 ${rewardText} 🏆 Новый титул! 🎖️ Достижение!`);
     } else if (newTitles.length > 0) {
-      ctx.answerCbQuery('🎁 +3 звезды бонус! 🏆 Новый титул!');
+      ctx.answerCbQuery(`🎁 ${rewardText} 🏆 Новый титул!`);
     } else if (newAchievements.length > 0) {
-      ctx.answerCbQuery(`🎁 +3 звезды! 🎖️ ${newAchievements[0].name}!`);
+      ctx.answerCbQuery(`🎁 ${rewardText} 🎖️ ${newAchievements[0].name}!`);
     } else {
-      ctx.answerCbQuery('🎁 +3 звезды! Ежедневный бонус получен!');
+      ctx.answerCbQuery(`🎁 ${rewardText} Ежедневный бонус получен!`);
     }
   } else {
     // Расчет времени до следующего дня (00:00)
