@@ -52,10 +52,10 @@ const ACHIEVEMENTS = {
   },
   'social_butterfly': { 
     name: '🤝 Социальная бабочка', 
-    description: 'Пригласить 5 друзей', 
+    description: 'Пригласить 10 друзей', 
     condition: 'invited', 
-    requirement: 5,
-    reward: 8,
+    requirement: 10,
+    reward: 10,
     icon: '🤝'
   },
   'week_warrior': { 
@@ -68,17 +68,17 @@ const ACHIEVEMENTS = {
   },
   'farm_master': { 
     name: '🌾 Мастер фарма', 
-    description: 'Сфармить 200 раз', 
+    description: 'Сфармить 1000 раз', 
     condition: 'farm_count', 
-    requirement: 200,
+    requirement: 1000,
     reward: 10,
     icon: '🌾'
   },
   'promo_hunter': { 
     name: '🎫 Охотник за промо', 
-    description: 'Активировать 10 промокодов', 
+    description: 'Активировать 15 промокодов', 
     condition: 'promo_count', 
-    requirement: 10,
+    requirement: 15,
     reward: 15,
     icon: '🎫'
   }
@@ -591,7 +591,7 @@ const SPONSOR_TASKS = [
     id: 'music_channel',
     title: '📱 Подписаться на канал @musice46',
     description: 'Подпишитесь на канал @musice46',
-    reward: 15,
+    reward: 3,
     instruction: 'Сделайте скриншот подписки на канал',
     link: 'https://t.me/musice46'
   },
@@ -599,7 +599,7 @@ const SPONSOR_TASKS = [
     id: 'firestars_bot',
     title: '🔥 Запустить бота FireStars',
     description: 'Запустите бота и получите бонус',
-    reward: 20,
+    reward: 3,
     instruction: 'Сделайте скриншот запуска бота',
     link: FIRESTARS_BOT_LINK
   },
@@ -607,7 +607,7 @@ const SPONSOR_TASKS = [
     id: 'farmik_bot',
     title: '⭐ Запустить бота FarmikStars',
     description: 'Запустите бота для заработка подарков',
-    reward: 25,
+    reward: 3,
     instruction: 'Сделайте скриншот запуска бота',
     link: FARMIK_BOT_LINK
   },
@@ -615,7 +615,7 @@ const SPONSOR_TASKS = [
     id: 'basket_game_bot',
     title: '🏀 Играть в BasketGift бота',
     description: 'Запустите бота и сыграйте в игру 3 раза',
-    reward: 30,
+    reward: 3,
     instruction: 'Сделайте скриншот результатов 3 игр',
     link: BASKET_BOT_LINK
   }
@@ -1648,7 +1648,7 @@ bot.action('farm', async (ctx) => {
   
   if (canFarm) {
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { stars: 0.5, farmCount: 1 }, 
+      $inc: { stars: 0.01, farmCount: 1 }, 
       $set: { lastFarm: now() } 
     });
     
@@ -1660,13 +1660,13 @@ bot.action('farm', async (ctx) => {
     await updateMainMenuBalance(ctx);
     
     if (newTitles.length > 0 && newAchievements.length > 0) {
-      ctx.answerCbQuery('⭐ +0.5 звезды! 🏆 Новый титул! 🎖️ Достижение!');
+      ctx.answerCbQuery('⭐ +0.01 звезды! 🏆 Новый титул! 🎖️ Достижение!');
     } else if (newTitles.length > 0) {
-      ctx.answerCbQuery('⭐ +0.5 звезды! 🏆 Новый титул получен!');
+      ctx.answerCbQuery('⭐ +0.01 звезды! 🏆 Новый титул получен!');
     } else if (newAchievements.length > 0) {
-      ctx.answerCbQuery(`⭐ +0.5 звезды! 🎖️ ${newAchievements[0].name}!`);
+      ctx.answerCbQuery(`⭐ +0.01 звезды! 🎖️ ${newAchievements[0].name}!`);
     } else {
-      ctx.answerCbQuery('⭐ +0.5 звезды!');
+      ctx.answerCbQuery('⭐ +0.01 звезды!');
     }
   } else {
     const timeLeft = 60 - (now() - user.lastFarm);
