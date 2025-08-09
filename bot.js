@@ -727,7 +727,7 @@ function createProgressBar(current, total, length = 10) {
   return '▓'.repeat(Math.max(0, filled)) + '░'.repeat(empty);
 }
 
-async function getDetailedProfile(userId) {
+async function getDetailedProfile(userId, ctx) {
   const user = await getUser(userId);
   const balance = Math.round((user.stars || 0) * 100) / 100; // Округляем до 2 знаков
   const friends = user.invited || 0;
@@ -735,6 +735,10 @@ async function getDetailedProfile(userId) {
   const rank = getUserRank(user);
   const nextRankInfo = getNextRankInfo(user);
   const status = getUserStatus(user);
+  
+  // Получаем имя пользователя
+  const userName = ctx ? (ctx.from.first_name || ctx.from.username || 'Игрок') : 'Игрок';
+  const userInfo = ctx ? `${userName} (ID: ${ctx.from.id})` : `ID: ${userId}`;
   
   let progressText = '';
   if (nextRankInfo.next && nextRankInfo.starsToNext > 0) {
@@ -747,6 +751,8 @@ ${progressBar}
   }
   
   return `👑 **Профиль игрока MagnumTap** 👑
+
+👋 **Приветствую, ${userInfo}!**
 
 💫 **Статус:** ${getStatusDisplayName(user)}  
 💎 **Баланс:** ${balance} ⭐ звёзд  
@@ -860,7 +866,7 @@ async function updateMainMenuBalance(ctx) {
 
 async function getMainMenu(ctx, userId) {
   const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
-  const profileText = await getDetailedProfile(userId);
+  const profileText = await getDetailedProfile(userId, ctx);
   
   return {
     text: profileText,
@@ -911,7 +917,7 @@ bot.action('main_menu', async (ctx) => {
 
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
-  const profileText = await getDetailedProfile(ctx.from.id);
+  const profileText = await getDetailedProfile(ctx.from.id, ctx);
 
   ctx.editMessageText(profileText, {
     parse_mode: 'Markdown',
