@@ -44,7 +44,7 @@ console.log('📞 SUPPORT_CHANNEL:', SUPPORT_CHANNEL || 'НЕ УСТАНОВЛЕ
 console.log('💳 WITHDRAWAL_CHANNEL:', WITHDRAWAL_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('🔐 REQUIRED_CHANNEL:', REQUIRED_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('📢 PROMO_NOTIFICATIONS_CHAT:', process.env.PROMO_NOTIFICATIONS_CHAT || 'НЕ УСТАНОВЛЕН');
-console.log('📢 CHANNEL_POSTS_CHAT:', process.env.CHANNEL_POSTS_CHAT || 'НЕ УСТАНОВЛЕН');
+console.log('📢 Канал для постов:', REQUIRED_CHANNEL ? `@${REQUIRED_CHANNEL}` : 'НЕ УСТАНОВЛЕН');
 
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
@@ -3233,7 +3233,7 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
 async function handlePostCreation(ctx, text, userState) {
   try {
     const { postType } = userState;
-    const channelChatId = process.env.CHANNEL_POSTS_CHAT || '@magnumtap';
+    const channelChatId = REQUIRED_CHANNEL ? `@${REQUIRED_CHANNEL}` : '@magnumtap';
     
     console.log(`📝 Создаем пост типа ${postType} для канала ${channelChatId}`);
     
@@ -3311,7 +3311,7 @@ async function handlePostCreation(ctx, text, userState) {
       console.error('❌ Ошибка отправки в канал:', channelError);
       
       if (channelError.message.includes('chat not found')) {
-        await ctx.reply('❌ Канал не найден! Проверьте переменную CHANNEL_POSTS_CHAT');
+        await ctx.reply('❌ Канал не найден! Проверьте переменную REQUIRED_CHANNEL');
       } else if (channelError.message.includes('Forbidden')) {
         await ctx.reply('❌ Бот не имеет прав для отправки в канал! Добавьте бота как администратора');
       } else if (channelError.message.includes('wrong file identifier')) {
