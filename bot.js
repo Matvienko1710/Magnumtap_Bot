@@ -646,6 +646,23 @@ async function checkAndAwardTitles(userId) {
 }
 
 function getUserMainTitle(user) {
+  // Если пользователь выбрал главный титул, используем его
+  if (user.selectedTitle) {
+    // Проверяем кастомный титул
+    if (user.selectedTitle === 'custom' && user.customTitle) {
+      return `✨ ${user.customTitle}`;
+    }
+    // Проверяем обычные титулы
+    if (TITLES[user.selectedTitle] && (user.titles || []).includes(user.selectedTitle)) {
+      return TITLES[user.selectedTitle].name;
+    }
+  }
+  
+  // Если кастомный титул есть, показываем его по умолчанию
+  if (user.customTitle) {
+    return `✨ ${user.customTitle}`;
+  }
+  
   const userTitles = user.titles || [];
   if (userTitles.length === 0) return '🆕 Нет титула';
   
@@ -1653,7 +1670,8 @@ bot.action('profile', async (ctx) => {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
       [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
-      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
+      [Markup.button.callback('✨ Выбрать титул', 'select_title'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
+      [Markup.button.callback('🤝 Пригласить друзей', 'invite')],
       [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
@@ -1666,12 +1684,24 @@ bot.action('my_titles', async (ctx) => {
   
   let titlesText = '🏆 **Твои титулы** 🏆\n\n';
   
-  if (userTitles.length === 0) {
+  if (userTitles.length === 0 && !user.customTitle) {
     titlesText += '🆕 Пока что у тебя нет титулов.\nВыполняй задания и приглашай друзей, чтобы заработать их!';
   } else {
+    // Показываем кастомный титул если есть
+    if (user.customTitle) {
+      const isSelected = user.selectedTitle === 'custom';
+      const indicator = isSelected ? '✅' : '✨';
+      titlesText += `${indicator} **${user.customTitle}** ${isSelected ? '(активен)' : ''}\n`;
+      titlesText += `📝 Ваш персональный титул\n\n`;
+    }
+    
+    // Показываем обычные титулы
     userTitles.forEach(titleId => {
       if (TITLES[titleId]) {
-        titlesText += `${TITLES[titleId].name}\n${TITLES[titleId].description}\n\n`;
+        const isSelected = user.selectedTitle === titleId;
+        const indicator = isSelected ? '✅' : '🏆';
+        titlesText += `${indicator} **${TITLES[titleId].name}** ${isSelected ? '(активен)' : ''}\n`;
+        titlesText += `📝 ${TITLES[titleId].description}\n\n`;
       }
     });
   }
@@ -1683,6 +1713,137 @@ bot.action('my_titles', async (ctx) => {
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ])
   });
+});
+
+// Выбор титула
+bot.action('select_title', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  const userTitles = user.titles || [];
+  
+  let msg = '✨ **Выбор главного титула** ✨\n\n';
+  msg += 'Выберите титул, который будет отображаться в вашем профиле и топе:\n\n';
+  
+  const buttons = [];
+  
+  // Кастомный титул
+  if (user.customTitle) {
+    const isSelected = user.selectedTitle === 'custom';
+    const text = `${isSelected ? '✅' : '✨'} ${user.customTitle} ${isSelected ? '(активен)' : ''}`;
+    buttons.push([Markup.button.callback(text, `set_title_custom`)]);
+  }
+  
+  // Обычные титулы
+  userTitles.forEach(titleId => {
+    if (TITLES[titleId]) {
+      const isSelected = user.selectedTitle === titleId;
+      const text = `${isSelected ? '✅' : '🏆'} ${TITLES[titleId].name} ${isSelected ? '(активен)' : ''}`;
+      buttons.push([Markup.button.callback(text, `set_title_${titleId}`)]);
+    }
+  });
+  
+  // Опция "Нет титула"
+  const noTitleSelected = !user.selectedTitle;
+  buttons.push([Markup.button.callback(
+    `${noTitleSelected ? '✅' : '🚫'} Нет титула ${noTitleSelected ? '(активен)' : ''}`, 
+    'set_title_none'
+  )]);
+  
+  buttons.push([Markup.button.callback('👤 Назад в профиль', 'profile')]);
+  
+  if (userTitles.length === 0 && !user.customTitle) {
+    msg += '📝 У вас пока нет доступных титулов.\n\nВыполняйте задания и достижения, чтобы заработать титулы!';
+  }
+  
+  ctx.editMessageText(msg, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+// Установка титула
+bot.action(/^set_title_(.+)$/, async (ctx) => {
+  const titleAction = ctx.match[1];
+  const userId = ctx.from.id;
+  
+  let newSelectedTitle = null;
+  let successMessage = '';
+  
+  if (titleAction === 'custom') {
+    const user = await getUser(userId);
+    if (user.customTitle) {
+      newSelectedTitle = 'custom';
+      successMessage = `✨ Установлен кастомный титул: "${user.customTitle}"`;
+    } else {
+      return ctx.answerCbQuery('❌ У вас нет кастомного титула!');
+    }
+  } else if (titleAction === 'none') {
+    newSelectedTitle = null;
+    successMessage = '🚫 Титул скрыт';
+  } else {
+    // Проверяем что у пользователя есть этот титул
+    const user = await getUser(userId);
+    const userTitles = user.titles || [];
+    
+    if (TITLES[titleAction] && userTitles.includes(titleAction)) {
+      newSelectedTitle = titleAction;
+      successMessage = `🏆 Установлен титул: ${TITLES[titleAction].name}`;
+    } else {
+      return ctx.answerCbQuery('❌ У вас нет этого титула!');
+    }
+  }
+  
+  // Обновляем выбранный титул в базе
+  await users.updateOne(
+    { id: userId },
+    { $set: { selectedTitle: newSelectedTitle } }
+  );
+  
+  await ctx.answerCbQuery(successMessage);
+  
+  // Обновляем меню выбора титула
+  setTimeout(async () => {
+    const updatedUser = await getUser(userId);
+    const userTitles = updatedUser.titles || [];
+    
+    let msg = '✨ **Выбор главного титула** ✨\n\n';
+    msg += 'Выберите титул, который будет отображаться в вашем профиле и топе:\n\n';
+    
+    const buttons = [];
+    
+    // Кастомный титул
+    if (updatedUser.customTitle) {
+      const isSelected = updatedUser.selectedTitle === 'custom';
+      const text = `${isSelected ? '✅' : '✨'} ${updatedUser.customTitle} ${isSelected ? '(активен)' : ''}`;
+      buttons.push([Markup.button.callback(text, `set_title_custom`)]);
+    }
+    
+    // Обычные титулы
+    userTitles.forEach(titleId => {
+      if (TITLES[titleId]) {
+        const isSelected = updatedUser.selectedTitle === titleId;
+        const text = `${isSelected ? '✅' : '🏆'} ${TITLES[titleId].name} ${isSelected ? '(активен)' : ''}`;
+        buttons.push([Markup.button.callback(text, `set_title_${titleId}`)]);
+      }
+    });
+    
+    // Опция "Нет титула"
+    const noTitleSelected = !updatedUser.selectedTitle;
+    buttons.push([Markup.button.callback(
+      `${noTitleSelected ? '✅' : '🚫'} Нет титула ${noTitleSelected ? '(активен)' : ''}`, 
+      'set_title_none'
+    )]);
+    
+    buttons.push([Markup.button.callback('👤 Назад в профиль', 'profile')]);
+    
+    if (userTitles.length === 0 && !updatedUser.customTitle) {
+      msg += '📝 У вас пока нет доступных титулов.\n\nВыполняйте задания и достижения, чтобы заработать титулы!';
+    }
+    
+    ctx.editMessageText(msg, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons)
+    });
+  }, 500);
 });
 
 bot.action('top', async (ctx) => {
