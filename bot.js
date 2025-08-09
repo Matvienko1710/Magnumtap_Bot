@@ -1721,13 +1721,15 @@ bot.action(/^approve_withdrawal_(.+)$/, async (ctx) => {
   }
   
   const requestId = ctx.match[1];
+  console.log('✅ Админ одобряет заявку:', requestId);
   const request = await withdrawalRequests.findOne({ id: requestId });
+  console.log('📋 Статус заявки:', request?.status);
   
   if (!request) {
     return ctx.answerCbQuery('❌ Заявка не найдена!');
   }
   
-  if (request.status !== 'pending') {
+  if (request.status !== 'pending' && request.status !== 'processing') {
     return ctx.answerCbQuery('❌ Заявка уже обработана!');
   }
   
@@ -1765,13 +1767,15 @@ bot.action(/^reject_withdrawal_(.+)$/, async (ctx) => {
   }
   
   const requestId = ctx.match[1];
+  console.log('❌ Админ отклоняет заявку:', requestId);
   const request = await withdrawalRequests.findOne({ id: requestId });
+  console.log('📋 Статус заявки:', request?.status);
   
   if (!request) {
     return ctx.answerCbQuery('❌ Заявка не найдена!');
   }
   
-  if (request.status !== 'pending') {
+  if (request.status !== 'pending' && request.status !== 'processing') {
     return ctx.answerCbQuery('❌ Заявка уже обработана!');
   }
   
@@ -1849,7 +1853,9 @@ bot.action(/^process_withdrawal_(.+)$/, async (ctx) => {
   }
   
   const requestId = ctx.match[1];
+  console.log('🔄 Админ берет заявку в обработку:', requestId);
   const request = await withdrawalRequests.findOne({ id: requestId });
+  console.log('📋 Статус заявки до обработки:', request?.status);
   
   if (!request) {
     return ctx.answerCbQuery('❌ Заявка не найдена!');
