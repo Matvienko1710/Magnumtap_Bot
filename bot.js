@@ -3065,6 +3065,7 @@ bot.action('shop', async (ctx) => {
   const keyboard = Markup.inlineKeyboard([
     [Markup.button.callback('⚡ Бусты и множители', 'shop_boosts')],
     [Markup.button.callback('🎲 Коробки удачи', 'shop_boxes')],
+    [Markup.button.callback('⛏️ Майнеры', 'shop_miner')],
     [Markup.button.callback('🌈 Косметика', 'shop_cosmetic')],
     [Markup.button.callback('👑 Премиум', 'shop_premium')],
     [Markup.button.callback('🏠 Главное меню', 'main_menu')]
@@ -3081,6 +3082,7 @@ bot.action(/^shop_(.+)$/, async (ctx) => {
   const categoryNames = {
     'boosts': '⚡ Бусты и множители',
     'boxes': '🎲 Коробки удачи', 
+    'miner': '⛏️ Майнеры',
     'cosmetic': '🌈 Косметика',
     'premium': '👑 Премиум товары'
   };
@@ -3089,6 +3091,7 @@ bot.action(/^shop_(.+)$/, async (ctx) => {
   Object.entries(SHOP_ITEMS).forEach(([id, item]) => {
     if ((category === 'boosts' && ['boosts', 'multipliers'].includes(item.category)) ||
         (category === 'boxes' && item.category === 'boxes') ||
+        (category === 'miner' && item.category === 'miner') ||
         (category === 'cosmetic' && item.category === 'cosmetic') ||
         (category === 'premium' && item.category === 'premium')) {
       items.push({ id, ...item });
@@ -3096,21 +3099,35 @@ bot.action(/^shop_(.+)$/, async (ctx) => {
   });
   
   let message = `${categoryNames[category]} 🛒\n\n`;
-  message += `💰 **Баланс:** ${Math.round((user.stars || 0) * 100) / 100} ⭐ звёзд\n\n`;
   
-
+  // Показываем соответствующий баланс для категории
+  if (category === 'miner') {
+    message += `💰 **Баланс:** ${Math.round((user.magnumCoins || 0) * 100) / 100} 🪙 Magnum Coin\n\n`;
+  } else {
+    message += `💰 **Баланс:** ${Math.round((user.stars || 0) * 100) / 100} ⭐ звёзд\n\n`;
+  }
   
   items.forEach(item => {
-    const canAfford = user.stars >= item.price ? '✅' : '❌';
+    let canAfford, priceText;
+    
+    if (item.currency === 'magnumCoins') {
+      canAfford = (user.magnumCoins || 0) >= item.price ? '✅' : '❌';
+      priceText = `${item.price} 🪙 Magnum Coin`;
+    } else {
+      canAfford = user.stars >= item.price ? '✅' : '❌';
+      priceText = `${item.price} ⭐ звёзд`;
+    }
+    
     message += `${canAfford} **${item.name}**\n`;
     message += `   ${item.description}\n`;
-    message += `   💰 Цена: ${item.price} ⭐ звёзд\n\n`;
+    message += `   💰 Цена: ${priceText}\n\n`;
   });
   
   const keyboard = [];
   items.forEach(item => {
+    const priceIcon = item.currency === 'magnumCoins' ? '🪙' : '⭐';
     keyboard.push([Markup.button.callback(
-      `${item.icon} ${item.name} — ${item.price}⭐`, 
+      `${item.icon} ${item.name} — ${item.price}${priceIcon}`, 
       `buy_${item.id}`
     )]);
   });
@@ -3130,9 +3147,18 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
   }
   
   const user = await getUser(ctx.from.id);
-  if (user.stars < item.price) {
-    await ctx.answerCbQuery('❌ Недостаточно звёзд для покупки!', { show_alert: true });
-    return;
+  
+  // Проверяем валюту для покупки
+  if (item.currency === 'magnumCoins') {
+    if ((user.magnumCoins || 0) < item.price) {
+      await ctx.answerCbQuery('❌ Недостаточно Magnum Coin для покупки!', { show_alert: true });
+      return;
+    }
+  } else {
+    if (user.stars < item.price) {
+      await ctx.answerCbQuery('❌ Недостаточно звёзд для покупки!', { show_alert: true });
+      return;
+    }
   }
   
   const result = await purchaseItem(ctx.from.id, itemId);
