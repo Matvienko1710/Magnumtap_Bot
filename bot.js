@@ -3103,10 +3103,16 @@ bot.action('admin_cancel', async (ctx) => {
 async function notifyPromoActivationToChat(activatorId, activatorName, code, rewardText) {
   try {
     // Проверяем, настроен ли чат для уведомлений
-    const promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
+    let promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
     if (!promoChatId) {
       console.log('📢 Чат для уведомлений о промокодах не настроен (PROMO_NOTIFICATIONS_CHAT)');
       return;
+    }
+
+    // Автоматически добавляем @ для текстовых ID (если это не числовой ID)
+    if (promoChatId && !promoChatId.startsWith('-') && !promoChatId.startsWith('@') && isNaN(Number(promoChatId))) {
+      promoChatId = '@' + promoChatId;
+      console.log(`📢 Автоматически добавлен @ к имени чата: ${promoChatId}`);
     }
 
     console.log(`📢 Отправляем уведомление о активации промокода ${code} в чат ${promoChatId}`);
@@ -3126,11 +3132,25 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
     
   } catch (error) {
     console.error('❌ Ошибка при отправке уведомления о промокоде в чат:', error);
-    // Проверяем типичные ошибки
+    console.error('📋 Отладочная информация:');
+    console.error(`   Исходное значение PROMO_NOTIFICATIONS_CHAT: "${process.env.PROMO_NOTIFICATIONS_CHAT}"`);
+    console.error(`   Обработанный ID чата: "${promoChatId}"`);
+    
+    // Проверяем типичные ошибки и даем конкретные советы
     if (error.message.includes('chat not found')) {
-      console.error('💡 Убедитесь, что бот добавлен в чат и имеет права на отправку сообщений');
+      console.error('💡 Возможные причины и решения:');
+      console.error('   1. Бот не добавлен в чат - добавьте бота в чат как участника');
+      console.error('   2. Неправильное имя чата - убедитесь что чат публичный с username');
+      console.error('   3. Попробуйте использовать числовой ID чата вместо username');
+      console.error('   4. Дайте боту права администратора в чате');
     } else if (error.message.includes('CHAT_ID_INVALID')) {
-      console.error('💡 Проверьте правильность PROMO_NOTIFICATIONS_CHAT (должен быть числовой ID или @username)');
+      console.error('💡 Проверьте правильность PROMO_NOTIFICATIONS_CHAT:');
+      console.error('   - Для публичного чата: @chatusername или chatusername');
+      console.error('   - Для приватного чата: числовой ID (например: -1001234567890)');
+    } else if (error.message.includes('Forbidden')) {
+      console.error('💡 Бот не имеет прав для отправки сообщений в чат');
+      console.error('   - Сделайте бота администратором чата');
+      console.error('   - Или дайте права на отправку сообщений');
     }
   }
 }
