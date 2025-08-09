@@ -695,12 +695,13 @@ async function connectDB() {
 function now() { return Math.floor(Date.now() / 1000); }
 
 // Обновляем функцию getUser для автоматической проверки титулов
-async function getUser(id) {
+async function getUser(id, ctx = null) {
   let user = await users.findOne({ id });
   if (!user) {
     user = {
       id,
-      username: '',
+      username: ctx ? (ctx.from.username || '') : '',
+      first_name: ctx ? (ctx.from.first_name || '') : '',
       stars: 0,
       lastFarm: 0,
       lastBonus: 0,
@@ -719,6 +720,19 @@ async function getUser(id) {
     await users.insertOne(user);
     // Даём титул новичка
     await checkAndAwardTitles(id);
+  } else if (ctx) {
+    // Обновляем информацию о пользователе если она изменилась
+    const updates = {};
+    if (ctx.from.username && ctx.from.username !== user.username) {
+      updates.username = ctx.from.username;
+    }
+    if (ctx.from.first_name && ctx.from.first_name !== user.first_name) {
+      updates.first_name = ctx.from.first_name;
+    }
+    if (Object.keys(updates).length > 0) {
+      await users.updateOne({ id }, { $set: updates });
+      Object.assign(user, updates);
+    }
   }
   return user;
 }
@@ -919,6 +933,25 @@ function calculateLuckyBoxReward(boxType = 'lucky') {
   return 1;
 }
 
+// Функция для получения отображаемого имени пользователя
+function getUserDisplayName(user, userData = null) {
+  // Получаем базовое имя
+  let displayName = user.username || user.first_name || `User${user.id}`;
+  
+  // Проверяем активность радужного имени
+  if (userData && userData.cosmetics && userData.cosmetics.rainbow_name) {
+    const now = Math.floor(Date.now() / 1000);
+    if (userData.cosmetics.rainbow_name.expiresAt > now) {
+      // Применяем радужный эффект (используем эмодзи для цвета)
+      const rainbowChars = ['🔴', '🟠', '🟡', '🟢', '🔵', '🟣'];
+      const colorIndex = Math.floor(Math.random() * rainbowChars.length);
+      return `${rainbowChars[colorIndex]}${displayName}${rainbowChars[(colorIndex + 3) % rainbowChars.length]}`;
+    }
+  }
+  
+  return displayName;
+}
+
 // Функции для работы со статусами
 function getUserStatus(user) {
   const userStatus = user.status || 'member';
@@ -1084,10 +1117,9 @@ async function getMainMenu(ctx, userId) {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
-        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🛒 Магазин', 'shop')],
-        [Markup.button.callback('🎫 Промокод', 'promo'), Markup.button.callback('📋 Ежедневные задания', 'daily_tasks')],
-        [Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
+        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
+        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
@@ -1102,7 +1134,7 @@ bot.start(async (ctx) => {
     return;
   }
   
-  const user = await getUser(ctx.from.id);
+  const user = await getUser(ctx.from.id, ctx);
   const menu = await getMainMenu(ctx, ctx.from.id);
   await ctx.reply(menu.text, menu.extra);
 });
@@ -1115,7 +1147,7 @@ bot.action('check_subscription', async (ctx) => {
   }
   
   await ctx.answerCbQuery('✅ Подписка подтверждена!');
-  const user = await getUser(ctx.from.id);
+  const user = await getUser(ctx.from.id, ctx);
   const menu = await getMainMenu(ctx, ctx.from.id);
   await ctx.editMessageText(menu.text, menu.extra);
 });
@@ -1169,8 +1201,16 @@ bot.action('top', async (ctx) => {
   const topUsers = await users.find({}).sort({ stars: -1 }).limit(10).toArray();
   let msg = '🏆 *Топ-10 игроков по звёздам:*\n\n';
   
-  topUsers.forEach((user, i) => {
-    const name = user.username || user.id;
+  for (let i = 0; i < topUsers.length; i++) {
+    const user = topUsers[i];
+    
+    // Получаем имя с учетом радужного эффекта
+    const displayName = getUserDisplayName({ 
+      username: user.username, 
+      first_name: user.first_name, 
+      id: user.id 
+    }, user);
+    
     const stars = Math.round((user.stars || 0) * 100) / 100;
     const status = getUserStatus(user);
     const title = getUserMainTitle(user);
@@ -1183,12 +1223,12 @@ bot.action('top', async (ctx) => {
     else if (i === 2) medal = '🥉';
     else medal = `${i + 1}.`;
     
-    msg += `${medal} *${name}*\n`;
+    msg += `${medal} *${displayName}*\n`;
     msg += `   💰 ${stars} ⭐ звёзд\n`;
     msg += `   ${status.color} ${status.name}\n`;
     msg += `   🏅 ${rank.name}\n`;
     msg += `   🏆 ${title}\n\n`;
-  });
+  }
   
   if (topUsers.length === 0) {
     msg += '📭 Пока что нет игроков в рейтинге.';
@@ -1276,18 +1316,7 @@ bot.action(/^shop_(.+)$/, async (ctx) => {
   let message = `${categoryNames[category]} 🛒\n\n`;
   message += `💰 **Баланс:** ${Math.round((user.stars || 0) * 100) / 100} ⭐ звёзд\n\n`;
   
-  // Добавляем информацию о вероятностях для коробок
-  if (category === 'boxes') {
-    message += `🎯 **Система вероятностей:**\n`;
-    message += `🎲 **Коробка удачи:** средний выигрыш ~10⭐\n`;
-    message += `   • 45% шанс получить 1-15⭐\n`;
-    message += `   • 25% шанс получить 16-30⭐\n`;
-    message += `   • 30% шанс получить 31-100⭐\n\n`;
-    message += `💎 **Мега коробка:** средний выигрыш ~75⭐\n`;
-    message += `   • 50% шанс получить 20-64⭐\n`;
-    message += `   • 35% шанс получить 65-104⭐\n`;
-    message += `   • 15% шанс получить 105-284⭐\n\n`;
-  }
+
   
   items.forEach(item => {
     const canAfford = user.stars >= item.price ? '✅' : '❌';
@@ -2996,7 +3025,7 @@ bot.action('farm', async (ctx) => {
     return;
   }
   
-  const user = await getUser(ctx.from.id);
+  const user = await getUser(ctx.from.id, ctx);
   const canFarm = !user.lastFarm || (now() - user.lastFarm) >= 60;
   
   if (canFarm) {
@@ -3040,7 +3069,7 @@ bot.action('bonus', async (ctx) => {
     return;
   }
   
-  const user = await getUser(ctx.from.id);
+  const user = await getUser(ctx.from.id, ctx);
   const today = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
   const canBonus = !user.lastBonus || user.lastBonus < today;
   
