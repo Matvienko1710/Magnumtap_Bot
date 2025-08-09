@@ -1117,10 +1117,9 @@ async function getMainMenu(ctx, userId) {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🌟 Фармить звёзды', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
-        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top')],
-        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🛒 Магазин', 'shop')],
-        [Markup.button.callback('🎫 Промокод', 'promo'), Markup.button.callback('📋 Ежедневные задания', 'daily_tasks')],
-        [Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
+        [Markup.button.callback('👤 Профиль', 'profile'), Markup.button.callback('🏆 Топ', 'top'), Markup.button.callback('🛒 Магазин', 'shop')],
+        [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🎫 Промокод', 'promo')],
+        [Markup.button.callback('📋 Ежедневные задания', 'daily_tasks'), Markup.button.callback('🎯 Задания от спонсора', 'sponsor_tasks')],
         ...adminRow
       ])
     }
