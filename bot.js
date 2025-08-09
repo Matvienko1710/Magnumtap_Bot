@@ -36,6 +36,14 @@ const REJECTION_REASONS = {
   'other': { name: '❓ Другая причина', description: 'Причина будет указана дополнительно' }
 };
 
+console.log('🔧 Проверяем переменные окружения...');
+console.log('🤖 BOT_TOKEN:', BOT_TOKEN ? 'установлен' : 'НЕ УСТАНОВЛЕН');
+console.log('🗄️ MONGODB_URI:', MONGODB_URI ? 'установлен' : 'НЕ УСТАНОВЛЕН');
+console.log('👑 ADMIN_IDS:', ADMIN_IDS.length ? ADMIN_IDS.join(', ') : 'НЕ УСТАНОВЛЕНЫ');
+console.log('📞 SUPPORT_CHANNEL:', SUPPORT_CHANNEL || 'НЕ УСТАНОВЛЕН');
+console.log('💳 WITHDRAWAL_CHANNEL:', WITHDRAWAL_CHANNEL || 'НЕ УСТАНОВЛЕН');
+console.log('🔐 REQUIRED_CHANNEL:', REQUIRED_CHANNEL || 'НЕ УСТАНОВЛЕН');
+
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
 
@@ -694,7 +702,13 @@ function getNextRankInfo(user) {
 
 
 async function connectDB() {
+  console.log('🔌 Подключаемся к MongoDB...');
+  console.log('📍 MONGODB_URI:', MONGODB_URI ? 'установлен' : 'НЕ УСТАНОВЛЕН');
+  console.log('💳 WITHDRAWAL_CHANNEL:', WITHDRAWAL_CHANNEL || 'НЕ УСТАНОВЛЕН');
+  
   await mongo.connect();
+  console.log('✅ MongoDB подключен');
+  
   const db = mongo.db();
   users = db.collection('users');
   promocodes = db.collection('promocodes');
@@ -703,6 +717,9 @@ async function connectDB() {
   supportTickets = db.collection('supportTickets'); // добавляем коллекцию заявок
   taskChecks = db.collection('taskChecks'); // коллекция проверок заданий
   withdrawalRequests = db.collection('withdrawalRequests'); // коллекция заявок на вывод
+  
+  console.log('📋 Коллекции инициализированы');
+  console.log('🎯 Система вывода готова к работе');
 }
 
 function now() { return Math.floor(Date.now() / 1000); }
@@ -1459,7 +1476,9 @@ bot.action('withdraw', async (ctx) => {
 
 // Обработчики методов вывода
 bot.action('withdraw_tg_stars', async (ctx) => {
+  console.log('🎯 Пользователь нажал кнопку withdraw_tg_stars, ID:', ctx.from.id);
   await adminForceReply(ctx, 'Введите количество звёзд для вывода в Telegram Stars (минимум 100):');
+  console.log('💬 Force reply отправлен для Telegram Stars');
 });
 
 bot.action('withdraw_ton', async (ctx) => {
@@ -2484,6 +2503,9 @@ bot.action('admin_faq', async (ctx) => {
 
 // Добавляем недостающие обработчики админских команд
 function adminForceReply(ctx, text) {
+  console.log('📝 Отправляем force reply:', text);
+  console.log('👤 Пользователю:', ctx.from.id, ctx.from.first_name || ctx.from.username);
+  
   return ctx.reply(text, {
     reply_markup: {
       force_reply: true,
@@ -3681,8 +3703,13 @@ bot.action(/^check_sponsor_(.+)$/, async (ctx) => {
 });
 
 connectDB().then(() => {
+  console.log('🚀 Запускаем бота...');
   bot.launch();
-  console.log('Бот запущен!');
+  console.log('✅ Бот запущен успешно!');
+  console.log('📱 Готов к обработке сообщений');
+}).catch(error => {
+  console.error('❌ Ошибка запуска бота:', error);
+  process.exit(1);
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
