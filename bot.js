@@ -44,6 +44,7 @@ console.log('📞 SUPPORT_CHANNEL:', SUPPORT_CHANNEL || 'НЕ УСТАНОВЛЕ
 console.log('💳 WITHDRAWAL_CHANNEL:', WITHDRAWAL_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('🔐 REQUIRED_CHANNEL:', REQUIRED_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('📢 PROMO_NOTIFICATIONS_CHAT:', process.env.PROMO_NOTIFICATIONS_CHAT || 'НЕ УСТАНОВЛЕН');
+console.log('📢 CHANNEL_POSTS_CHAT:', process.env.CHANNEL_POSTS_CHAT || 'НЕ УСТАНОВЛЕН');
 
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
@@ -3228,6 +3229,91 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
   }
 }
 
+// Функция создания постов для канала
+async function handlePostCreation(ctx, text, userState) {
+  try {
+    const { postType } = userState;
+    const channelChatId = process.env.CHANNEL_POSTS_CHAT || '@magnumtap';
+    
+    console.log(`📝 Создаем пост типа ${postType} для канала ${channelChatId}`);
+    
+    // Проверяем наличие фото бота
+    const botPhotoUrl = process.env.BOT_PHOTO_URL;
+    if (!botPhotoUrl) {
+      await ctx.reply('❌ Фото бота не настроено! Добавьте переменную BOT_PHOTO_URL');
+      userStates.delete(ctx.from.id);
+      return;
+    }
+    
+    // Формируем клавиатуру в зависимости от типа поста
+    let keyboard = null;
+    
+    if (postType === 'game') {
+      keyboard = Markup.inlineKeyboard([
+        [Markup.button.url('🎮 Играть', `https://t.me/${ctx.botInfo.username}?start=game`)]
+      ]);
+    } else if (postType === 'chat') {
+      keyboard = Markup.inlineKeyboard([
+        [Markup.button.url('💬 Присоединиться к чату', 'https://t.me/+Poy0ZtUoux1hMTMy')]
+      ]);
+    } else if (postType === 'promo') {
+      keyboard = Markup.inlineKeyboard([
+        [Markup.button.url('🎫 Получить промокод', `https://t.me/${ctx.botInfo.username}?start=promo`)]
+      ]);
+    }
+    
+    // Отправляем пост в канал
+    try {
+      if (keyboard) {
+        await bot.telegram.sendPhoto(channelChatId, botPhotoUrl, {
+          caption: text,
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        });
+      } else {
+        await bot.telegram.sendPhoto(channelChatId, botPhotoUrl, {
+          caption: text,
+          parse_mode: 'Markdown'
+        });
+      }
+      
+      console.log(`✅ Пост успешно отправлен в канал ${channelChatId}`);
+      
+      // Отправляем подтверждение админу
+      let confirmText = `✅ **Пост создан успешно!**\n\n`;
+      confirmText += `📢 **Тип:** ${postType === 'normal' ? 'Обычный' : postType === 'game' ? 'Игровой' : postType === 'chat' ? 'Чат' : 'Промокод'}\n`;
+      confirmText += `📝 **Текст:** ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}\n`;
+      confirmText += `📸 **Фото:** Добавлено\n`;
+      
+      if (keyboard) {
+        confirmText += `🔘 **Кнопка:** Добавлена\n`;
+      }
+      
+      confirmText += `\n📢 Пост опубликован в канале!`;
+      
+      await ctx.reply(confirmText, { parse_mode: 'Markdown' });
+      
+    } catch (channelError) {
+      console.error('❌ Ошибка отправки в канал:', channelError);
+      
+      if (channelError.message.includes('chat not found')) {
+        await ctx.reply('❌ Канал не найден! Проверьте переменную CHANNEL_POSTS_CHAT');
+      } else if (channelError.message.includes('Forbidden')) {
+        await ctx.reply('❌ Бот не имеет прав для отправки в канал! Добавьте бота как администратора');
+      } else {
+        await ctx.reply(`❌ Ошибка отправки в канал: ${channelError.message}`);
+      }
+    }
+    
+    userStates.delete(ctx.from.id);
+    
+  } catch (error) {
+    console.error('❌ Ошибка создания поста:', error);
+    await ctx.reply('❌ Произошла ошибка при создании поста. Попробуйте снова.');
+    userStates.delete(ctx.from.id);
+  }
+}
+
 // Функция обработки создания промокодов
 async function handlePromoCodeCreation(ctx, text, userState) {
   try {
@@ -4140,6 +4226,12 @@ bot.on('text', async (ctx) => {
         await handlePromoCodeCreation(ctx, text, userState);
         return;
       }
+      
+      // Создание поста
+      else if (userState.type === 'admin_create_post') {
+        await handlePostCreation(ctx, text, userState);
+        return;
+      }
 
       // Выдать/забрать звёзды
       else if (replyText.includes('ID пользователя и количество звёзд')) {
@@ -4218,27 +4310,78 @@ bot.action('admin_panel', async (ctx) => {
 
   await sendMessageWithPhoto(ctx, adminText, Markup.inlineKeyboard([
     [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
-    [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
-    [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
-    [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('🌾 Настройки фарма', 'admin_farm')],
-    [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    [Markup.button.callback('📝 Создать пост', 'admin_create_post'), Markup.button.callback('📊 Статистика', 'admin_stats')],
+    [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
+    [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
+    [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]));
 });
 
 bot.action('admin_cancel', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
   ctx.answerCbQuery();
-  await sendMessageWithPhoto(ctx, 
+      await sendMessageWithPhoto(ctx, 
     '⚙️ *Админ-панель* ⚙️\n\n🎛️ Выберите действие:',
     Markup.inlineKeyboard([
       [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
-      [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
-      [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
-      [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('🌾 Настройки фарма', 'admin_farm')],
-      [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      [Markup.button.callback('📝 Создать пост', 'admin_create_post'), Markup.button.callback('📊 Статистика', 'admin_stats')],
+      [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
+      [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
+      [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]),
     false
   );
+});
+
+// Создание постов для канала
+bot.action('admin_create_post', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const postText = `📝 **Создание поста для канала** 📝\n\n` +
+                   `Выберите тип поста:\n\n` +
+                   `📢 **Обычный пост** - текст с фото бота\n` +
+                   `🎮 **Игровой пост** - с кнопкой "Играть"\n` +
+                   `💬 **Чат пост** - с кнопкой "Присоединиться к чату"\n` +
+                   `🎫 **Промокод пост** - с кнопкой "Получить промокод"`;
+
+  await sendMessageWithPhoto(ctx, postText, Markup.inlineKeyboard([
+    [Markup.button.callback('📢 Обычный пост', 'post_type_normal')],
+    [Markup.button.callback('🎮 Игровой пост', 'post_type_game')],
+    [Markup.button.callback('💬 Чат пост', 'post_type_chat')],
+    [Markup.button.callback('🎫 Промокод пост', 'post_type_promo')],
+    [Markup.button.callback('🔙 Назад', 'admin_panel')]
+  ]));
+});
+
+// Обработчики типов постов
+bot.action('post_type_normal', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_create_post', postType: 'normal' });
+  await adminForceReply(ctx, '📢 **Обычный пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 Поддерживается Markdown разметка');
+});
+
+bot.action('post_type_game', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_create_post', postType: 'game' });
+  await adminForceReply(ctx, '🎮 **Игровой пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 К посту автоматически добавится кнопка "🎮 Играть"');
+});
+
+bot.action('post_type_chat', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_create_post', postType: 'chat' });
+  await adminForceReply(ctx, '💬 **Чат пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 К посту автоматически добавится кнопка "💬 Присоединиться к чату"');
+});
+
+bot.action('post_type_promo', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_create_post', postType: 'promo' });
+  await adminForceReply(ctx, '🎫 **Промокод пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 К посту автоматически добавится кнопка "🎫 Получить промокод"');
 });
 
 // Управление статусами
