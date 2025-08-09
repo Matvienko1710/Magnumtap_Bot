@@ -7,6 +7,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => id.trim()) : [];
 const SUPPORT_CHANNEL = process.env.SUPPORT_CHANNEL; // Имя канала без @
+const WITHDRAWAL_CHANNEL = process.env.WITHDRAWAL_CHANNEL; // Канал для заявок на вывод
 
 // Обязательная подписка
 const REQUIRED_CHANNEL = process.env.REQUIRED_CHANNEL;
@@ -14,15 +15,33 @@ const REQUIRED_BOT_LINK = process.env.REQUIRED_BOT_LINK || 'https://t.me/Referal
 
 // Ссылки для заданий (настраиваются через переменные окружения)
 const FIRESTARS_BOT_LINK = process.env.FIRESTARS_BOT_LINK || 'https://t.me/firestars_rbot?start=6587897295';
-const FARMIK_BOT_LINK = process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295';  
+const FARMIK_BOT_LINK = process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295';
 const BASKET_BOT_LINK = process.env.BASKET_BOT_LINK || 'https://t.me/basket_gift_bot?start=6587897295';
+
+// Система заявок на вывод
+const WITHDRAWAL_STATUSES = {
+  'pending': { name: '⏳ На рассмотрении', color: '🟡' },
+  'approved': { name: '✅ Одобрено', color: '🟢' },
+  'rejected': { name: '❌ Отклонено', color: '🔴' },
+  'processing': { name: '🔄 В обработке', color: '🔵' },
+  'completed': { name: '✅ Выполнено', color: '🟢' }
+};
+
+const REJECTION_REASONS = {
+  'fraud': { name: '🚫 Накрутка активности', description: 'Обнаружены признаки накрутки активности или использования ботов' },
+  'bug_abuse': { name: '🐛 Злоупотребление багами', description: 'Использование багов или уязвимостей для получения звёзд' },
+  'multi_account': { name: '👥 Мультиаккаунтинг', description: 'Использование нескольких аккаунтов одним пользователем' },
+  'insufficient_activity': { name: '📊 Недостаточная активность', description: 'Слишком низкая активность для такого количества звёзд' },
+  'suspicious_pattern': { name: '🔍 Подозрительная активность', description: 'Обнаружены подозрительные паттерны в активности' },
+  'other': { name: '❓ Другая причина', description: 'Причина будет указана дополнительно' }
+};
 
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
 
 const bot = new Telegraf(BOT_TOKEN);
 const mongo = new MongoClient(MONGODB_URI);
-let users, promocodes, taskChecks;
+let users, promocodes, taskChecks, withdrawalRequests;
 
 // Система титулов
 const TITLES = {
@@ -683,6 +702,7 @@ async function connectDB() {
   titles = db.collection('titles');
   supportTickets = db.collection('supportTickets'); // добавляем коллекцию заявок
   taskChecks = db.collection('taskChecks'); // коллекция проверок заданий
+  withdrawalRequests = db.collection('withdrawalRequests'); // коллекция заявок на вывод
 }
 
 function now() { return Math.floor(Date.now() / 1000); }
@@ -919,6 +939,102 @@ function calculateLuckyBoxReward(boxType = 'lucky') {
 // Функция для получения отображаемого имени пользователя
 function getUserDisplayName(user, userData = null) {
   return user.username || user.first_name || `User${user.id}`;
+}
+
+// Функции для работы с заявками на вывод
+async function createWithdrawalRequest(userId, method, amount, address) {
+  const user = await getUser(userId);
+  const requestId = new Date().getTime().toString();
+  
+  const request = {
+    id: requestId,
+    userId: userId,
+    username: user.username || '',
+    firstName: user.first_name || '',
+    method: method,
+    amount: amount,
+    address: address,
+    status: 'pending',
+    createdAt: Math.floor(Date.now() / 1000),
+    updatedAt: Math.floor(Date.now() / 1000),
+    fee: Math.round(amount * 0.05 * 100) / 100, // 5% комиссия
+    netAmount: Math.round((amount - amount * 0.05) * 100) / 100
+  };
+  
+  await withdrawalRequests.insertOne(request);
+  return request;
+}
+
+async function updateWithdrawalStatus(requestId, status, adminId, reason = null) {
+  const update = {
+    status: status,
+    updatedAt: Math.floor(Date.now() / 1000),
+    processedBy: adminId
+  };
+  
+  if (reason) {
+    update.rejectionReason = reason;
+  }
+  
+  await withdrawalRequests.updateOne(
+    { id: requestId },
+    { $set: update }
+  );
+}
+
+async function sendWithdrawalToChannel(request) {
+  if (!WITHDRAWAL_CHANNEL) return;
+  
+  const user = await getUser(request.userId);
+  const methodNames = {
+    'tg_stars': '⭐ Telegram Stars',
+    'ton': '💎 TON Coin', 
+    'usdt': '💵 USDT TRC-20'
+  };
+  
+  const message = `💸 **Новая заявка на вывод** 💸\n\n` +
+                  `👤 **Пользователь:** ${request.firstName || request.username || `ID: ${request.userId}`}\n` +
+                  `🆔 **ID пользователя:** ${request.userId}\n` +
+                  `💰 **Сумма:** ${request.amount}⭐\n` +
+                  `💸 **К выводу:** ${request.netAmount}⭐ (комиссия: ${request.fee}⭐)\n` +
+                  `🔄 **Метод:** ${methodNames[request.method]}\n` +
+                  `📍 **Адрес/Данные:** \`${request.address}\`\n` +
+                  `⏰ **Время:** ${new Date(request.createdAt * 1000).toLocaleString('ru-RU')}\n` +
+                  `📊 **Статус:** ${WITHDRAWAL_STATUSES[request.status].color} ${WITHDRAWAL_STATUSES[request.status].name}\n\n` +
+                  `🏷️ **ID заявки:** \`${request.id}\``;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('✅ Одобрить', `approve_withdrawal_${request.id}`)],
+    [Markup.button.callback('❌ Отклонить', `reject_withdrawal_${request.id}`)],
+    [Markup.button.callback('🔄 В обработку', `process_withdrawal_${request.id}`)]
+  ]);
+  
+  try {
+    await bot.telegram.sendMessage(`@${WITHDRAWAL_CHANNEL}`, message, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
+  } catch (error) {
+    console.error('Ошибка отправки заявки в канал:', error);
+  }
+}
+
+async function notifyUserWithdrawalUpdate(request, isApproved, reason = null) {
+  const statusText = isApproved ? 
+    `✅ **Заявка одобрена!**\n\nВаш вывод ${request.netAmount}⭐ обрабатывается. Средства поступят в течение 24-48 часов.` :
+    `❌ **Заявка отклонена**\n\nПричина: ${REJECTION_REASONS[reason]?.name || 'Не указана'}\n${REJECTION_REASONS[reason]?.description || ''}`;
+  
+  const message = `💸 **Обновление заявки на вывод** 💸\n\n` +
+                  `🏷️ **ID заявки:** \`${request.id}\`\n` +
+                  `💰 **Сумма:** ${request.amount}⭐\n` +
+                  `🔄 **Метод:** ${request.method}\n\n` +
+                  statusText;
+  
+  try {
+    await bot.telegram.sendMessage(request.userId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    console.error('Ошибка уведомления пользователя:', error);
+  }
 }
 
 // Функции для работы со статусами
@@ -1356,6 +1472,156 @@ bot.action('withdraw_info', async (ctx) => {
   );
 });
 
+// Обработчики для канала выводов (только для админов)
+bot.action(/^approve_withdrawal_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) {
+    return ctx.answerCbQuery('❌ Нет доступа!');
+  }
+  
+  const requestId = ctx.match[1];
+  const request = await withdrawalRequests.findOne({ id: requestId });
+  
+  if (!request) {
+    return ctx.answerCbQuery('❌ Заявка не найдена!');
+  }
+  
+  if (request.status !== 'pending') {
+    return ctx.answerCbQuery('❌ Заявка уже обработана!');
+  }
+  
+  await updateWithdrawalStatus(requestId, 'approved', ctx.from.id);
+  await notifyUserWithdrawalUpdate(request, true);
+  
+  const updatedMessage = ctx.callbackQuery.message.text + 
+                        `\n\n✅ **ОДОБРЕНО** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
+                        `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  await ctx.answerCbQuery('✅ Заявка одобрена!');
+});
+
+bot.action(/^reject_withdrawal_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) {
+    return ctx.answerCbQuery('❌ Нет доступа!');
+  }
+  
+  const requestId = ctx.match[1];
+  const request = await withdrawalRequests.findOne({ id: requestId });
+  
+  if (!request) {
+    return ctx.answerCbQuery('❌ Заявка не найдена!');
+  }
+  
+  if (request.status !== 'pending') {
+    return ctx.answerCbQuery('❌ Заявка уже обработана!');
+  }
+  
+  // Показываем выбор причины отклонения
+  const reasons = Object.entries(REJECTION_REASONS).map(([key, reason]) => 
+    [Markup.button.callback(reason.name, `reject_reason_${requestId}_${key}`)]
+  );
+  
+  const keyboard = Markup.inlineKeyboard([
+    ...reasons,
+    [Markup.button.callback('🔙 Назад', `back_to_withdrawal_${requestId}`)]
+  ]);
+  
+  await ctx.editMessageText(
+    `❌ **Выберите причину отклонения заявки:**\n\n` + 
+    `🏷️ **ID:** \`${requestId}\`\n` +
+    `👤 **Пользователь:** ${request.firstName || request.username || request.userId}\n` +
+    `💰 **Сумма:** ${request.amount}⭐`,
+    { parse_mode: 'Markdown', ...keyboard }
+  );
+});
+
+bot.action(/^reject_reason_(.+)_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) {
+    return ctx.answerCbQuery('❌ Нет доступа!');
+  }
+  
+  const requestId = ctx.match[1];
+  const reason = ctx.match[2];
+  
+  const request = await withdrawalRequests.findOne({ id: requestId });
+  if (!request) {
+    return ctx.answerCbQuery('❌ Заявка не найдена!');
+  }
+  
+  // Возвращаем звёзды пользователю
+  await users.updateOne({ id: request.userId }, { $inc: { stars: request.amount } });
+  
+  await updateWithdrawalStatus(requestId, 'rejected', ctx.from.id, reason);
+  await notifyUserWithdrawalUpdate(request, false, reason);
+  
+  const reasonInfo = REJECTION_REASONS[reason];
+  const updatedMessage = ctx.callbackQuery.message.text.split('\n\n❌')[0] + 
+                        `\n\n❌ **ОТКЛОНЕНО** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
+                        `\n📋 **Причина:** ${reasonInfo.name}` +
+                        `\n💰 **Звёзды возвращены пользователю**` +
+                        `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  await ctx.answerCbQuery(`✅ Заявка отклонена: ${reasonInfo.name}`);
+});
+
+bot.action(/^process_withdrawal_(.+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) {
+    return ctx.answerCbQuery('❌ Нет доступа!');
+  }
+  
+  const requestId = ctx.match[1];
+  const request = await withdrawalRequests.findOne({ id: requestId });
+  
+  if (!request) {
+    return ctx.answerCbQuery('❌ Заявка не найдена!');
+  }
+  
+  await updateWithdrawalStatus(requestId, 'processing', ctx.from.id);
+  
+  const updatedMessage = ctx.callbackQuery.message.text + 
+                        `\n\n🔄 **В ОБРАБОТКЕ** администратором ${ctx.from.first_name || ctx.from.username || ctx.from.id}` +
+                        `\n⏰ ${new Date().toLocaleString('ru-RU')}`;
+  
+  await ctx.editMessageText(updatedMessage, { parse_mode: 'Markdown' });
+  await ctx.answerCbQuery('🔄 Заявка взята в обработку!');
+});
+
+bot.action(/^back_to_withdrawal_(.+)$/, async (ctx) => {
+  const requestId = ctx.match[1];
+  const request = await withdrawalRequests.findOne({ id: requestId });
+  
+  if (!request) {
+    return ctx.answerCbQuery('❌ Заявка не найдена!');
+  }
+  
+  // Возвращаем исходное сообщение с кнопками
+  const methodNames = {
+    'tg_stars': '⭐ Telegram Stars',
+    'ton': '💎 TON Coin', 
+    'usdt': '💵 USDT TRC-20'
+  };
+  
+  const message = `💸 **Новая заявка на вывод** 💸\n\n` +
+                  `👤 **Пользователь:** ${request.firstName || request.username || `ID: ${request.userId}`}\n` +
+                  `🆔 **ID пользователя:** ${request.userId}\n` +
+                  `💰 **Сумма:** ${request.amount}⭐\n` +
+                  `💸 **К выводу:** ${request.netAmount}⭐ (комиссия: ${request.fee}⭐)\n` +
+                  `🔄 **Метод:** ${methodNames[request.method]}\n` +
+                  `📍 **Адрес/Данные:** \`${request.address}\`\n` +
+                  `⏰ **Время:** ${new Date(request.createdAt * 1000).toLocaleString('ru-RU')}\n` +
+                  `📊 **Статус:** ${WITHDRAWAL_STATUSES[request.status].color} ${WITHDRAWAL_STATUSES[request.status].name}\n\n` +
+                  `🏷️ **ID заявки:** \`${request.id}\``;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('✅ Одобрить', `approve_withdrawal_${request.id}`)],
+    [Markup.button.callback('❌ Отклонить', `reject_withdrawal_${request.id}`)],
+    [Markup.button.callback('🔄 В обработку', `process_withdrawal_${request.id}`)]
+  ]);
+  
+  await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+});
+
 // Магазин
 bot.action('shop', async (ctx) => {
   const user = await getUser(ctx.from.id);
@@ -1578,6 +1844,144 @@ bot.on('text', async (ctx) => {
   const replyText = replyMsg.text;
 
   try {
+    // Обработка заявок на вывод
+    if (replyText.includes('Введите количество звёзд для вывода в Telegram Stars')) {
+      const amount = parseFloat(text);
+      if (isNaN(amount) || amount < 100) {
+        return ctx.reply('❌ Неверная сумма! Минимум для вывода: 100⭐');
+      }
+      
+      const user = await getUser(ctx.from.id, ctx);
+      if (user.stars < amount) {
+        return ctx.reply(`❌ Недостаточно звёзд! У вас: ${Math.round(user.stars * 100) / 100}⭐`);
+      }
+      
+      await adminForceReply(ctx, `⭐ Введите ваш Telegram ID для получения ${amount} Telegram Stars:`);
+      return;
+    }
+    
+    if (replyText.includes('Введите ваш Telegram ID для получения') && replyText.includes('Telegram Stars')) {
+      const telegramId = text.trim();
+      const amountMatch = replyText.match(/(\d+(?:\.\d+)?)/);
+      if (!amountMatch) return ctx.reply('❌ Ошибка обработки суммы!');
+      
+      const amount = parseFloat(amountMatch[1]);
+      const request = await createWithdrawalRequest(ctx.from.id, 'tg_stars', amount, telegramId);
+      
+      // Списываем звёзды
+      await users.updateOne({ id: ctx.from.id }, { $inc: { stars: -amount } });
+      
+      await sendWithdrawalToChannel(request);
+      
+      ctx.reply(`✅ **Заявка создана!**\n\n` +
+                `🏷️ **ID заявки:** \`${request.id}\`\n` +
+                `💰 **Сумма:** ${amount}⭐\n` +
+                `💸 **К получению:** ${request.netAmount}⭐\n` +
+                `⏰ **Статус:** ⏳ На рассмотрении\n\n` +
+                `Заявка отправлена администраторам. Ожидайте обработки в течение 24-48 часов.`, 
+                { parse_mode: 'Markdown' });
+      return;
+    }
+    
+    if (replyText.includes('Введите ваш TON адрес для вывода')) {
+      const address = text.trim();
+      if (address.length < 10) {
+        return ctx.reply('❌ Неверный TON адрес!');
+      }
+      
+      await adminForceReply(ctx, `💎 Введите количество звёзд для вывода в TON (минимум 500):`);
+      return;
+    }
+    
+    if (replyText.includes('Введите количество звёзд для вывода в TON')) {
+      const amount = parseFloat(text);
+      if (isNaN(amount) || amount < 500) {
+        return ctx.reply('❌ Неверная сумма! Минимум для вывода в TON: 500⭐');
+      }
+      
+      const user = await getUser(ctx.from.id, ctx);
+      if (user.stars < amount) {
+        return ctx.reply(`❌ Недостаточно звёзд! У вас: ${Math.round(user.stars * 100) / 100}⭐`);
+      }
+      
+      // Получаем адрес из предыдущего сообщения
+      const messages = await ctx.telegram.getUpdates();
+      // Используем временное решение - запрашиваем адрес заново
+      await adminForceReply(ctx, `💎 Подтвердите TON адрес для вывода ${amount}⭐:`);
+      return;
+    }
+    
+    if (replyText.includes('Подтвердите TON адрес для вывода')) {
+      const address = text.trim();
+      const amountMatch = replyText.match(/(\d+(?:\.\d+)?)/);
+      if (!amountMatch) return ctx.reply('❌ Ошибка обработки суммы!');
+      
+      const amount = parseFloat(amountMatch[1]);
+      const request = await createWithdrawalRequest(ctx.from.id, 'ton', amount, address);
+      
+      // Списываем звёзды
+      await users.updateOne({ id: ctx.from.id }, { $inc: { stars: -amount } });
+      
+      await sendWithdrawalToChannel(request);
+      
+      ctx.reply(`✅ **Заявка создана!**\n\n` +
+                `🏷️ **ID заявки:** \`${request.id}\`\n` +
+                `💰 **Сумма:** ${amount}⭐\n` +
+                `💸 **К получению:** ${request.netAmount}⭐\n` +
+                `⏰ **Статус:** ⏳ На рассмотрении\n\n` +
+                `Заявка отправлена администраторам. Ожидайте обработки в течение 24-48 часов.`, 
+                { parse_mode: 'Markdown' });
+      return;
+    }
+    
+    if (replyText.includes('Введите ваш USDT TRC-20 адрес для вывода')) {
+      const address = text.trim();
+      if (address.length < 10) {
+        return ctx.reply('❌ Неверный USDT адрес!');
+      }
+      
+      await adminForceReply(ctx, `💵 Введите количество звёзд для вывода в USDT (минимум 1000):`);
+      return;
+    }
+    
+    if (replyText.includes('Введите количество звёзд для вывода в USDT')) {
+      const amount = parseFloat(text);
+      if (isNaN(amount) || amount < 1000) {
+        return ctx.reply('❌ Неверная сумма! Минимум для вывода в USDT: 1000⭐');
+      }
+      
+      const user = await getUser(ctx.from.id, ctx);
+      if (user.stars < amount) {
+        return ctx.reply(`❌ Недостаточно звёзд! У вас: ${Math.round(user.stars * 100) / 100}⭐`);
+      }
+      
+      await adminForceReply(ctx, `💵 Подтвердите USDT TRC-20 адрес для вывода ${amount}⭐:`);
+      return;
+    }
+    
+    if (replyText.includes('Подтвердите USDT TRC-20 адрес для вывода')) {
+      const address = text.trim();
+      const amountMatch = replyText.match(/(\d+(?:\.\d+)?)/);
+      if (!amountMatch) return ctx.reply('❌ Ошибка обработки суммы!');
+      
+      const amount = parseFloat(amountMatch[1]);
+      const request = await createWithdrawalRequest(ctx.from.id, 'usdt', amount, address);
+      
+      // Списываем звёзды
+      await users.updateOne({ id: ctx.from.id }, { $inc: { stars: -amount } });
+      
+      await sendWithdrawalToChannel(request);
+      
+      ctx.reply(`✅ **Заявка создана!**\n\n` +
+                `🏷️ **ID заявки:** \`${request.id}\`\n` +
+                `💰 **Сумма:** ${amount}⭐\n` +
+                `💸 **К получению:** ${request.netAmount}⭐\n` +
+                `⏰ **Статус:** ⏳ На рассмотрении\n\n` +
+                `Заявка отправлена администраторам. Ожидайте обработки в течение 24-48 часов.`, 
+                { parse_mode: 'Markdown' });
+      return;
+    }
+    
     // Создание заявки в техподдержку
     if (replyText.includes('ТЕХНИЧЕСКАЯ ПОДДЕРЖКА') && replyText.includes('Опишите вашу проблему')) {
       const ticket = await createSupportTicket(

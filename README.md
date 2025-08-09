@@ -174,6 +174,7 @@ BOT_TOKEN=ваш_токен_бота_от_BotFather
 MONGODB_URI=ваша_строка_подключения_к_MongoDB
 ADMIN_IDS=123456789,987654321
 SUPPORT_CHANNEL=имя_канала_техподдержки
+WITHDRAWAL_CHANNEL=канал_выводов_без_собаки
 
 # Обязательная подписка
 REQUIRED_CHANNEL=имя_канала_без_собаки
@@ -217,6 +218,7 @@ BOT_TOKEN=ваш_токен_бота_здесь
 MONGODB_URI=строка_подключения_MongoDB
 ADMIN_IDS=ваши_telegram_id_через_запятую
 SUPPORT_CHANNEL=support_channel_name     # Имя канала техподдержки без @
+WITHDRAWAL_CHANNEL=withdrawals_channel   # Канал для заявок на вывод без @
 
 # Обязательная подписка
 REQUIRED_CHANNEL=имя_канала_без_собаки    # Имя канала для подписки без @
