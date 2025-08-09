@@ -1148,11 +1148,17 @@ bot.action('bonus', async (ctx) => {
       ctx.answerCbQuery('🎁 +10 звёзд! Ежедневный бонус получен!');
     }
   } else {
-    // Более точный расчет времени до следующего бонуса
-    const nextBonusTime = (user.lastBonus + 1) * (1000 * 60 * 60 * 24);
-    const timeLeft = nextBonusTime - Date.now();
-    const hoursLeft = Math.ceil(timeLeft / (1000 * 60 * 60));
-    const minutesLeft = Math.ceil((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+    // Расчет времени до следующего дня (00:00)
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    
+    const timeLeft = tomorrow.getTime() - now.getTime();
+    const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
+    const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+    
+    console.log(`Бонус - timeLeft: ${timeLeft}, hoursLeft: ${hoursLeft}, minutesLeft: ${minutesLeft}`);
     
     if (hoursLeft > 0) {
       ctx.answerCbQuery(`🕐 Следующий бонус через ${hoursLeft}ч ${minutesLeft}мин`);
