@@ -1006,8 +1006,18 @@ function getNextRankInfo(user) {
     const starsToNext = nextRank.requirement - stars;
     const progress = Math.max(0, Math.min(100, (stars - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
     
-    // Отладочная информация
-    console.log(`🔍 Уровень пользователя ${user.id}: ${stars} звёзд, ${currentRank.name} -> ${nextRank.name}, прогресс: ${Math.round(progress)}%`);
+    // КРИТИЧЕСКАЯ отладочная информация
+    console.log(`🔥🔥🔥 РАСЧЕТ ПРОГРЕССА УРОВНЯ:`);
+    console.log(`🔥 Пользователь: ${user.id}`);
+    console.log(`🔥 Звёзды: ${stars}`);
+    console.log(`🔥 Текущий ранг: ${currentRank.name} (от ${currentRank.requirement} звёзд)`);
+    console.log(`🔥 Следующий ранг: ${nextRank.name} (нужно ${nextRank.requirement} звёзд)`);
+    console.log(`🔥 До следующего: ${starsToNext} звёзд`);
+    console.log(`🔥 Формула прогресса: (${stars} - ${currentRank.requirement}) / (${nextRank.requirement} - ${currentRank.requirement}) * 100`);
+    console.log(`🔥 Числитель: ${stars - currentRank.requirement}`);
+    console.log(`🔥 Знаменатель: ${nextRank.requirement - currentRank.requirement}`);
+    console.log(`🔥 Прогресс: ${progress}% (округлено: ${Math.round(progress)}%)`);
+    console.log(`🔥🔥🔥 КОНЕЦ РАСЧЕТА`);
     
     return {
       current: currentRank,
@@ -1954,6 +1964,14 @@ async function getDetailedProfile(userId, ctx) {
   const title = getUserMainTitle(user);
   const rank = getUserRank(user);
   const nextRankInfo = getNextRankInfo(user);
+  
+  // КРИТИЧЕСКАЯ ПРОВЕРКА: Пересчитываем с самыми свежими данными
+  console.log(`🔥 ПРОВЕРКА РАНГА: Пользователь ${userId} имеет ${user.stars} звёзд`);
+  console.log(`🔥 ТЕКУЩИЙ РАНГ: ${rank.name} (требует ${rank.requirement} звёзд)`);
+  if (nextRankInfo.next) {
+    console.log(`🔥 СЛЕДУЮЩИЙ РАНГ: ${nextRankInfo.next.name} (требует ${nextRankInfo.next.requirement} звёзд)`);
+    console.log(`🔥 ПРОГРЕСС: ${nextRankInfo.progress}%, до следующего: ${nextRankInfo.starsToNext} звёзд`);
+  }
   const status = getUserStatus(user);
   
   // Получаем имя пользователя
@@ -2344,6 +2362,18 @@ bot.action('main_menu', async (ctx) => {
 
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
+  console.log(`🔥 КНОПКА ПРОФИЛЬ - принудительное обновление для ${ctx.from.id}`);
+  
+  // ПОЛНОЕ удаление из кеша и принудительное обновление
+  for (let i = 0; i < 10; i++) {
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
+  }
+  
+  // Получаем АБСОЛЮТНО свежие данные из базы
+  const freshUser = await getUserDirectFromDB(ctx.from.id, ctx);
+  console.log(`🔥 ПРОФИЛЬ: Свежие данные получены - ${freshUser.stars} звёзд`);
+  
   await updateProfileRealtime(ctx);
 });
 
@@ -3032,7 +3062,7 @@ bot.action('admin_cancel', async (ctx) => {
 
 // Магазин
 bot.action('shop', async (ctx) => {
-  const user = await getUser(ctx.from.id);
+  const user = await getUserDirectFromDB(ctx.from.id);
   
   // Отмечаем задание "посетить магазин"
   await markDailyTaskCompleted(ctx.from.id, 'shop_visit');
@@ -3077,7 +3107,7 @@ bot.action('shop', async (ctx) => {
 // Категории магазина
 bot.action(/^shop_(.+)$/, async (ctx) => {
   const category = ctx.match[1];
-  const user = await getUser(ctx.from.id);
+  const user = await getUserDirectFromDB(ctx.from.id);
   
   const categoryNames = {
     'boosts': '⚡ Бусты и множители',
@@ -3146,7 +3176,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     return;
   }
   
-  const user = await getUser(ctx.from.id);
+  const user = await getUserDirectFromDB(ctx.from.id);
   
   // Проверяем валюту для покупки
   if (item.currency === 'magnumCoins') {
