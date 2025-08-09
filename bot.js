@@ -1449,12 +1449,12 @@ ${progressBar}
 
 👋 **Приветствую, ${userInfo}!**
 
-[💫 ${getStatusDisplayName(user)}]  
+[${status.color} ${status.name}]  
 [🪙 ${magnumCoinsBalance}] Magnum Coin  
 [💎 ${starsBalance}] звёзд  
 [👥 ${friends}] друзей приглашено  
-[🏅 ${rank.name}]  
-[🏆 ${title}]
+[${rank.color} ${rank.name}]  
+[${title}]
 
 ${progressText}`;
 }
@@ -1711,10 +1711,11 @@ bot.action('my_titles', async (ctx) => {
     // Показываем обычные титулы
     userTitles.forEach(titleId => {
       if (TITLES[titleId]) {
+        const title = TITLES[titleId];
         const isSelected = user.selectedTitle === titleId;
-        const indicator = isSelected ? '✅' : '🏆';
-        titlesText += `${indicator} **${TITLES[titleId].name}** ${isSelected ? '(активен)' : ''}\n`;
-        titlesText += `📝 ${TITLES[titleId].description}\n\n`;
+        const indicator = isSelected ? '✅' : title.icon;
+        titlesText += `${indicator} **${title.name}** ${isSelected ? '(активен)' : ''}\n`;
+        titlesText += `📝 ${title.description}\n\n`;
       }
     });
   }
@@ -1757,8 +1758,9 @@ bot.action('select_title', async (ctx) => {
   // Обычные титулы
   userTitles.forEach(titleId => {
     if (TITLES[titleId]) {
+      const title = TITLES[titleId];
       const isSelected = user.selectedTitle === titleId;
-      const text = `${isSelected ? '✅' : '🏆'} ${TITLES[titleId].name} ${isSelected ? '(активен)' : ''}`;
+      const text = `${isSelected ? '✅' : title.icon} ${title.name} ${isSelected ? '(активен)' : ''}`;
       buttons.push([Markup.button.callback(text, `set_title_${titleId}`)]);
     }
   });
@@ -1842,8 +1844,9 @@ bot.action(/^set_title_(.+)$/, async (ctx) => {
     // Обычные титулы
     userTitles.forEach(titleId => {
       if (TITLES[titleId]) {
+        const title = TITLES[titleId];
         const isSelected = updatedUser.selectedTitle === titleId;
-        const text = `${isSelected ? '✅' : '🏆'} ${TITLES[titleId].name} ${isSelected ? '(активен)' : ''}`;
+        const text = `${isSelected ? '✅' : title.icon} ${title.name} ${isSelected ? '(активен)' : ''}`;
         buttons.push([Markup.button.callback(text, `set_title_${titleId}`)]);
       }
     });
@@ -3336,14 +3339,14 @@ bot.action('admin_titles', async (ctx) => {
   
   Object.entries(TITLES).forEach(([id, title]) => {
     if (title.condition !== 'secret') {
-      titlesList += `${title.name}\n${title.description}\n\n`;
+      titlesList += `${title.icon} ${title.name}\n${title.description}\n\n`;
     }
   });
   
   titlesList += '**СЕКРЕТНЫЕ ТИТУЛЫ:**\n';
   Object.entries(TITLES).forEach(([id, title]) => {
     if (title.condition === 'secret') {
-      titlesList += `${title.name}\n${title.description}\n\n`;
+      titlesList += `${title.icon} ${title.name}\n${title.description}\n\n`;
     }
   });
 
