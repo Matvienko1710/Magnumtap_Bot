@@ -40,6 +40,52 @@ const TITLES = {
   'vip_elite': { name: '💫 VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only' }
 };
 
+// Система статусов пользователей
+const USER_STATUSES = {
+  'owner': { 
+    name: '👑 Владелец', 
+    description: 'Создатель и владелец бота', 
+    color: '👑',
+    priority: 1
+  },
+  'admin': { 
+    name: '⚡ Администратор', 
+    description: 'Полный доступ к управлению ботом', 
+    color: '⚡',
+    priority: 2
+  },
+  'moderator': { 
+    name: '🛡️ Модератор', 
+    description: 'Модерация пользователей и контента', 
+    color: '🛡️',
+    priority: 3
+  },
+  'vip_gold': { 
+    name: '💎 VIP Gold', 
+    description: 'Премиум статус высшего уровня', 
+    color: '💎',
+    priority: 4
+  },
+  'vip': { 
+    name: '💫 VIP', 
+    description: 'Премиум пользователь', 
+    color: '💫',
+    priority: 5
+  },
+  'verified': { 
+    name: '✅ Верифицированный', 
+    description: 'Проверенный активный пользователь', 
+    color: '✅',
+    priority: 6
+  },
+  'member': { 
+    name: '🎮 Участник', 
+    description: 'Обычный участник сообщества', 
+    color: '🎮',
+    priority: 7
+  }
+};
+
 // Система достижений
 const ACHIEVEMENTS = {
   'first_hundred': { 
@@ -564,7 +610,8 @@ async function getUser(id) {
       bonusCount: 0,
       promoCount: 0,
       taskCount: 0,
-      dailyStreak: 0
+      dailyStreak: 0,
+      status: 'member' // Устанавливаем базовый статус
     };
     await users.insertOne(user);
     // Даём титул новичка
@@ -574,6 +621,17 @@ async function getUser(id) {
 }
 
 function isAdmin(userId) { return ADMIN_IDS.includes(String(userId)); }
+
+// Функции для работы со статусами
+function getUserStatus(user) {
+  const userStatus = user.status || 'member';
+  return USER_STATUSES[userStatus] ? USER_STATUSES[userStatus] : USER_STATUSES['member'];
+}
+
+function getStatusDisplayName(user) {
+  const status = getUserStatus(user);
+  return status.name;
+}
 
 function createProgressBar(current, total, length = 10) {
   if (total <= 0) return '░'.repeat(length); // Избегаем деления на ноль
@@ -631,7 +689,7 @@ async function getDetailedProfile(userId) {
   
   return `👑 **Профиль игрока MagnumTap** 👑
 
-💫 **Статус:** VIP-участник  
+💫 **Статус:** ${getStatusDisplayName(user)}  
 💎 **Баланс:** ${balance} ⭐ звёзд  
 👥 **Друзей приглашено:** ${friends}  
 🏆 **Ранг:** ${rank} 🌟
@@ -1097,6 +1155,53 @@ bot.on('text', async (ctx) => {
         ctx.reply(titlesList, { parse_mode: 'Markdown' });
       }
 
+      // Управление статусами
+      else if (replyText.includes('Выдача статуса') && replyText.includes('ID СТАТУС')) {
+        const [userId, statusKey] = text.split(' ');
+        if (!userId || !statusKey || !USER_STATUSES[statusKey]) {
+          return ctx.reply('❌ Неверный формат или несуществующий статус!\n\nДоступные статусы: owner, admin, moderator, vip_gold, vip, verified, member');
+        }
+
+        await users.updateOne(
+          { id: parseInt(userId) },
+          { $set: { status: statusKey } }
+        );
+        
+        ctx.reply(`✅ Статус "${USER_STATUSES[statusKey].name}" выдан пользователю ${userId}!`);
+      }
+      
+      else if (replyText.includes('Сброс статуса') && replyText.includes('обычному участнику')) {
+        const userId = parseInt(text);
+        if (!userId) {
+          return ctx.reply('❌ Введите корректный ID пользователя!');
+        }
+
+        await users.updateOne(
+          { id: userId },
+          { $set: { status: 'member' } }
+        );
+        
+        ctx.reply(`✅ Статус пользователя ${userId} сброшен к обычному участнику!`);
+      }
+      
+      else if (replyText.includes('Проверка статуса') && replyText.includes('просмотра его статуса')) {
+        const userId = parseInt(text);
+        const user = await users.findOne({ id: userId });
+        
+        if (!user) {
+          return ctx.reply('❌ Пользователь не найден!');
+        }
+
+        const currentStatus = getUserStatus(user);
+        ctx.reply(
+          `👤 **Статус пользователя ${userId}:**\n\n` +
+          `${currentStatus.color} **${currentStatus.name}**\n` +
+          `└ ${currentStatus.description}\n\n` +
+          `📊 **Приоритет:** ${currentStatus.priority}`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+
       // Рассылка
       else if (replyText.includes('текст для рассылки')) {
         const allUsers = await users.find().toArray();
@@ -1199,34 +1304,157 @@ bot.on('text', async (ctx) => {
 });
 
 bot.action('admin_panel', async (ctx) => {
-  const adminText = '⚙️ Админ-панель\n\nВыберите действие:';
+  const adminText = '⚙️ **Админ-панель** ⚙️\n\n🎛️ Выберите действие:';
 
-  ctx.editMessageText(adminText, Markup.inlineKeyboard([
-    [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
-    [Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
-    [Markup.button.callback('📊 Статистика', 'admin_stats')],
-    [Markup.button.callback('⭐ Звёзды', 'admin_stars')],
-    [Markup.button.callback('👥 Рефералы', 'admin_refs')],
-    [Markup.button.callback('🏆 Управление титулами', 'admin_titles')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-  ]));
+  ctx.editMessageText(adminText, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
+      [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
+      [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
+      [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ])
+  });
 });
 
 bot.action('admin_cancel', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
   ctx.answerCbQuery();
   ctx.reply(
-    '⚙️ Админ-панель\n\nВыберите действие:',
-    Markup.inlineKeyboard([
-      [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
-      [Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
-      [Markup.button.callback('📊 Статистика', 'admin_stats')],
-      [Markup.button.callback('⭐ Звёзды', 'admin_stars')],
-      [Markup.button.callback('👥 Рефералы', 'admin_refs')],
-      [Markup.button.callback('🏆 Управление титулами', 'admin_titles')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-    ])
+    '⚙️ **Админ-панель** ⚙️\n\n🎛️ Выберите действие:',
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
+        [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
+        [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
+        [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
+        [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      ])
+    }
   );
+});
+
+// Управление статусами
+bot.action('admin_statuses', async (ctx) => {
+  let statusText = '💫 **Управление статусами** 💫\n\n';
+  statusText += '📋 **Доступные статусы:**\n\n';
+  
+  Object.entries(USER_STATUSES).forEach(([key, status]) => {
+    statusText += `${status.color} **${status.name}**\n`;
+    statusText += `└ ${status.description}\n\n`;
+  });
+
+  ctx.editMessageText(statusText, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('➕ Выдать статус', 'admin_give_status')],
+      [Markup.button.callback('➖ Убрать статус', 'admin_remove_status')],
+      [Markup.button.callback('👤 Статус пользователя', 'admin_user_status')],
+      [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+    ])
+  });
+});
+
+bot.action('admin_give_status', async (ctx) => {
+  ctx.reply(
+    '➕ **Выдача статуса**\n\nВведите ID пользователя и статус через пробел:\n\n📝 Формат: `ID СТАТУС`\n\n🔧 Доступные статусы:\n• owner\n• admin\n• moderator\n• vip_gold\n• vip\n• verified\n• member',
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: 'Например: 123456789 vip'
+      }
+    }
+  );
+});
+
+bot.action('admin_remove_status', async (ctx) => {
+  ctx.reply(
+    '➖ **Сброс статуса**\n\nВведите ID пользователя для сброса статуса к обычному участнику:',
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: 'Введите ID пользователя'
+      }
+    }
+  );
+});
+
+bot.action('admin_user_status', async (ctx) => {
+  ctx.reply(
+    '👤 **Проверка статуса**\n\nВведите ID пользователя для просмотра его статуса:',
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: 'Введите ID пользователя'
+      }
+    }
+  );
+});
+
+// FAQ для админов
+bot.action('admin_faq', async (ctx) => {
+  const adminFaqText = `❓ **FAQ Админ-панели** ❓
+
+🎛️ **Основные функции:**
+
+📢 **Рассылка** - Отправка сообщений всем пользователям
+├ Введите текст для рассылки
+└ Сообщение отправится всем зарегистрированным пользователям
+
+🎫 **Промокод** - Создание промокодов
+├ Формат: НАЗВАНИЕ ЗВЁЗДЫ ЛИМИТ
+├ Пример: NEWCODE 25 100
+└ Создаст промокод на 25 звёзд с лимитом 100 активаций
+
+📊 **Статистика** - Подробная статистика бота
+├ Общее количество пользователей
+├ Активность за день/неделю
+└ Статистика по промокодам и заданиям
+
+⭐ **Звёзды** - Управление балансом пользователей
+├ Формат: ID_ПОЛЬЗОВАТЕЛЯ КОЛИЧЕСТВО
+├ Положительное число - добавить
+└ Отрицательное число - отнять
+
+👥 **Рефералы** - Просмотр рефералов пользователя
+├ Введите ID пользователя
+└ Покажет список приглашённых им людей
+
+🏆 **Титулы** - Управление титулами
+├ Просмотр всех титулов
+├ Выдача/удаление титулов
+└ Просмотр титулов конкретного пользователя
+
+💫 **Статусы** - Новая система статусов
+├ 👑 Владелец - высший статус
+├ ⚡ Администратор - полный доступ
+├ 🛡️ Модератор - модерация контента
+├ 💎 VIP Gold - премиум высшего уровня
+├ 💫 VIP - обычный премиум
+├ ✅ Верифицированный - проверенный пользователь
+└ 🎮 Участник - базовый статус
+
+🔧 **Команды статусов:**
+• Выдать: ID СТАТУС (123456789 vip)
+• Убрать: сбросить до обычного участника
+• Проверить: посмотреть текущий статус
+
+⚠️ **Важно:**
+- Все изменения применяются немедленно
+- Будьте осторожны с массовыми операциями
+- Используйте "Отмена" для возврата в админку`;
+
+  ctx.editMessageText(adminFaqText, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+    ])
+  });
 });
 
 // Добавляем недостающие обработчики админских команд
