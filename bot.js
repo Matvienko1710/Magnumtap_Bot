@@ -961,6 +961,67 @@ function getUserDisplayName(user, userData = null) {
   return user.username || user.first_name || `User${user.id}`;
 }
 
+// Обработка создания промокода
+async function handlePromoCreation(ctx, text, userState) {
+  const userId = ctx.from.id;
+  
+  try {
+    console.log('🎫 Обрабатываем создание промокода:', text);
+    
+    const parts = text.trim().split(/\s+/);
+    
+    if (parts.length !== 3) {
+      await ctx.reply('❌ Неверный формат! Используйте: НАЗВАНИЕ ЗВЁЗДЫ ЛИМИТ\n\nПример: NEWCODE 25 100');
+      return;
+    }
+    
+    const [code, stars, maxActivations] = parts;
+    const starsNum = Number(stars);
+    const maxNum = Number(maxActivations);
+    
+    if (!code || isNaN(starsNum) || isNaN(maxNum) || starsNum <= 0 || maxNum <= 0) {
+      await ctx.reply('❌ Неверные данные!\n\n✅ Правильный формат:\n• НАЗВАНИЕ - любой текст\n• ЗВЁЗДЫ - положительное число\n• ЛИМИТ - положительное число\n\nПример: NEWCODE 25 100');
+      return;
+    }
+    
+    // Проверяем, не существует ли уже такой промокод
+    const existingPromo = await promocodes.findOne({ code: code.toUpperCase() });
+    if (existingPromo) {
+      await ctx.reply(`❌ Промокод ${code.toUpperCase()} уже существует!`);
+      userStates.delete(userId);
+      return;
+    }
+    
+    console.log('💾 Сохраняем промокод в базу:', { code: code.toUpperCase(), stars: starsNum, max: maxNum });
+    
+    await promocodes.insertOne({
+      code: code.toUpperCase(),
+      stars: starsNum,
+      max: maxNum,
+      used: 0,
+      created: now()
+    });
+    
+    // Очищаем состояние
+    userStates.delete(userId);
+    
+    await ctx.reply(`✅ Промокод создан успешно!\n\n` +
+                    `🏷️ **Код:** \`${code.toUpperCase()}\`\n` +
+                    `⭐ **Награда:** ${starsNum} звёзд\n` +
+                    `🔢 **Лимит активаций:** ${maxNum}\n` +
+                    `📅 **Создан:** ${new Date().toLocaleString('ru-RU')}\n\n` +
+                    `📋 Пользователи могут ввести код: \`${code.toUpperCase()}\``, 
+                    { parse_mode: 'Markdown' });
+    
+    console.log('✅ Промокод успешно создан:', code.toUpperCase());
+    
+  } catch (error) {
+    console.error('❌ Ошибка создания промокода:', error);
+    userStates.delete(userId);
+    await ctx.reply('❌ Произошла ошибка при создании промокода');
+  }
+}
+
 // Обработка состояний для вывода
 async function handleWithdrawalState(ctx, text, userState) {
   const userId = ctx.from.id;
@@ -2037,6 +2098,12 @@ bot.on('text', async (ctx) => {
     return;
   }
   
+  if (userState && userState.type === 'admin_create_promo') {
+    console.log('🎫 Обрабатываем создание промокода через состояние');
+    await handlePromoCreation(ctx, text, userState);
+    return;
+  }
+  
   // Если нет состояния, проверяем reply_to_message (старый способ)
   const replyMsg = ctx.message.reply_to_message;
   if (!replyMsg) {
@@ -2433,19 +2500,41 @@ bot.on('text', async (ctx) => {
       }
 
       // Промокод
-      else if (replyText.includes('Введите промокод и количество звёзд')) {
-        const [code, stars] = text.trim().split(/\s+/);
-        if (!code || isNaN(Number(stars))) {
-          return ctx.reply('❌ Формат: КОД 10');
+      else if (replyText.includes('Введите данные промокода в формате: НАЗВАНИЕ ЗВЁЗДЫ ЛИМИТ')) {
+        const parts = text.trim().split(/\s+/);
+        
+        if (parts.length !== 3) {
+          return ctx.reply('❌ Неверный формат! Используйте: НАЗВАНИЕ ЗВЁЗДЫ ЛИМИТ\n\nПример: NEWCODE 25 100');
         }
+        
+        const [code, stars, maxActivations] = parts;
+        const starsNum = Number(stars);
+        const maxNum = Number(maxActivations);
+        
+        if (!code || isNaN(starsNum) || isNaN(maxNum) || starsNum <= 0 || maxNum <= 0) {
+          return ctx.reply('❌ Неверные данные!\n\n✅ Правильный формат:\n• НАЗВАНИЕ - любой текст\n• ЗВЁЗДЫ - положительное число\n• ЛИМИТ - положительное число\n\nПример: NEWCODE 25 100');
+        }
+        
+        // Проверяем, не существует ли уже такой промокод
+        const existingPromo = await promocodes.findOne({ code: code.toUpperCase() });
+        if (existingPromo) {
+          return ctx.reply(`❌ Промокод ${code.toUpperCase()} уже существует!`);
+        }
+        
         await promocodes.insertOne({
           code: code.toUpperCase(),
-          stars: Number(stars),
-          max: 100,
+          stars: starsNum,
+          max: maxNum,
           used: 0,
           created: now()
         });
-        ctx.reply(`✅ Промокод ${code.toUpperCase()} на ${stars} звёзд добавлен.`);
+        
+        ctx.reply(`✅ Промокод создан успешно!\n\n` +
+                  `🏷️ **Код:** ${code.toUpperCase()}\n` +
+                  `⭐ **Награда:** ${starsNum} звёзд\n` +
+                  `🔢 **Лимит активаций:** ${maxNum}\n` +
+                  `📅 **Создан:** ${new Date().toLocaleString('ru-RU')}`, 
+                  { parse_mode: 'Markdown' });
       }
 
       // Выдать/забрать звёзды
@@ -2701,7 +2790,14 @@ bot.action('admin_broadcast', async (ctx) => {
 // Добавить промокод
 bot.action('admin_addpromo', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
-  await adminForceReply(ctx, '➕ Введите промокод и количество звёзд через пробел (например: NEWCODE 25):');
+  
+  // Устанавливаем состояние для создания промокода
+  userStates.set(ctx.from.id, { 
+    type: 'admin_create_promo' 
+  });
+  console.log('🎫 Админ начинает создание промокода:', ctx.from.id);
+  
+  await adminForceReply(ctx, '➕ Введите данные промокода в формате: НАЗВАНИЕ ЗВЁЗДЫ ЛИМИТ\n\nПример: NEWCODE 25 100\n(код NEWCODE на 25 звёзд с лимитом 100 активаций)');
 });
 
 // Статистика
