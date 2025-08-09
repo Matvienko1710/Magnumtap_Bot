@@ -1459,15 +1459,15 @@ bot.action('withdraw', async (ctx) => {
 
 // Обработчики методов вывода
 bot.action('withdraw_tg_stars', async (ctx) => {
-  await adminForceReply(ctx, '⭐ Введите количество звёзд для вывода в Telegram Stars (минимум 100):');
+  await adminForceReply(ctx, 'Введите количество звёзд для вывода в Telegram Stars (минимум 100):');
 });
 
 bot.action('withdraw_ton', async (ctx) => {
-  await adminForceReply(ctx, '💎 Введите ваш TON адрес для вывода:');
+  await adminForceReply(ctx, 'Введите ваш TON адрес для вывода:');
 });
 
 bot.action('withdraw_usdt', async (ctx) => {
-  await adminForceReply(ctx, '💵 Введите ваш USDT TRC-20 адрес для вывода:');
+  await adminForceReply(ctx, 'Введите ваш USDT TRC-20 адрес для вывода:');
 });
 
 bot.action('withdraw_info', async (ctx) => {
@@ -1857,7 +1857,7 @@ bot.on('text', async (ctx) => {
 
   try {
     // Обработка заявок на вывод
-    if (replyText.includes('Введите количество звёзд для вывода в Telegram Stars')) {
+    if (replyText.includes('Введите количество звёзд для вывода в Telegram Stars (минимум 100)')) {
       console.log('Обрабатываем ввод суммы для Telegram Stars:', text);
       const amount = parseFloat(text);
       if (isNaN(amount) || amount < 100) {
@@ -1870,7 +1870,7 @@ bot.on('text', async (ctx) => {
         return ctx.reply(`❌ Недостаточно звёзд! У вас: ${Math.round(user.stars * 100) / 100}⭐`);
       }
       
-      await adminForceReply(ctx, `⭐ Введите ваш Telegram ID для получения ${amount} Telegram Stars:`);
+      await adminForceReply(ctx, `Введите ваш Telegram ID для получения ${amount} Telegram Stars:`);
       return;
     }
     
@@ -1904,17 +1904,17 @@ bot.on('text', async (ctx) => {
       return;
     }
     
-    if (replyText.includes('Введите ваш TON адрес для вывода')) {
+         if (replyText.includes('Введите ваш TON адрес для вывода:')) {
       const address = text.trim();
       if (address.length < 10) {
         return ctx.reply('❌ Неверный TON адрес!');
       }
       
-      await adminForceReply(ctx, `💎 Введите количество звёзд для вывода в TON (минимум 500):`);
+             await adminForceReply(ctx, `Введите количество звёзд для вывода в TON (минимум 500):`);
       return;
     }
     
-    if (replyText.includes('Введите количество звёзд для вывода в TON')) {
+         if (replyText.includes('Введите количество звёзд для вывода в TON (минимум 500)')) {
       const amount = parseFloat(text);
       if (isNaN(amount) || amount < 500) {
         return ctx.reply('❌ Неверная сумма! Минимум для вывода в TON: 500⭐');
@@ -1928,7 +1928,7 @@ bot.on('text', async (ctx) => {
       // Получаем адрес из предыдущего сообщения
       const messages = await ctx.telegram.getUpdates();
       // Используем временное решение - запрашиваем адрес заново
-      await adminForceReply(ctx, `💎 Подтвердите TON адрес для вывода ${amount}⭐:`);
+             await adminForceReply(ctx, `Подтвердите TON адрес для вывода ${amount}⭐:`);
       return;
     }
     
@@ -1955,17 +1955,17 @@ bot.on('text', async (ctx) => {
       return;
     }
     
-    if (replyText.includes('Введите ваш USDT TRC-20 адрес для вывода')) {
+         if (replyText.includes('Введите ваш USDT TRC-20 адрес для вывода:')) {
       const address = text.trim();
       if (address.length < 10) {
         return ctx.reply('❌ Неверный USDT адрес!');
       }
       
-      await adminForceReply(ctx, `💵 Введите количество звёзд для вывода в USDT (минимум 1000):`);
+             await adminForceReply(ctx, `Введите количество звёзд для вывода в USDT (минимум 1000):`);
       return;
     }
     
-    if (replyText.includes('Введите количество звёзд для вывода в USDT')) {
+         if (replyText.includes('Введите количество звёзд для вывода в USDT (минимум 1000)')) {
       const amount = parseFloat(text);
       if (isNaN(amount) || amount < 1000) {
         return ctx.reply('❌ Неверная сумма! Минимум для вывода в USDT: 1000⭐');
@@ -1976,7 +1976,7 @@ bot.on('text', async (ctx) => {
         return ctx.reply(`❌ Недостаточно звёзд! У вас: ${Math.round(user.stars * 100) / 100}⭐`);
       }
       
-      await adminForceReply(ctx, `💵 Подтвердите USDT TRC-20 адрес для вывода ${amount}⭐:`);
+             await adminForceReply(ctx, `Подтвердите USDT TRC-20 адрес для вывода ${amount}⭐:`);
       return;
     }
     
