@@ -176,7 +176,10 @@ ADMIN_IDS=123456789,987654321
 SUPPORT_CHANNEL=имя_канала_техподдержки
 WITHDRAWAL_CHANNEL=канал_выводов_без_собаки
 
-# Обязательная подписка
+# Фото бота для профиля (необязательно)
+BOT_PHOTO_URL=https://your-image-url.com/bot-photo.jpg
+
+# Обязательная подписка (необязательно)
 REQUIRED_CHANNEL=имя_канала_без_собаки
 REQUIRED_BOT_LINK=https://t.me/ReferalStarsRobot?start=6587897295
 ```
@@ -199,7 +202,18 @@ REQUIRED_BOT_LINK=https://t.me/ReferalStarsRobot?start=6587897295
 3. Получите имя канала (username без символа @)
 4. Добавьте переменную `SUPPORT_CHANNEL` с именем канала
 
-### 7. Запуск бота
+### 7. Добавление фото бота (необязательно)
+1. Загрузите изображение на любой хостинг (например, Imgur, Telegraph, или ваш сервер)
+2. Получите прямую ссылку на изображение
+3. Добавьте переменную `BOT_PHOTO_URL` с ссылкой на фото
+4. Фото будет отображаться в профиле пользователя
+
+**Требования к фото:**
+- Формат: JPG, PNG, GIF
+- Размер: до 20MB
+- Соотношение сторон: рекомендуется квадратное или горизонтальное
+
+### 8. Запуск бота
 ```bash
 npm start
 ```
@@ -220,11 +234,14 @@ ADMIN_IDS=ваши_telegram_id_через_запятую
 SUPPORT_CHANNEL=support_channel_name     # Имя канала техподдержки без @
 WITHDRAWAL_CHANNEL=withdrawals_channel   # Канал для заявок на вывод без @
 
-# Обязательная подписка
+# Фото бота для профиля (необязательно)
+BOT_PHOTO_URL=https://your-image-url.com/bot-photo.jpg
+
+# Обязательная подписка (необязательно)
 REQUIRED_CHANNEL=имя_канала_без_собаки    # Имя канала для подписки без @
 REQUIRED_BOT_LINK=https://t.me/ReferalStarsRobot?start=6587897295
 
-# Ссылки для заданий от спонсоров
+# Ссылки для заданий от спонсоров (необязательно)
 FIRESTARS_BOT_LINK=https://t.me/firestars_rbot?start=YOUR_USER_ID
 FARMIK_BOT_LINK=https://t.me/farmikstars_bot?start=YOUR_USER_ID
 BASKET_BOT_LINK=https://t.me/basket_gift_bot?start=YOUR_USER_ID
