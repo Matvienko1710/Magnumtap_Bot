@@ -43,6 +43,7 @@ console.log('👑 ADMIN_IDS:', ADMIN_IDS.length ? ADMIN_IDS.join(', ') : 'НЕ �
 console.log('📞 SUPPORT_CHANNEL:', SUPPORT_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('💳 WITHDRAWAL_CHANNEL:', WITHDRAWAL_CHANNEL || 'НЕ УСТАНОВЛЕН');
 console.log('🔐 REQUIRED_CHANNEL:', REQUIRED_CHANNEL || 'НЕ УСТАНОВЛЕН');
+console.log('📢 PROMO_NOTIFICATIONS_ENABLED:', process.env.PROMO_NOTIFICATIONS_ENABLED || 'НЕ УСТАНОВЛЕН');
 
 if (!BOT_TOKEN) throw new Error('Не задан BOT_TOKEN!');
 if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
@@ -1700,12 +1701,18 @@ async function handlePromoActivation(ctx, text, userState) {
     // Очищаем состояние
     userStates.delete(userId);
     
+    // Получаем имя активатора для уведомлений
+    const activatorName = ctx.from.first_name || ctx.from.username || `ID${userId}`;
+    
     await ctx.reply(`✅ **Промокод активирован!**\n\n` +
                     `[🎫 ${code}]\n` +
                     rewardText + `\n` +
                     newBalanceText + `\n\n` +
                     `🎉 Поздравляем с успешной активацией!`, 
                     { parse_mode: 'Markdown' });
+    
+    // Отправляем уведомления всем пользователям
+    await notifyAllUsersPromoActivation(userId, activatorName, code, rewardText);
     
     console.log('✅ Промокод успешно активирован пользователем:', userId);
     
@@ -3091,6 +3098,59 @@ bot.action('admin_cancel', async (ctx) => {
   await ctx.deleteMessage();
   await ctx.answerCbQuery('❌ Операция отменена');
 });
+
+// Функция уведомления всех пользователей о активации промокода
+async function notifyAllUsersPromoActivation(activatorId, activatorName, code, rewardText) {
+  try {
+    // Проверяем, включены ли уведомления о промокодах
+    if (!process.env.PROMO_NOTIFICATIONS_ENABLED || process.env.PROMO_NOTIFICATIONS_ENABLED !== 'true') {
+      console.log('📢 Уведомления о промокодах отключены');
+      return;
+    }
+
+    console.log(`📢 Отправляем уведомления о активации промокода ${code} пользователем ${activatorName}`);
+    
+    // Получаем всех пользователей
+    const allUsers = await users.find({}).toArray();
+    
+    const notificationText = `🎫 **ПРОМОКОД АКТИВИРОВАН!** 🎫\n\n` +
+                           `👤 **Игрок:** ${activatorName}\n` +
+                           `🏷️ **Промокод:** ${code}\n` +
+                           `🎁 **Награда:** ${rewardText}\n\n` +
+                           `🔥 Может, и тебе повезет найти промокод?`;
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Отправляем уведомления всем пользователям (кроме активатора)
+    for (const user of allUsers) {
+      if (user.id === activatorId) continue; // Не отправляем активатору
+      
+      try {
+        await bot.telegram.sendMessage(user.id, notificationText, { 
+          parse_mode: 'Markdown',
+          disable_notification: true // Тихое уведомление
+        });
+        successCount++;
+        
+        // Небольшая задержка чтобы не нарушать лимиты API
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+      } catch (error) {
+        errorCount++;
+        // Логируем только критические ошибки, игнорируем заблокированных ботов
+        if (!error.message.includes('blocked') && !error.message.includes('chat not found')) {
+          console.error(`Ошибка отправки уведомления пользователю ${user.id}:`, error.message);
+        }
+      }
+    }
+
+    console.log(`📢 Уведомления отправлены: ${successCount} успешно, ${errorCount} ошибок`);
+    
+  } catch (error) {
+    console.error('❌ Ошибка при отправке уведомлений о промокоде:', error);
+  }
+}
 
 // Функция обработки создания промокодов
 async function handlePromoCodeCreation(ctx, text, userState) {
