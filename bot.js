@@ -1051,6 +1051,51 @@ async function connectDB() {
 function now() { return Math.floor(Date.now() / 1000); }
 
 // Обновляем функцию getUser для автоматической проверки титулов
+// КРИТИЧЕСКАЯ функция - ВСЕГДА из базы, НИКОГДА кеш для прогресса
+async function getUserDirectFromDB(id, ctx = null) {
+  console.log(`🔥 ПРЯМОЕ ЧТЕНИЕ ИЗ БД для пользователя ${id}`);
+  const user = await users.findOne({ id });
+  if (!user) {
+    const newUser = {
+      id,
+      username: ctx?.from?.username || '',
+      magnumCoins: 0,
+      totalEarnedMagnumCoins: 0,
+      stars: 100,
+      lastFarm: 0,
+      lastBonus: 0,
+      farmCount: 0,
+      bonusCount: 0,
+      promoCodesUsed: 0,
+      invited: 0,
+      invitedBy: null,
+      titles: [],
+      mainTitle: null,
+      purchases: [],
+      customTitleRequested: false,
+      achievements: [],
+      dailyStreak: 0,
+      lastDaily: 0,
+      lastSeen: Math.floor(Date.now() / 1000),
+      userStatus: 'user',
+      dailyTasks: {},
+      dailyFarms: 0,
+      miner: { active: false }
+    };
+    await users.insertOne(newUser);
+    return newUser;
+  }
+  
+  // Backward compatibility
+  if (user.totalEarnedMagnumCoins === undefined) {
+    await users.updateOne({ id }, { $set: { totalEarnedMagnumCoins: user.magnumCoins || 0 } });
+    user.totalEarnedMagnumCoins = user.magnumCoins || 0;
+  }
+  
+  console.log(`🔥 ПОЛУЧЕНЫ СВЕЖИЕ ДАННЫЕ: ${user.stars} звёзд для пользователя ${id}`);
+  return user;
+}
+
 // Функция для получения СВЕЖИХ данных пользователя БЕЗ кеша
 async function getUserFresh(id, ctx = null) {
   const user = await users.findOne({ id });
@@ -1900,10 +1945,9 @@ function createProgressBar(current, total, length = 10) {
 }
 
 async function getDetailedProfile(userId, ctx) {
-  // Принудительно очищаем кеш перед получением данных
-  invalidateUserCache(userId);
-  const user = await getUserFresh(userId, ctx); // Используем getUserFresh для гарантированно свежих данных
-  console.log(`🔄 getDetailedProfile: Пользователь ${userId} имеет ${user.stars} звёзд`);
+  // КРИТИЧЕСКАЯ ФУНКЦИЯ - ВСЕГДА ИЗ БАЗЫ!
+  const user = await getUserDirectFromDB(userId, ctx);
+  console.log(`🔥 getDetailedProfile: ПРЯМО ИЗ БД - Пользователь ${userId} имеет ${user.stars} звёзд`);
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   const friends = user.invited || 0;
@@ -2123,41 +2167,36 @@ async function markDailyTaskCompleted(userId, taskId) {
 
 async function updateMainMenuBalance(ctx) {
   try {
-    // Многократно очищаем кеш для гарантии
-    for (let i = 0; i < 5; i++) {
-      invalidateUserCache(ctx.from.id);
-      invalidateBotStatsCache();
-    }
+    console.log(`🔥 ОБНОВЛЯЕМ ГЛАВНОЕ МЕНЮ - ПРЯМО ИЗ БД для пользователя ${ctx.from.id}`);
     
-    // Получаем АБСОЛЮТНО свежие данные БЕЗ кеша
-    const freshUser = await getUserFresh(ctx.from.id, ctx);
-    console.log(`🔄 updateMainMenuBalance: Обновляем для пользователя ${ctx.from.id} с ${freshUser.stars} звёздами`);
+    // ПОЛНОЕ УДАЛЕНИЕ из кеша
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
-    // Обновляем кеш свежими данными
-    userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
+    // ПРЯМОЕ чтение из базы - БЕЗ кеша вообще!
+    const freshUser = await getUserDirectFromDB(ctx.from.id, ctx);
+    console.log(`🔥 updateMainMenuBalance: СВЕЖИЕ ДАННЫЕ ${ctx.from.id} = ${freshUser.stars} звёзд`);
     
+    // Генерируем меню с АБСОЛЮТНО свежими данными
     const menu = await getMainMenu(ctx, ctx.from.id);
     await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard);
   } catch (error) {
-    console.error('Ошибка обновления баланса в меню:', error);
+    console.error('🔥 КРИТИЧЕСКАЯ ОШИБКА обновления главного меню:', error);
   }
 }
 
 // Функция для обновления профиля в реальном времени
 async function updateProfileRealtime(ctx) {
   try {
-    // Многократно очищаем кеш для гарантии
-    for (let i = 0; i < 5; i++) {
-      invalidateUserCache(ctx.from.id);
-      invalidateBotStatsCache();
-    }
+    console.log(`🔥 ОБНОВЛЯЕМ ПРОФИЛЬ - ПРЯМО ИЗ БД для пользователя ${ctx.from.id}`);
     
-    // Получаем АБСОЛЮТНО свежие данные БЕЗ кеша
-    const freshUser = await getUserFresh(ctx.from.id, ctx);
-    console.log(`🔄 updateProfileRealtime: Обновляем профиль для пользователя ${ctx.from.id} с ${freshUser.stars} звёздами`);
+    // ПОЛНОЕ удаление из кеша
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
-    // Обновляем кеш свежими данными
-    userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
+    // ПРЯМОЕ чтение из базы
+    const freshUser = await getUserDirectFromDB(ctx.from.id, ctx);
+    console.log(`🔥 updateProfileRealtime: СВЕЖИЕ ДАННЫЕ ${ctx.from.id} = ${freshUser.stars} звёзд`);
     
     const profileText = await getDetailedProfile(ctx.from.id, ctx);
 
@@ -2175,8 +2214,10 @@ async function updateProfileRealtime(ctx) {
 }
 
 async function getMainMenu(ctx, userId) {
+  console.log(`🔥 getMainMenu: Генерируем главное меню для пользователя ${userId}`);
   const adminRow = isAdmin(ctx.from.id) ? [[Markup.button.callback('⚙️ Админ-панель', 'admin_panel')]] : [];
   const profileText = await getDetailedProfile(userId, ctx);
+  console.log(`🔥 getMainMenu: Получили текст профиля для главного меню`);
   
   const keyboard = Markup.inlineKeyboard([
     [Markup.button.callback('🪙 Фармить Magnum Coin', 'farm'), Markup.button.callback('🎁 Бонус', 'bonus')],
@@ -2286,12 +2327,17 @@ bot.action('check_subscription', async (ctx) => {
 });
 
 bot.action('main_menu', async (ctx) => {
+  console.log(`🔥 КНОПКА ГЛАВНОЕ МЕНЮ - пользователь ${ctx.from.id}`);
   try { await ctx.deleteMessage(); } catch (e) {}
-  // Принудительно обновляем кеш свежими данными
+  
+  // ПОЛНОЕ удаление из кеша
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
-  const freshUser = await getUserFresh(ctx.from.id, ctx);
-  userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
+  
+  // ПРЯМОЕ чтение из базы для главного меню
+  const freshUser = await getUserDirectFromDB(ctx.from.id, ctx);
+  console.log(`🔥 ГЛАВНОЕ МЕНЮ: Свежие данные ${ctx.from.id} = ${freshUser.stars} звёзд`);
+  
   const menu = await getMainMenu(ctx, ctx.from.id);
   await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
@@ -4907,7 +4953,8 @@ bot.action('farm', async (ctx) => {
     return;
   }
   
-  const user = await getUserFresh(ctx.from.id, ctx);
+  const user = await getUserDirectFromDB(ctx.from.id, ctx);
+  console.log(`🔥 ФАРМ: Проверяем пользователя ${ctx.from.id} с ${user.stars} звёздами`);
   const canFarm = !farmCooldownEnabled || !user.lastFarm || (now() - user.lastFarm) >= farmCooldownSeconds;
   
   if (canFarm) {
@@ -4922,7 +4969,8 @@ bot.action('farm', async (ctx) => {
     invalidateBotStatsCache();
     
     // Проверяем задание активного фармера
-    const updatedUser = await getUserFresh(ctx.from.id);
+    const updatedUser = await getUserDirectFromDB(ctx.from.id);
+    console.log(`🔥 ФАРМ: После обновления БД - у пользователя ${ctx.from.id} теперь ${updatedUser.stars} звёзд`);
     if ((updatedUser.dailyFarms || 0) >= 10) {
       await markDailyTaskCompleted(ctx.from.id, 'farm_10');
     }
@@ -4931,8 +4979,10 @@ bot.action('farm', async (ctx) => {
     const newTitles = await checkAndAwardTitles(ctx.from.id);
     const newAchievements = await checkAndAwardAchievements(ctx.from.id);
     
-    // Обновляем баланс в интерфейсе
+    // КРИТИЧЕСКОЕ обновление интерфейса после фарма
+    console.log(`🔥 ФАРМ ЗАВЕРШЕН: Обновляем интерфейс для ${ctx.from.id}`);
     await updateMainMenuBalance(ctx);
+    console.log(`🔥 ИНТЕРФЕЙС ОБНОВЛЕН после фарма`);
     
     const rewardText = boostedReward > baseReward ? `+${boostedReward} Magnum Coin (🔥 БУСТ!)` : `+${boostedReward} Magnum Coin`;
     
@@ -4959,7 +5009,8 @@ bot.action('bonus', async (ctx) => {
     return;
   }
   
-  const user = await getUserFresh(ctx.from.id, ctx);
+  const user = await getUserDirectFromDB(ctx.from.id, ctx);
+  console.log(`🔥 БОНУС: Проверяем пользователя ${ctx.from.id} с ${user.stars} звёздами`);
   const today = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
   const canBonus = !user.lastBonus || user.lastBonus < today;
   
@@ -4990,8 +5041,10 @@ bot.action('bonus', async (ctx) => {
     const newTitles = await checkAndAwardTitles(ctx.from.id);
     const newAchievements = await checkAndAwardAchievements(ctx.from.id);
     
-    // Обновляем баланс в интерфейсе
+    // КРИТИЧЕСКОЕ обновление интерфейса после бонуса
+    console.log(`🔥 БОНУС ЗАВЕРШЕН: Обновляем интерфейс для ${ctx.from.id}`);
     await updateMainMenuBalance(ctx);
+    console.log(`🔥 ИНТЕРФЕЙС ОБНОВЛЕН после бонуса`);
     
     const rewardText = boostedReward > baseReward ? `+${boostedReward} Magnum Coin (🔥 БУСТ!)` : `+${boostedReward} Magnum Coin`;
     
