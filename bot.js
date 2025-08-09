@@ -1679,16 +1679,39 @@ bot.action('main_menu', async (ctx) => {
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
   const profileText = await getDetailedProfile(ctx.from.id, ctx);
+  const photoUrl = process.env.BOT_PHOTO_URL;
 
-  ctx.editMessageText(profileText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
-      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
-      [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-    ])
-  });
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
+    [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
+    [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]);
+
+  if (photoUrl) {
+    // Если есть фото, используем editMessageMedia
+    try {
+      await ctx.editMessageMedia({
+        type: 'photo',
+        media: photoUrl,
+        caption: profileText,
+        parse_mode: 'Markdown'
+      }, keyboard);
+    } catch (error) {
+      console.log('⚠️ Ошибка обновления фото, используем текст:', error.message);
+      // Fallback на обычный текст если фото не загружается
+      ctx.editMessageText(profileText, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    }
+  } else {
+    // Если фото нет, используем обычный текст
+    ctx.editMessageText(profileText, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
+  }
 });
 
 bot.action('my_titles', async (ctx) => {
