@@ -54,79 +54,87 @@ let users, promocodes, taskChecks, withdrawalRequests;
 // Состояния пользователей для обработки ввода
 const userStates = new Map();
 
-// Универсальная функция для отправки сообщений с фото
+// Кеш пользователей для оптимизации (время жизни 30 секунд)
+const userCache = new Map();
+const USER_CACHE_TTL = 30000;
+
+// Функция для инвалидации кеша пользователя
+function invalidateUserCache(userId) {
+  userCache.delete(userId.toString());
+}
+
+// Периодическая очистка устаревшего кеша (каждые 5 минут)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, cached] of userCache.entries()) {
+    if (now - cached.timestamp > USER_CACHE_TTL) {
+      userCache.delete(key);
+    }
+  }
+}, 300000); // 5 минут
+
+// Кеш для оптимизации
+const photoUrlCache = process.env.BOT_PHOTO_URL;
+
+// Универсальная функция для отправки сообщений с фото (оптимизированная)
 async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
-  const photoUrl = process.env.BOT_PHOTO_URL;
-  
-  if (photoUrl && isEdit) {
+  if (photoUrlCache && isEdit) {
     try {
       // Пытаемся редактировать как медиа (если сообщение уже с фото)
-      await ctx.editMessageMedia({
+      return await ctx.editMessageMedia({
         type: 'photo',
-        media: photoUrl,
+        media: photoUrlCache,
         caption: text,
         parse_mode: 'Markdown'
       }, keyboard);
     } catch (error) {
-      console.log('⚠️ Ошибка редактирования медиа:', error.message);
+      // Быстрый fallback на текст
       try {
-        // Fallback: пытаемся редактировать как текст (если сообщение текстовое)
-        await ctx.editMessageText(text, {
+        return await ctx.editMessageText(text, {
           parse_mode: 'Markdown',
           ...keyboard
         });
       } catch (textError) {
-        console.log('⚠️ Ошибка редактирования текста:', textError.message);
-        // Последний fallback: удаляем старое и отправляем новое
-        try {
-          await ctx.deleteMessage();
-        } catch (deleteError) {
-          console.log('⚠️ Не удалось удалить сообщение:', deleteError.message);
-        }
-        await ctx.replyWithPhoto(photoUrl, {
+        // Последний fallback: новое сообщение
+        try { await ctx.deleteMessage(); } catch {}
+        return await ctx.replyWithPhoto(photoUrlCache, {
           caption: text,
           parse_mode: 'Markdown',
           ...keyboard
         });
       }
     }
-  } else if (photoUrl && !isEdit) {
+  } else if (photoUrlCache && !isEdit) {
     // Новое сообщение с фото
     try {
-      await ctx.replyWithPhoto(photoUrl, {
+      return await ctx.replyWithPhoto(photoUrlCache, {
         caption: text,
         parse_mode: 'Markdown',
         ...keyboard
       });
-    } catch (error) {
-      console.log('⚠️ Ошибка отправки фото, используем текст:', error.message);
-      await ctx.reply(text, {
+    } catch {
+      return await ctx.reply(text, {
         parse_mode: 'Markdown',
         ...keyboard
       });
     }
   } else {
-    // Без фото или fallback
+    // Без фото
     if (isEdit) {
       try {
-        await ctx.editMessageText(text, {
+        return await ctx.editMessageText(text, {
           parse_mode: 'Markdown',
           ...keyboard
         });
-      } catch (error) {
-        console.log('⚠️ Ошибка редактирования текста, отправляем новое:', error.message);
-        try {
-          await ctx.deleteMessage();
-        } catch (deleteError) {
-          console.log('⚠️ Не удалось удалить сообщение:', deleteError.message);
-        }
-        await ctx.reply(text, {
+      } catch {
+        try { await ctx.deleteMessage(); } catch {}
+        return await ctx.reply(text, {
           parse_mode: 'Markdown',
           ...keyboard
         });
       }
     } else {
-      await ctx.reply(text, {
+      return await ctx.reply(text, {
         parse_mode: 'Markdown',
         ...keyboard
       });
@@ -828,6 +836,13 @@ function now() { return Math.floor(Date.now() / 1000); }
 
 // Обновляем функцию getUser для автоматической проверки титулов
 async function getUser(id, ctx = null) {
+  // Проверяем кеш
+  const cacheKey = id.toString();
+  const cached = userCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < USER_CACHE_TTL) {
+    return cached.user;
+  }
+
   let user = await users.findOne({ id });
   if (!user) {
     user = {
@@ -835,7 +850,7 @@ async function getUser(id, ctx = null) {
       username: ctx ? (ctx.from.username || '') : '',
       first_name: ctx ? (ctx.from.first_name || '') : '',
       stars: 0,
-      magnumCoins: 0, // Новая валюта
+      magnumCoins: 0,
       lastFarm: 0,
       lastBonus: 0,
       created: now(),
@@ -848,33 +863,34 @@ async function getUser(id, ctx = null) {
       promoCount: 0,
       taskCount: 0,
       dailyStreak: 0,
-      status: 'member' // Устанавливаем базовый статус
+      status: 'member'
     };
     await users.insertOne(user);
-    // Даём титул новичка
     await checkAndAwardTitles(id);
   } else {
-    // Для существующих пользователей добавляем поле magnumCoins если его нет
+    // Обратная совместимость
     if (user.magnumCoins === undefined) {
       await users.updateOne({ id }, { $set: { magnumCoins: 0 } });
       user.magnumCoins = 0;
     }
     
     if (ctx) {
-    // Обновляем информацию о пользователе если она изменилась
-    const updates = {};
-    if (ctx.from.username && ctx.from.username !== user.username) {
-      updates.username = ctx.from.username;
-    }
-    if (ctx.from.first_name && ctx.from.first_name !== user.first_name) {
-      updates.first_name = ctx.from.first_name;
-    }
-    if (Object.keys(updates).length > 0) {
-      await users.updateOne({ id }, { $set: updates });
-      Object.assign(user, updates);
-    }
+      const updates = {};
+      if (ctx.from.username && ctx.from.username !== user.username) {
+        updates.username = ctx.from.username;
+      }
+      if (ctx.from.first_name && ctx.from.first_name !== user.first_name) {
+        updates.first_name = ctx.from.first_name;
+      }
+      if (Object.keys(updates).length > 0) {
+        await users.updateOne({ id }, { $set: updates });
+        Object.assign(user, updates);
+      }
     }
   }
+  
+  // Обновляем кеш
+  userCache.set(cacheKey, { user, timestamp: Date.now() });
   return user;
 }
 
@@ -2496,10 +2512,7 @@ bot.action(/^shop_(.+)$/, async (ctx) => {
   });
   keyboard.push([Markup.button.callback('🔙 Назад в магазин', 'shop')]);
   
-  ctx.editMessageText(message, { 
-    parse_mode: 'Markdown', 
-    ...Markup.inlineKeyboard(keyboard) 
-  });
+  await sendMessageWithPhoto(ctx, message, Markup.inlineKeyboard(keyboard));
 });
 
 // Покупка товара
@@ -2530,8 +2543,8 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     }
     
     // Обновляем отображение магазина
-    setTimeout(() => {
-      ctx.editMessageText('🛒 Покупка завершена! Возвращаемся в магазин...', 
+    setTimeout(async () => {
+      await sendMessageWithPhoto(ctx, '🛒 Покупка завершена! Возвращаемся в магазин...', 
         Markup.inlineKeyboard([[Markup.button.callback('🛒 Открыть магазин', 'shop')]]));
     }, 1000);
   } else {
@@ -2554,7 +2567,6 @@ bot.action('promo', async (ctx) => {
   userStates.set(ctx.from.id, { 
     type: 'activate_promo' 
   });
-  console.log('🎫 Пользователь начинает активацию промокода:', ctx.from.id);
   
   await adminForceReply(ctx, '🎫 Введите промокод:');
 });
@@ -3324,9 +3336,6 @@ bot.action('admin_faq', async (ctx) => {
 
 // Добавляем недостающие обработчики админских команд
 function adminForceReply(ctx, text) {
-  console.log('📝 Отправляем force reply:', text);
-  console.log('👤 Пользователю:', ctx.from.id, ctx.from.first_name || ctx.from.username);
-  
   return ctx.reply(text + '\n\n👆 Ответьте на это сообщение', {
     reply_markup: {
       force_reply: true,
@@ -3354,7 +3363,6 @@ bot.action('admin_addpromo', async (ctx) => {
   userStates.set(ctx.from.id, { 
     type: 'admin_create_promo' 
   });
-  console.log('🎫 Админ начинает создание промокода:', ctx.from.id);
   
   await adminForceReply(ctx, '➕ Введите данные промокода в формате: НАЗВАНИЕ МАГНУМ_КОИНЫ ЛИМИТ\n\nПример: NEWCODE 25 100\n(код NEWCODE на 25 Magnum Coin с лимитом 100 активаций)');
 });
@@ -3921,12 +3929,9 @@ bot.action('faq_tasks', async (ctx) => {
 • Задание не выполнено полностью
 • Нарушение правил платформы`;
 
-  ctx.editMessageText(tasksText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, tasksText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_referrals', async (ctx) => {
@@ -3979,12 +3984,9 @@ bot.action('faq_referrals', async (ctx) => {
 • 📈 Прогресс к следующему достижению
 • 🏆 Уведомления о новых титулах`;
 
-  ctx.editMessageText(referralsText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, referralsText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_titles', async (ctx) => {
@@ -4062,12 +4064,9 @@ bot.action('faq_titles', async (ctx) => {
 🎖️ **Главный титул:**
 В профиле отображается ваш лучший титул по приоритету!`;
 
-  ctx.editMessageText(titlesText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, titlesText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_achievements', async (ctx) => {
@@ -4129,12 +4128,9 @@ bot.action('faq_achievements', async (ctx) => {
 🏆 **Награды автоматические:**
 После выполнения условий звёзды начисляются сразу!`;
 
-  ctx.editMessageText(achievementsText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, achievementsText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_levels', async (ctx) => {
@@ -4197,12 +4193,9 @@ bot.action('faq_levels', async (ctx) => {
 • Показатель опыта
 • Мотивация для роста`;
 
-  ctx.editMessageText(levelsText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, levelsText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_promocodes', async (ctx) => {
@@ -4260,12 +4253,9 @@ bot.action('faq_promocodes', async (ctx) => {
 • Использование истекшего кода
 • Превышение лимита активаций`;
 
-  ctx.editMessageText(promocodesText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, promocodesText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_statuses', async (ctx) => {
@@ -4323,12 +4313,9 @@ bot.action('faq_statuses', async (ctx) => {
 • Могут быть отозваны за нарушения
 • Высокие статусы требуют доверия администрации`;
 
-  ctx.editMessageText(statusesText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, statusesText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 bot.action('faq_support', async (ctx) => {
@@ -4393,12 +4380,9 @@ bot.action('faq_support', async (ctx) => {
 • Указывайте свой ID
 • Не создавайте дубли заявок`;
 
-  ctx.editMessageText(supportText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, supportText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
+  ]));
 });
 
 // Достижения
@@ -4551,6 +4535,7 @@ bot.action('farm', async (ctx) => {
       $inc: { magnumCoins: boostedReward, farmCount: 1, dailyFarms: 1 }, 
       $set: { lastFarm: now() } 
     });
+    invalidateUserCache(ctx.from.id);
     
     // Проверяем задание активного фармера
     const updatedUser = await getUser(ctx.from.id);
@@ -4611,6 +4596,7 @@ bot.action('bonus', async (ctx) => {
       $inc: { magnumCoins: boostedReward, bonusCount: 1 }, 
       $set: { lastBonus: today, dailyStreak: dailyStreak } 
     });
+    invalidateUserCache(ctx.from.id);
     
     // Отмечаем задание "ежедневный бонус"
     await markDailyTaskCompleted(ctx.from.id, 'bonus');
