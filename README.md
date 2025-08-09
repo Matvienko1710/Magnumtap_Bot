@@ -210,9 +210,9 @@ ADMIN_IDS=ваши_telegram_id_через_запятую
 SUPPORT_CHANNEL=support_channel_name     # Имя канала техподдержки без @
 
 # Ссылки для заданий от спонсоров
-TELEGRAM_CHANNEL=https://t.me/your_channel
-YOUTUBE_CHANNEL=https://youtube.com/@your_channel  
-INSTAGRAM_ACCOUNT=https://instagram.com/your_account
+FIRESTARS_BOT_LINK=https://t.me/firestars_rbot?start=YOUR_USER_ID
+FARMIK_BOT_LINK=https://t.me/farmikstars_bot?start=YOUR_USER_ID
+BASKET_BOT_LINK=https://t.me/basket_gift_bot?start=YOUR_USER_ID
 ```
 
 ### 3. Автоматический деплой
