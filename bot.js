@@ -58,10 +58,16 @@ const userStates = new Map();
 const userCache = new Map();
 const USER_CACHE_TTL = 30000;
 
-// Кеш статистики бота (время жизни 5 минут)
+// Кеш статистики бота (время жизни 30 секунд для быстрого обновления)
 let botStatsCache = null;
 let botStatsCacheTime = 0;
-const BOT_STATS_CACHE_TTL = 300000; // 5 минут
+const BOT_STATS_CACHE_TTL = 30000; // 30 секунд
+
+// Функция для инвалидации кеша статистики
+function invalidateBotStatsCache() {
+  botStatsCache = null;
+  botStatsCacheTime = 0;
+}
 
 // Настройки кулдауна фарма
 let farmCooldownEnabled = true;
@@ -84,9 +90,9 @@ async function getBotStatistics() {
     // Общее количество пользователей
     const totalUsers = await users.countDocuments();
     
-    // Общее количество заработанных Magnum Coin
+    // Общее количество заработанных Magnum Coin (реальная статистика)
     const totalMagnumCoinsResult = await users.aggregate([
-      { $group: { _id: null, total: { $sum: '$magnumCoins' } } }
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$totalEarnedMagnumCoins', '$magnumCoins'] } } } }
     ]).toArray();
     const totalMagnumCoins = totalMagnumCoinsResult.length > 0 ? totalMagnumCoinsResult[0].total : 0;
     
@@ -182,66 +188,111 @@ const photoUrlCache = process.env.BOT_PHOTO_URL;
 
 // Универсальная функция для отправки сообщений с фото (оптимизированная)
 async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
-  if (photoUrlCache && isEdit) {
-    try {
-      // Пытаемся редактировать как медиа (если сообщение уже с фото)
-      return await ctx.editMessageMedia({
-        type: 'photo',
-        media: photoUrlCache,
-        caption: text,
-        parse_mode: 'Markdown'
-      }, keyboard);
-    } catch (error) {
-      // Быстрый fallback на текст
+  try {
+    if (photoUrlCache && isEdit) {
+      // Попытка 1: редактирование медиа (если сообщение уже с фото)
       try {
-        return await ctx.editMessageText(text, {
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
-      } catch (textError) {
-        // Последний fallback: новое сообщение
-        try { await ctx.deleteMessage(); } catch {}
+        return await ctx.editMessageMedia({
+          type: 'photo',
+          media: photoUrlCache,
+          caption: text,
+          parse_mode: 'Markdown'
+        }, keyboard);
+      } catch (mediaError) {
+        console.log('Не удалось отредактировать медиа:', mediaError.message);
+        
+        // Попытка 2: редактирование текста
+        try {
+          return await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
+        } catch (textError) {
+          console.log('Не удалось отредактировать текст:', textError.message);
+          
+          // Попытка 3: удаляем и создаем новое с фото
+          try {
+            await ctx.deleteMessage();
+          } catch (deleteError) {
+            console.log('Не удалось удалить сообщение:', deleteError.message);
+          }
+          
+          try {
+            return await ctx.replyWithPhoto(photoUrlCache, {
+              caption: text,
+              parse_mode: 'Markdown',
+              ...keyboard
+            });
+          } catch (photoError) {
+            console.log('Не удалось отправить фото:', photoError.message);
+            
+            // Финальный fallback: обычное текстовое сообщение
+            return await ctx.reply(text, {
+              parse_mode: 'Markdown',
+              ...keyboard
+            });
+          }
+        }
+      }
+    } else if (photoUrlCache && !isEdit) {
+      // Новое сообщение с фото
+      try {
         return await ctx.replyWithPhoto(photoUrlCache, {
           caption: text,
           parse_mode: 'Markdown',
           ...keyboard
         });
-      }
-    }
-  } else if (photoUrlCache && !isEdit) {
-    // Новое сообщение с фото
-    try {
-      return await ctx.replyWithPhoto(photoUrlCache, {
-        caption: text,
-        parse_mode: 'Markdown',
-        ...keyboard
-      });
-    } catch {
-      return await ctx.reply(text, {
-        parse_mode: 'Markdown',
-        ...keyboard
-      });
-    }
-  } else {
-    // Без фото
-    if (isEdit) {
-      try {
-        return await ctx.editMessageText(text, {
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
-      } catch {
-        try { await ctx.deleteMessage(); } catch {}
+      } catch (photoError) {
+        console.log('Не удалось отправить новое фото:', photoError.message);
         return await ctx.reply(text, {
           parse_mode: 'Markdown',
           ...keyboard
         });
       }
     } else {
-      return await ctx.reply(text, {
-        parse_mode: 'Markdown',
-        ...keyboard
+      // Без фото
+      if (isEdit) {
+        try {
+          return await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
+        } catch (editError) {
+          console.log('Не удалось отредактировать без фото:', editError.message);
+          
+          try {
+            await ctx.deleteMessage();
+          } catch (deleteError) {
+            console.log('Не удалось удалить без фото:', deleteError.message);
+          }
+          
+          return await ctx.reply(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
+        }
+      } else {
+        return await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      }
+    }
+  } catch (criticalError) {
+    console.error('Критическая ошибка в sendMessageWithPhoto:', criticalError);
+    
+    // Последняя попытка отправить хотя бы базовое уведомление
+    try {
+      return await ctx.reply('⚠️ Временно недоступно. Повторите через пару секунд.', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🔄 Попробовать снова', callback_data: 'main_menu' }
+          ]]
+        }
       });
+    } catch (finalError) {
+      console.error('Полный провал отправки сообщения:', finalError);
+      return null;
     }
   }
 }
@@ -780,9 +831,11 @@ async function checkAndAwardAchievements(userId) {
         { id: userId },
         { 
           $addToSet: { achievements: achievementId },
-          $inc: { magnumCoins: achievement.reward }
+          $inc: { magnumCoins: achievement.reward, totalEarnedMagnumCoins: achievement.reward }
         }
       );
+      invalidateUserCache(userId);
+      invalidateBotStatsCache();
       newAchievements.push(achievement);
     }
   }
@@ -962,6 +1015,7 @@ async function getUser(id, ctx = null) {
       first_name: ctx ? (ctx.from.first_name || '') : '',
       stars: 0,
       magnumCoins: 0,
+      totalEarnedMagnumCoins: 0, // Отслеживаем общую сумму заработанных монет
       lastFarm: 0,
       lastBonus: 0,
       created: now(),
@@ -983,6 +1037,12 @@ async function getUser(id, ctx = null) {
     if (user.magnumCoins === undefined) {
       await users.updateOne({ id }, { $set: { magnumCoins: 0 } });
       user.magnumCoins = 0;
+    }
+    
+    if (user.totalEarnedMagnumCoins === undefined) {
+      // Инициализируем как текущий баланс для существующих пользователей
+      await users.updateOne({ id }, { $set: { totalEarnedMagnumCoins: user.magnumCoins || 0 } });
+      user.totalEarnedMagnumCoins = user.magnumCoins || 0;
     }
     
     if (ctx) {
@@ -1230,11 +1290,26 @@ async function handleFarmCooldownChange(ctx, text, userState) {
 
 🎛️ **Управление:**`;
 
-    await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
-      [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
-      [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
-      [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
-    ]), false);
+    try {
+      await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
+        [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
+        [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
+      ]), false);
+    } catch (sendError) {
+      console.log('Ошибка отправки настроек фарма:', sendError.message);
+      // Fallback: просто отправляем текстовое сообщение
+      await ctx.reply(farmText, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔄 Переключить кулдаун', callback_data: 'admin_farm_toggle' }],
+            [{ text: '⏱️ Изменить время', callback_data: 'admin_farm_time' }],
+            [{ text: '🔙 Назад в админ-панель', callback_data: 'admin_panel' }]
+          ]
+        }
+      });
+    }
     
   } catch (error) {
     console.error('Ошибка изменения кулдауна фарма:', error);
@@ -1383,10 +1458,12 @@ async function handlePromoActivation(ctx, text, userState) {
     await users.updateOne(
       { id: userId },
       { 
-        $inc: { magnumCoins: promo.stars, promoCount: 1 },
+        $inc: { magnumCoins: promo.stars, promoCount: 1, totalEarnedMagnumCoins: promo.stars },
         $addToSet: { promoCodes: code }
       }
     );
+    invalidateUserCache(userId);
+    invalidateBotStatsCache();
     
     // Обновляем промокод
     await promocodes.updateOne(
@@ -1690,7 +1767,7 @@ function createProgressBar(current, total, length = 10) {
 }
 
 async function getDetailedProfile(userId, ctx) {
-  const user = await getUser(userId);
+  const user = await getUser(userId, ctx);
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   const friends = user.invited || 0;
@@ -1893,10 +1970,32 @@ async function markDailyTaskCompleted(userId, taskId) {
 
 async function updateMainMenuBalance(ctx) {
   try {
+    // Принудительно обновляем кеш пользователя
+    invalidateUserCache(ctx.from.id);
     const menu = await getMainMenu(ctx, ctx.from.id);
     await sendMessageWithPhoto(ctx, menu.text, menu.keyboard);
   } catch (error) {
     console.error('Ошибка обновления баланса в меню:', error);
+  }
+}
+
+// Функция для обновления профиля в реальном времени
+async function updateProfileRealtime(ctx) {
+  try {
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
+    const profileText = await getDetailedProfile(ctx.from.id, ctx);
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
+      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
+      [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ]);
+
+    await sendMessageWithPhoto(ctx, profileText, keyboard);
+  } catch (error) {
+    console.error('Ошибка обновления профиля:', error);
   }
 }
 
@@ -1990,6 +2089,10 @@ bot.start(async (ctx) => {
   // Автоматически отмечаем задание "ежедневный вход"
   await markDailyTaskCompleted(ctx.from.id, 'login');
   
+  // Принудительно обновляем кеш для новых пользователей
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
+  
   const menu = await getMainMenu(ctx, ctx.from.id);
   await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
@@ -2009,22 +2112,16 @@ bot.action('check_subscription', async (ctx) => {
 
 bot.action('main_menu', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
+  // Принудительно обновляем кеш для актуальных данных
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   const menu = await getMainMenu(ctx, ctx.from.id);
   await sendMessageWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
 
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
-  const profileText = await getDetailedProfile(ctx.from.id, ctx);
-
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
-    [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
-    [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-  ]);
-
-  await sendMessageWithPhoto(ctx, profileText, keyboard);
+  await updateProfileRealtime(ctx);
 });
 
 bot.action('my_titles', async (ctx) => {
@@ -2199,6 +2296,9 @@ bot.action(/^set_title_(.+)$/, async (ctx) => {
 });
 
 bot.action('top', async (ctx) => {
+  // Принудительно обновляем статистику
+  invalidateBotStatsCache();
+  
   // Отмечаем задание "изучить топ"
   await markDailyTaskCompleted(ctx.from.id, 'top_check');
   
@@ -3867,6 +3967,8 @@ bot.action('buy_tg_stars', async (ctx) => {
       $set: { lastExchange: Math.floor(Date.now() / 1000) }
     }
   );
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   
   await ctx.answerCbQuery('✅ Успешно! 100🪙 → 10⭐ TG Stars', { show_alert: true });
   
@@ -4053,23 +4155,28 @@ bot.action('admin_farm', async (ctx) => {
 });
 
 bot.action('admin_farm_toggle', async (ctx) => {
-  farmCooldownEnabled = !farmCooldownEnabled;
-  const statusText = farmCooldownEnabled ? '🟢 Включен' : '🔴 Выключен';
-  
-  await ctx.answerCbQuery(`✅ Кулдаун фарма ${farmCooldownEnabled ? 'включен' : 'выключен'}!`);
-  
-  const farmText = `🌾 **Настройки фарма** 🌾
+  try {
+    farmCooldownEnabled = !farmCooldownEnabled;
+    const statusText = farmCooldownEnabled ? '🟢 Включен' : '🔴 Выключен';
+    
+    await ctx.answerCbQuery(`✅ Кулдаун фарма ${farmCooldownEnabled ? 'включен' : 'выключен'}!`);
+    
+    const farmText = `🌾 **Настройки фарма** 🌾
 
 ⏱️ **Кулдаун фарма:** ${statusText}
 🕐 **Время кулдауна:** ${farmCooldownSeconds} секунд
 
 🎛️ **Управление:**`;
 
-  await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
-    [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
-    [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
-    [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
-  ]));
+    await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
+      [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
+      [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
+      [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
+    ]));
+  } catch (error) {
+    console.error('Ошибка переключения кулдауна фарма:', error);
+    await ctx.answerCbQuery('⚠️ Временно недоступно. Повторите через пару секунд.', { show_alert: true });
+  }
 });
 
 bot.action('admin_farm_time', async (ctx) => {
@@ -4592,10 +4699,11 @@ bot.action('farm', async (ctx) => {
     const boostedReward = applyBoostMultiplier(baseReward, user, 'farm');
     
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { magnumCoins: boostedReward, farmCount: 1, dailyFarms: 1 }, 
+      $inc: { magnumCoins: boostedReward, farmCount: 1, dailyFarms: 1, totalEarnedMagnumCoins: boostedReward }, 
       $set: { lastFarm: now() } 
     });
     invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
     // Проверяем задание активного фармера
     const updatedUser = await getUser(ctx.from.id);
@@ -4653,10 +4761,11 @@ bot.action('bonus', async (ctx) => {
     const boostedReward = applyBoostMultiplier(baseReward, user, 'bonus');
     
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { magnumCoins: boostedReward, bonusCount: 1 }, 
+      $inc: { magnumCoins: boostedReward, bonusCount: 1, totalEarnedMagnumCoins: boostedReward }, 
       $set: { lastBonus: today, dailyStreak: dailyStreak } 
     });
     invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
     
     // Отмечаем задание "ежедневный бонус"
     await markDailyTaskCompleted(ctx.from.id, 'bonus');
@@ -4710,7 +4819,9 @@ bot.action(/^claim_daily_(.+)$/, async (ctx) => {
     { userId: ctx.from.id, type: 'daily' },
     { $set: { [`claimed.${taskId}`]: true } }
   );
-  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward } });
+  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward, totalEarnedMagnumCoins: task.reward } });
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   
   ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
   ctx.action('daily_tasks')(ctx);
@@ -4725,7 +4836,9 @@ bot.action(/^claim_sponsor_(.+)$/, async (ctx) => {
     { userId: ctx.from.id, type: 'sponsor' },
     { $set: { [`claimed.${taskId}`]: true } }
   );
-  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward } });
+  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward, totalEarnedMagnumCoins: task.reward } });
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
   
   ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
   ctx.action('sponsor_tasks')(ctx);
@@ -4975,4 +5088,47 @@ bot.action(/^ticket_reply_(.+)$/, async (ctx) => {
     console.error('Ошибка отправки приглашения к ответу:', error);
     ctx.answerCbQuery('❌ Ошибка! Убедитесь, что бот может писать в личные сообщения');
   }
+});
+// Глобальная обработка ошибок для предотвращения краха бота
+bot.catch(async (err, ctx) => {
+  console.error('🚨 Глобальная ошибка бота:', err);
+  console.error('📍 Контекст ошибки:', {
+    updateType: ctx.updateType,
+    userId: ctx.from?.id,
+    chatId: ctx.chat?.id,
+    messageText: ctx.message?.text,
+    callbackData: ctx.callbackQuery?.data
+  });
+  
+  // Пытаемся отправить пользователю уведомление об ошибке
+  try {
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('⚠️ Временно недоступно. Повторите через пару секунд.', { show_alert: true });
+    } else if (ctx.message) {
+      await ctx.reply('⚠️ Временно недоступно. Повторите через пару секунд.', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🏠 Главное меню', callback_data: 'main_menu' }
+          ]]
+        }
+      });
+    }
+  } catch (notifyError) {
+    console.error('❌ Не удалось уведомить пользователя об ошибке:', notifyError);
+  }
+});
+
+// Глобальная обработка необработанных промисов
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 Необработанный отказ промиса:', reason);
+  console.error('📍 Promise:', promise);
+});
+
+// Глобальная обработка необработанных исключений
+process.on('uncaughtException', (error) => {
+  console.error('💥 Необработанное исключение:', error);
+  console.error('📍 Stack trace:', error.stack);
+  
+  // Не выходим из процесса, пытаемся продолжить работу
+  console.log('�� Пытаемся продолжить работу бота...');
 });
