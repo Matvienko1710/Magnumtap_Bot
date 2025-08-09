@@ -983,7 +983,13 @@ async function updateWithdrawalStatus(requestId, status, adminId, reason = null)
 }
 
 async function sendWithdrawalToChannel(request) {
-  if (!WITHDRAWAL_CHANNEL) return;
+  console.log('sendWithdrawalToChannel вызвана для заявки:', request.id);
+  console.log('WITHDRAWAL_CHANNEL:', WITHDRAWAL_CHANNEL);
+  
+  if (!WITHDRAWAL_CHANNEL) {
+    console.log('WITHDRAWAL_CHANNEL не настроен, пропускаем отправку в канал');
+    return;
+  }
   
   const user = await getUser(request.userId);
   const methodNames = {
@@ -1009,11 +1015,13 @@ async function sendWithdrawalToChannel(request) {
     [Markup.button.callback('🔄 В обработку', `process_withdrawal_${request.id}`)]
   ]);
   
+  console.log('Пытаемся отправить сообщение в канал @' + WITHDRAWAL_CHANNEL);
   try {
     await bot.telegram.sendMessage(`@${WITHDRAWAL_CHANNEL}`, message, {
       parse_mode: 'Markdown',
       ...keyboard
     });
+    console.log('Сообщение успешно отправлено в канал');
   } catch (error) {
     console.error('Ошибка отправки заявки в канал:', error);
   }
@@ -1842,16 +1850,22 @@ bot.on('text', async (ctx) => {
 
   const text = ctx.message.text;
   const replyText = replyMsg.text;
+  
+  console.log('Text handler triggered:');
+  console.log('Text:', text);
+  console.log('Reply text:', replyText);
 
   try {
     // Обработка заявок на вывод
     if (replyText.includes('Введите количество звёзд для вывода в Telegram Stars')) {
+      console.log('Обрабатываем ввод суммы для Telegram Stars:', text);
       const amount = parseFloat(text);
       if (isNaN(amount) || amount < 100) {
         return ctx.reply('❌ Неверная сумма! Минимум для вывода: 100⭐');
       }
       
       const user = await getUser(ctx.from.id, ctx);
+      console.log('Баланс пользователя:', user.stars, 'Запрашивает:', amount);
       if (user.stars < amount) {
         return ctx.reply(`❌ Недостаточно звёзд! У вас: ${Math.round(user.stars * 100) / 100}⭐`);
       }
@@ -1861,17 +1875,24 @@ bot.on('text', async (ctx) => {
     }
     
     if (replyText.includes('Введите ваш Telegram ID для получения') && replyText.includes('Telegram Stars')) {
+      console.log('Обрабатываем ввод Telegram ID:', text);
+      console.log('Reply text:', replyText);
       const telegramId = text.trim();
       const amountMatch = replyText.match(/(\d+(?:\.\d+)?)/);
       if (!amountMatch) return ctx.reply('❌ Ошибка обработки суммы!');
       
       const amount = parseFloat(amountMatch[1]);
+      console.log('Создаем заявку на сумму:', amount, 'для ID:', telegramId);
       const request = await createWithdrawalRequest(ctx.from.id, 'tg_stars', amount, telegramId);
+      console.log('Заявка создана:', request.id);
       
       // Списываем звёзды
       await users.updateOne({ id: ctx.from.id }, { $inc: { stars: -amount } });
+      console.log('Звёзды списаны с баланса');
       
+      console.log('Отправляем заявку в канал...');
       await sendWithdrawalToChannel(request);
+      console.log('Заявка отправлена в канал');
       
       ctx.reply(`✅ **Заявка создана!**\n\n` +
                 `🏷️ **ID заявки:** \`${request.id}\`\n` +
@@ -2579,72 +2600,7 @@ bot.action('admin_user_titles', async (ctx) => {
   );
 });
 
-// Обновляем обработчик текстовых сообщений для титулов
-bot.on('text', async (ctx) => {
-  const replyMsg = ctx.message.reply_to_message;
-  if (!replyMsg || !isAdmin(ctx.from.id)) return;
 
-  const text = ctx.message.text;
-  const replyText = replyMsg.text;
-
-  try {
-    if (replyText.includes('Выдача титула')) {
-      const [userId, titleId] = text.split(' ');
-      if (!userId || !titleId || !TITLES[titleId]) {
-        return ctx.reply('❌ Неверный формат или несуществующий титул!');
-      }
-
-      await users.updateOne(
-        { id: parseInt(userId) },
-        { $addToSet: { titles: titleId } }
-      );
-      
-      ctx.reply(`✅ Титул "${TITLES[titleId].name}" выдан пользователю ${userId}!`);
-    }
-    
-    else if (replyText.includes('Забрать титул')) {
-      const [userId, titleId] = text.split(' ');
-      if (!userId || !titleId || !TITLES[titleId]) {
-        return ctx.reply('❌ Неверный формат или несуществующий титул!');
-      }
-
-      await users.updateOne(
-        { id: parseInt(userId) },
-        { $pull: { titles: titleId } }
-      );
-      
-      ctx.reply(`✅ Титул "${TITLES[titleId].name}" забран у пользователя ${userId}!`);
-    }
-    
-    else if (replyText.includes('Титулы пользователя')) {
-      const userId = parseInt(text);
-      const user = await users.findOne({ id: userId });
-      
-      if (!user) {
-        return ctx.reply('❌ Пользователь не найден!');
-      }
-
-      const userTitles = user.titles || [];
-      let titlesList = `👤 **Титулы пользователя ${userId}:**\n\n`;
-      
-      if (userTitles.length === 0) {
-        titlesList += '🚫 У пользователя нет титулов';
-      } else {
-        userTitles.forEach(titleId => {
-          if (TITLES[titleId]) {
-            titlesList += `${TITLES[titleId].name}\n`;
-          }
-        });
-      }
-
-      ctx.reply(titlesList, { parse_mode: 'Markdown' });
-    }
-
-    // ... existing admin text handlers ...
-  } catch (error) {
-    ctx.reply('❌ Произошла ошибка при обработке команды!');
-  }
-});
 
 bot.action('daily_tasks', async (ctx) => {
   const userTasks = await getUserTasks(ctx.from.id, true);
