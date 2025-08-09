@@ -872,12 +872,35 @@ bot.action('my_titles', async (ctx) => {
 
 bot.action('top', async (ctx) => {
   const topUsers = await users.find({}).sort({ stars: -1 }).limit(10).toArray();
-  let msg = '🏆 Топ-10 игроков по звёздам:\n\n';
+  let msg = '🏆 *Топ-10 игроков по звёздам:*\n\n';
+  
   topUsers.forEach((user, i) => {
     const name = user.username || user.id;
-    msg += `${i + 1}. ${name} — ${user.stars || 0} звёзд\n`;
+    const stars = Math.round((user.stars || 0) * 100) / 100;
+    const status = getUserStatus(user);
+    const mainTitle = getUserMainTitle(user);
+    
+    // Медали для топ-3
+    let medal = '';
+    if (i === 0) medal = '🥇';
+    else if (i === 1) medal = '🥈';
+    else if (i === 2) medal = '🥉';
+    else medal = `${i + 1}.`;
+    
+    msg += `${medal} *${name}*\n`;
+    msg += `   💰 ${stars} ⭐ звёзд\n`;
+    msg += `   ${status.color} ${status.name}\n`;
+    msg += `   🏆 ${mainTitle}\n\n`;
   });
-  ctx.editMessageText(msg, Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]]));
+  
+  if (topUsers.length === 0) {
+    msg += '📭 Пока что нет игроков в рейтинге.';
+  }
+  
+  ctx.editMessageText(msg, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'main_menu')]])
+  });
 });
 
 bot.action('invite', async (ctx) => {
@@ -1978,7 +2001,7 @@ bot.action('faq_titles', async (ctx) => {
 
 👑 **Список всех титулов:**
 
-**🟢 Обычные титулы:**
+**🟢 Обычные титулы (10 штук):**
 • 🌱 **Новичок** - Начал путь в MagnumTap
 • ⚡ **Фармер** - 30 действий фарминга  
 • 💎 **Коллекционер** - Собрал 50 звёзд
@@ -1990,7 +2013,7 @@ bot.action('faq_titles', async (ctx) => {
 • 🌟 **Звёздный лорд** - 200 звёзд
 • 👑 **Легенда** - 500 звёзд + 10 друзей
 
-**🔴 Секретные титулы:**
+**🔴 Секретные титулы (3 штуки):**
 • 🌅 **Ранняя пташка** - Секретное условие
 • 🦉 **Ночная сова** - Секретное условие  
 • 💫 **VIP Элита** - Выдается администрацией
