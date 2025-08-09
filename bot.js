@@ -303,6 +303,7 @@ async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
     // Всегда отправляем только текстовые сообщения (без фото)
     if (isEdit) {
       try {
+        // Сначала пытаемся отредактировать как текст
         return await ctx.editMessageText(text, {
           parse_mode: 'Markdown',
           ...keyboard
@@ -310,16 +311,28 @@ async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
       } catch (editError) {
         console.log('Не удалось отредактировать текст:', editError.message);
         
+        // Если не получается отредактировать текст, возможно это сообщение с фото
+        // Пытаемся отредактировать caption
         try {
-          await ctx.deleteMessage();
-        } catch (deleteError) {
-          console.log('Не удалось удалить сообщение:', deleteError.message);
+          return await ctx.editMessageCaption(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
+        } catch (captionError) {
+          console.log('Не удалось отредактировать caption:', captionError.message);
+          
+          // Если и caption не работает, удаляем и создаем новое
+          try {
+            await ctx.deleteMessage();
+          } catch (deleteError) {
+            console.log('Не удалось удалить сообщение:', deleteError.message);
+          }
+          
+          return await ctx.reply(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
         }
-        
-        return await ctx.reply(text, {
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
       }
     } else {
       return await ctx.reply(text, {
@@ -442,10 +455,11 @@ const SHOP_ITEMS = {
   },
   'miner': {
     name: '⛏️ Майнер',
-    description: 'Автоматический майнер Magnum Coin. Работает 24/7',
-    price: 5000,
+    description: 'Автоматический майнер звезд. Доход 24/7. Окупается за 30-60 дней',
+    price: 1000,
     icon: '⛏️',
-    category: 'miner'
+    category: 'miner',
+    currency: 'magnumCoins'  // Покупается за Magnum Coin
   }
 };
 
@@ -1213,20 +1227,30 @@ async function purchaseItem(userId, itemId) {
   const item = SHOP_ITEMS[itemId];
   
   if (!item) return { success: false, message: 'Товар не найден' };
-  if (user.stars < item.price) return { success: false, message: 'Недостаточно звёзд' };
+  
+  // Проверяем валюту покупки
+  if (item.currency === 'magnumCoins') {
+    if ((user.magnumCoins || 0) < item.price) return { success: false, message: 'Недостаточно Magnum Coin' };
+  } else {
+    if (user.stars < item.price) return { success: false, message: 'Недостаточно звёзд' };
+  }
   
   const now = Math.floor(Date.now() / 1000);
   let result = { success: true, message: '' };
   
-  // Записываем трату звёзд для всех покупок (кроме кастомных титулов и майнера)
+  // Записываем трату для всех покупок (кроме кастомных титулов и майнера)
   if ((item.category !== 'cosmetic' || itemId !== 'custom_title') && item.category !== 'miner') {
-    await users.updateOne(
-      { id: userId },
-      { 
-        $inc: { stars: -item.price },
-        $push: { purchases: { itemId, price: item.price, timestamp: now } }
-      }
-    );
+    const updateQuery = { 
+      $push: { purchases: { itemId, price: item.price, timestamp: now, currency: item.currency || 'stars' } }
+    };
+    
+    if (item.currency === 'magnumCoins') {
+      updateQuery.$inc = { magnumCoins: -item.price };
+    } else {
+      updateQuery.$inc = { stars: -item.price };
+    }
+    
+    await users.updateOne({ id: userId }, updateQuery);
     invalidateUserCache(userId);
   }
 
@@ -1286,16 +1310,17 @@ async function purchaseItem(userId, itemId) {
       await users.updateOne(
         { id: userId },
         { 
-          $inc: { stars: -item.price },
+          $inc: { magnumCoins: -item.price },
           $set: { 
             'miner.active': true,
             'miner.purchasedAt': now,
-            'miner.lastReward': now
+            'miner.lastReward': now,
+            'miner.totalEarned': 0
           },
-          $push: { purchases: { itemId, price: item.price, timestamp: now } }
+          $push: { purchases: { itemId, price: item.price, timestamp: now, currency: 'magnumCoins' } }
         }
       );
-      result.message = `${item.icon} Майнер активирован! Начинает работать автоматически и приносить Magnum Coin каждый час.`;
+      result.message = `${item.icon} Майнер активирован! Начинает работать автоматически и приносить звезды каждый час.`;
       break;
   }
   
@@ -2064,15 +2089,20 @@ async function markDailyTaskCompleted(userId, taskId) {
 
 async function updateMainMenuBalance(ctx) {
   try {
-    // Принудительно обновляем кеш пользователя
-    invalidateUserCache(ctx.from.id);
-    invalidateBotStatsCache();
+    // Принудительно обновляем кеш пользователя НЕСКОЛЬКО РАЗ для гарантии
+    for (let i = 0; i < 3; i++) {
+      invalidateUserCache(ctx.from.id);
+      invalidateBotStatsCache();
+    }
     
-    // Получаем свежие данные из базы
+    // Получаем свежие данные из базы принудительно
     const freshUser = await users.findOne({ id: ctx.from.id });
     if (freshUser) {
       userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
     }
+    
+    // Небольшая задержка для гарантии обновления кеша
+    await new Promise(resolve => setTimeout(resolve, 50));
     
     const menu = await getMainMenu(ctx, ctx.from.id);
     await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard);
@@ -2085,22 +2115,27 @@ async function updateMainMenuBalance(ctx) {
 async function updateProfileRealtime(ctx) {
   try {
     // Принудительно очищаем кеш несколько раз для гарантии
-    invalidateUserCache(ctx.from.id);
-    invalidateBotStatsCache();
+    for (let i = 0; i < 3; i++) {
+      invalidateUserCache(ctx.from.id);
+      invalidateBotStatsCache();
+    }
     
-    // Получаем свежие данные из базы
+    // Получаем свежие данные из базы принудительно
     const freshUser = await users.findOne({ id: ctx.from.id });
     if (freshUser) {
       userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
     }
     
+    // Небольшая задержка для гарантии обновления кеша
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     const profileText = await getDetailedProfile(ctx.from.id, ctx);
 
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🏆 Мои титулы', 'my_titles'), Markup.button.callback('🎖️ Достижения', 'achievements')],
-      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
-      [Markup.button.callback('🛠️ Тех поддержка', 'support_menu'), Markup.button.callback('❓ FAQ', 'faq')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      [Markup.button.callback('⛏️ Мои майнеры', 'my_miners'), Markup.button.callback('💸 Вывод звёзд', 'withdraw')],
+      [Markup.button.callback('🤝 Пригласить друзей', 'invite'), Markup.button.callback('🛠️ Тех поддержка', 'support_menu')],
+      [Markup.button.callback('❓ FAQ', 'faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]);
 
     await sendMessageWithPhoto(ctx, profileText, keyboard);
@@ -2232,6 +2267,45 @@ bot.action('main_menu', async (ctx) => {
 // Обновляем профиль с кнопкой техподдержки
 bot.action('profile', async (ctx) => {
   await updateProfileRealtime(ctx);
+});
+
+bot.action('my_miners', async (ctx) => {
+  const user = await getUser(ctx.from.id);
+  
+  let minerText = '⛏️ **Мои майнеры** ⛏️\n\n';
+  
+  if (user.miner && user.miner.active) {
+    const now = Math.floor(Date.now() / 1000);
+    const hoursWorking = Math.floor((now - user.miner.purchasedAt) / 3600);
+    const daysWorking = Math.floor(hoursWorking / 24);
+    const totalEarned = user.miner.totalEarned || 0;
+    const invested = 1000; // Magnum Coin
+    const remaining = Math.max(0, invested - totalEarned);
+    const paybackProgress = Math.min(100, Math.round((totalEarned / invested) * 100));
+    
+    minerText += `🟢 **Майнер #1** - Активен\n`;
+    minerText += `💰 Инвестиция: 1000 🪙 Magnum Coin\n`;
+    minerText += `📊 Заработано: ${totalEarned} ⭐ звезд\n`;
+    minerText += `⏰ Работает: ${daysWorking} дней (${hoursWorking}ч)\n`;
+    minerText += `📈 Окупаемость: ${paybackProgress}%\n`;
+    
+    if (remaining > 0) {
+      minerText += `💎 До окупаемости: ${remaining} ⭐\n`;
+    } else {
+      minerText += `✅ Майнер окупился! Чистая прибыль: ${totalEarned - invested} ⭐\n`;
+    }
+    
+    minerText += `\n⚡ Доход: 1 ⭐ в час (24 ⭐ в день)`;
+  } else {
+    minerText += `❌ У вас нет активных майнеров\n\n`;
+    minerText += `💡 Купите майнер в магазине за 1000 🪙 Magnum Coin\n`;
+    minerText += `📈 Доход: 1 ⭐ в час, окупаемость 30-60 дней`;
+  }
+
+  await sendMessageWithPhoto(ctx, minerText, Markup.inlineKeyboard([
+    [Markup.button.callback('🛒 Магазин', 'shop')],
+    [Markup.button.callback('👤 Профиль', 'profile')]
+  ]));
 });
 
 bot.action('my_titles', async (ctx) => {
@@ -5218,7 +5292,11 @@ async function processMinerRewards() {
       const hoursElapsed = Math.floor(timeSinceLastReward / oneHour);
       
       if (hoursElapsed > 0) {
-        const rewardPerHour = 2; // 2 Magnum Coin за час
+        // Доход: 1000 MC стоит майнер, окупаемость 30-60 дней
+        // 30 дней = 720 часов, 60 дней = 1440 часов
+        // Для окупаемости 45 дней (1080 часов): 1000 MC / 1080 часов = ~0.93 звезды/час
+        // Округляем до 1 звезды в час для простоты
+        const rewardPerHour = 1; // 1 звезда за час
         const totalReward = hoursElapsed * rewardPerHour;
         
         // Выдаем награду
@@ -5226,22 +5304,23 @@ async function processMinerRewards() {
           { id: user.id },
           {
             $inc: { 
-              magnumCoins: totalReward,
-              totalEarnedMagnumCoins: totalReward
+              stars: totalReward,
+              'miner.totalEarned': totalReward
             },
             $set: { 'miner.lastReward': now }
           }
         );
         
         invalidateUserCache(user.id);
-        console.log(`⛏️ Майнер пользователя ${user.id} выдал ${totalReward} Magnum Coin за ${hoursElapsed} часов`);
+        console.log(`⛏️ Майнер пользователя ${user.id} выдал ${totalReward} звезд за ${hoursElapsed} часов`);
         
         // Отправляем уведомление пользователю (если возможно)
         try {
           await bot.telegram.sendMessage(user.id, 
             `⛏️ **Майнер принес доход!**\n\n` +
-            `💰 Получено: ${totalReward} 🪙 Magnum Coin\n` +
-            `⏰ За период: ${hoursElapsed} час(ов)\n\n` +
+            `💎 Получено: ${totalReward} ⭐ звезд\n` +
+            `⏰ За период: ${hoursElapsed} час(ов)\n` +
+            `📊 Всего заработано: ${(user.miner.totalEarned || 0) + totalReward} ⭐\n\n` +
             `Майнер продолжает работать автоматически!`,
             { parse_mode: 'Markdown' }
           );
