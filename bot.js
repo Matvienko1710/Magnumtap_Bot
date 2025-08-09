@@ -24,15 +24,15 @@ let users, promocodes, taskChecks;
 const TITLES = {
   // Обычные титулы (10)
   'newcomer': { name: '🌱 Новичок', description: 'Начал путь в MagnumTap', condition: 'registration', requirement: 1 },
-  'farmer': { name: '⚡ Фармер', description: 'Выполнил 50 действий фарминга', condition: 'farm_count', requirement: 50 },
-  'collector': { name: '💎 Коллекционер', description: 'Собрал 100 звёзд', condition: 'stars', requirement: 100 },
-  'inviter': { name: '🤝 Амбассадор', description: 'Пригласил 5 друзей', condition: 'invited', requirement: 5 },
-  'daily_visitor': { name: '📅 Постоянный посетитель', description: '7 дней подряд заходил в бота', condition: 'daily_streak', requirement: 7 },
-  'bonus_hunter': { name: '🎁 Охотник за бонусами', description: 'Собрал 30 ежедневных бонусов', condition: 'bonus_count', requirement: 30 },
-  'promo_master': { name: '🎫 Мастер промокодов', description: 'Активировал 10 промокодов', condition: 'promo_count', requirement: 10 },
-  'task_warrior': { name: '⚔️ Воин заданий', description: 'Выполнил 100 заданий', condition: 'task_count', requirement: 100 },
-  'star_lord': { name: '🌟 Звёздный лорд', description: 'Собрал 500 звёзд', condition: 'stars', requirement: 500 },
-  'legend': { name: '👑 Легенда', description: 'Собрал 1000 звёзд и пригласил 20 друзей', condition: 'combined', requirement: { stars: 1000, invited: 20 } },
+  'farmer': { name: '⚡ Фармер', description: 'Выполнил 30 действий фарминга', condition: 'farm_count', requirement: 30 },
+  'collector': { name: '💎 Коллекционер', description: 'Собрал 50 звёзд', condition: 'stars', requirement: 50 },
+  'inviter': { name: '🤝 Амбассадор', description: 'Пригласил 3 друзей', condition: 'invited', requirement: 3 },
+  'daily_visitor': { name: '📅 Постоянный посетитель', description: '5 дней подряд заходил в бота', condition: 'daily_streak', requirement: 5 },
+  'bonus_hunter': { name: '🎁 Охотник за бонусами', description: 'Собрал 15 ежедневных бонусов', condition: 'bonus_count', requirement: 15 },
+  'promo_master': { name: '🎫 Мастер промокодов', description: 'Активировал 5 промокодов', condition: 'promo_count', requirement: 5 },
+  'task_warrior': { name: '⚔️ Воин заданий', description: 'Выполнил 20 заданий', condition: 'task_count', requirement: 20 },
+  'star_lord': { name: '🌟 Звёздный лорд', description: 'Собрал 200 звёзд', condition: 'stars', requirement: 200 },
+  'legend': { name: '👑 Легенда', description: 'Собрал 500 звёзд и пригласил 10 друзей', condition: 'combined', requirement: { stars: 500, invited: 10 } },
 
   // Секретные титулы (3)
   'early_bird': { name: '🌅 Ранняя пташка', description: 'Секретный титул за особую активность', condition: 'secret', requirement: 'special' },
@@ -42,20 +42,20 @@ const TITLES = {
 
 // Система достижений
 const ACHIEVEMENTS = {
-  'first_hundred': { 
-    name: '💰 Сотка', 
-    description: 'Накопить 100 звёзд', 
+  'first_fifty': { 
+    name: '⭐ Первые звёзды', 
+    description: 'Накопить 50 звёзд', 
     condition: 'stars', 
-    requirement: 100,
-    reward: 10,
-    icon: '💰'
+    requirement: 50,
+    reward: 5,
+    icon: '⭐'
   },
   'social_butterfly': { 
     name: '🤝 Социальная бабочка', 
-    description: 'Пригласить 5 друзей', 
+    description: 'Пригласить 3 друзей', 
     condition: 'invited', 
-    requirement: 5,
-    reward: 25,
+    requirement: 3,
+    reward: 8,
     icon: '🤝'
   },
   'week_warrior': { 
@@ -63,23 +63,23 @@ const ACHIEVEMENTS = {
     description: 'Получить бонус 7 дней подряд', 
     condition: 'daily_streak', 
     requirement: 7,
-    reward: 50,
+    reward: 15,
     icon: '⚡'
   },
   'farm_master': { 
     name: '🌾 Мастер фарма', 
-    description: 'Сфармить 200 раз', 
+    description: 'Сфармить 100 раз', 
     condition: 'farm_count', 
-    requirement: 200,
-    reward: 30,
+    requirement: 100,
+    reward: 10,
     icon: '🌾'
   },
   'promo_hunter': { 
     name: '🎫 Охотник за промо', 
-    description: 'Активировать 10 промокодов', 
+    description: 'Активировать 5 промокодов', 
     condition: 'promo_count', 
-    requirement: 10,
-    reward: 40,
+    requirement: 5,
+    reward: 12,
     icon: '🎫'
   }
 };
@@ -513,12 +513,12 @@ function getUserMainTitle(user) {
 function getNextLevelInfo(user) {
   const stars = user.stars || 0;
   const levels = [
-    { name: 'Bronze Star', requirement: 50 },
-    { name: 'Silver Star', requirement: 150 },
-    { name: 'Gold Star', requirement: 300 },
-    { name: 'Platinum Star', requirement: 500 },
-    { name: 'Diamond Star', requirement: 1000 },
-    { name: 'Master Star', requirement: 2000 }
+    { name: 'Bronze Star', requirement: 25 },
+    { name: 'Silver Star', requirement: 75 },
+    { name: 'Gold Star', requirement: 150 },
+    { name: 'Platinum Star', requirement: 250 },
+    { name: 'Diamond Star', requirement: 400 },
+    { name: 'Master Star', requirement: 600 }
   ];
 
   for (const level of levels) {
@@ -591,7 +591,7 @@ const SPONSOR_TASKS = [
     id: 'music_channel',
     title: '📱 Подписаться на канал @musice46',
     description: 'Подпишитесь на канал @musice46',
-    reward: 50,
+    reward: 15,
     instruction: 'Сделайте скриншот подписки на канал',
     link: 'https://t.me/musice46'
   },
@@ -599,7 +599,7 @@ const SPONSOR_TASKS = [
     id: 'firestars_bot',
     title: '🔥 Запустить бота FireStars',
     description: 'Запустите бота и получите бонус',
-    reward: 75,
+    reward: 20,
     instruction: 'Сделайте скриншот запуска бота',
     link: FIRESTARS_BOT_LINK
   },
@@ -607,7 +607,7 @@ const SPONSOR_TASKS = [
     id: 'farmik_bot',
     title: '⭐ Запустить бота FarmikStars',
     description: 'Запустите бота для заработка подарков',
-    reward: 80,
+    reward: 25,
     instruction: 'Сделайте скриншот запуска бота',
     link: FARMIK_BOT_LINK
   },
@@ -615,7 +615,7 @@ const SPONSOR_TASKS = [
     id: 'basket_game_bot',
     title: '🏀 Играть в BasketGift бота',
     description: 'Запустите бота и сыграйте в игру 3 раза',
-    reward: 100,
+    reward: 30,
     instruction: 'Сделайте скриншот результатов 3 игр',
     link: BASKET_BOT_LINK
   }
@@ -1648,7 +1648,7 @@ bot.action('farm', async (ctx) => {
   
   if (canFarm) {
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { stars: 1, farmCount: 1 }, 
+      $inc: { stars: 0.5, farmCount: 1 }, 
       $set: { lastFarm: now() } 
     });
     
@@ -1660,13 +1660,13 @@ bot.action('farm', async (ctx) => {
     await updateMainMenuBalance(ctx);
     
     if (newTitles.length > 0 && newAchievements.length > 0) {
-      ctx.answerCbQuery('🌟 +1 звезда! 🏆 Новый титул! 🎖️ Достижение!');
+      ctx.answerCbQuery('⭐ +0.5 звезды! 🏆 Новый титул! 🎖️ Достижение!');
     } else if (newTitles.length > 0) {
-      ctx.answerCbQuery('🌟 +1 звезда! 🏆 Новый титул получен!');
+      ctx.answerCbQuery('⭐ +0.5 звезды! 🏆 Новый титул получен!');
     } else if (newAchievements.length > 0) {
-      ctx.answerCbQuery(`🌟 +1 звезда! 🎖️ ${newAchievements[0].name}!`);
+      ctx.answerCbQuery(`⭐ +0.5 звезды! 🎖️ ${newAchievements[0].name}!`);
     } else {
-      ctx.answerCbQuery('🌟 +1 звезда!');
+      ctx.answerCbQuery('⭐ +0.5 звезды!');
     }
   } else {
     const timeLeft = 60 - (now() - user.lastFarm);
@@ -1690,7 +1690,7 @@ bot.action('bonus', async (ctx) => {
     }
     
     await users.updateOne({ id: ctx.from.id }, { 
-      $inc: { stars: 10, bonusCount: 1 }, 
+      $inc: { stars: 3, bonusCount: 1 }, 
       $set: { lastBonus: today, dailyStreak: dailyStreak } 
     });
     
@@ -1702,13 +1702,13 @@ bot.action('bonus', async (ctx) => {
     await updateMainMenuBalance(ctx);
     
     if (newTitles.length > 0 && newAchievements.length > 0) {
-      ctx.answerCbQuery('🎁 +10 звёзд! 🏆 Новый титул! 🎖️ Достижение!');
+      ctx.answerCbQuery('🎁 +3 звезды! 🏆 Новый титул! 🎖️ Достижение!');
     } else if (newTitles.length > 0) {
-      ctx.answerCbQuery('🎁 +10 звёзд бонус! 🏆 Новый титул!');
+      ctx.answerCbQuery('🎁 +3 звезды бонус! 🏆 Новый титул!');
     } else if (newAchievements.length > 0) {
-      ctx.answerCbQuery(`🎁 +10 звёзд! 🎖️ ${newAchievements[0].name}!`);
+      ctx.answerCbQuery(`🎁 +3 звезды! 🎖️ ${newAchievements[0].name}!`);
     } else {
-      ctx.answerCbQuery('🎁 +10 звёзд! Ежедневный бонус получен!');
+      ctx.answerCbQuery('🎁 +3 звезды! Ежедневный бонус получен!');
     }
   } else {
     // Расчет времени до следующего дня (00:00)
