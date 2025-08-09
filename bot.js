@@ -3245,10 +3245,26 @@ async function handlePostCreation(ctx, text, userState) {
       return;
     }
     
-    // Формируем клавиатуру в зависимости от типа поста
+    console.log(`📸 Используем фото бота: ${botPhotoUrl}`);
+    
+    // Парсим текст и кнопку для обычного поста
+    let postText = text;
     let keyboard = null;
     
-    if (postType === 'game') {
+    if (postType === 'normal') {
+      // Проверяем, есть ли кнопка в тексте
+      const buttonMatch = text.match(/КНОПКА:(.+?):(.+?)$/);
+      if (buttonMatch) {
+        const [, buttonText, buttonUrl] = buttonMatch;
+        postText = text.replace(/КНОПКА:.+?$/, '').trim(); // Убираем строку с кнопкой из текста
+        
+        keyboard = Markup.inlineKeyboard([
+          [Markup.button.url(buttonText, buttonUrl)]
+        ]);
+        
+        console.log(`🔘 Добавляем кнопку: "${buttonText}" → ${buttonUrl}`);
+      }
+    } else if (postType === 'game') {
       keyboard = Markup.inlineKeyboard([
         [Markup.button.url('🎮 Играть', `https://t.me/${ctx.botInfo.username}?start=game`)]
       ]);
@@ -3264,26 +3280,24 @@ async function handlePostCreation(ctx, text, userState) {
     
     // Отправляем пост в канал
     try {
+      const messageOptions = {
+        caption: postText,
+        parse_mode: 'Markdown'
+      };
+      
       if (keyboard) {
-        await bot.telegram.sendPhoto(channelChatId, botPhotoUrl, {
-          caption: text,
-          parse_mode: 'Markdown',
-          reply_markup: keyboard.reply_markup
-        });
-      } else {
-        await bot.telegram.sendPhoto(channelChatId, botPhotoUrl, {
-          caption: text,
-          parse_mode: 'Markdown'
-        });
+        messageOptions.reply_markup = keyboard.reply_markup;
       }
+      
+      await bot.telegram.sendPhoto(channelChatId, botPhotoUrl, messageOptions);
       
       console.log(`✅ Пост успешно отправлен в канал ${channelChatId}`);
       
       // Отправляем подтверждение админу
       let confirmText = `✅ **Пост создан успешно!**\n\n`;
       confirmText += `📢 **Тип:** ${postType === 'normal' ? 'Обычный' : postType === 'game' ? 'Игровой' : postType === 'chat' ? 'Чат' : 'Промокод'}\n`;
-      confirmText += `📝 **Текст:** ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}\n`;
-      confirmText += `📸 **Фото:** Добавлено\n`;
+      confirmText += `📝 **Текст:** ${postText.substring(0, 100)}${postText.length > 100 ? '...' : ''}\n`;
+      confirmText += `📸 **Фото:** ${botPhotoUrl.substring(0, 50)}...\n`;
       
       if (keyboard) {
         confirmText += `🔘 **Кнопка:** Добавлена\n`;
@@ -3300,6 +3314,8 @@ async function handlePostCreation(ctx, text, userState) {
         await ctx.reply('❌ Канал не найден! Проверьте переменную CHANNEL_POSTS_CHAT');
       } else if (channelError.message.includes('Forbidden')) {
         await ctx.reply('❌ Бот не имеет прав для отправки в канал! Добавьте бота как администратора');
+      } else if (channelError.message.includes('wrong file identifier')) {
+        await ctx.reply('❌ Ошибка с фото бота! Проверьте переменную BOT_PHOTO_URL - должна быть прямая ссылка на изображение');
       } else {
         await ctx.reply(`❌ Ошибка отправки в канал: ${channelError.message}`);
       }
@@ -4341,7 +4357,7 @@ bot.action('admin_create_post', async (ctx) => {
   
   const postText = `📝 **Создание поста для канала** 📝\n\n` +
                    `Выберите тип поста:\n\n` +
-                   `📢 **Обычный пост** - текст с фото бота\n` +
+                   `📢 **Обычный пост** - текст с фото бота (можно добавить кнопку)\n` +
                    `🎮 **Игровой пост** - с кнопкой "Играть"\n` +
                    `💬 **Чат пост** - с кнопкой "Присоединиться к чату"\n` +
                    `🎫 **Промокод пост** - с кнопкой "Получить промокод"`;
@@ -4360,7 +4376,7 @@ bot.action('post_type_normal', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   userStates.set(ctx.from.id, { type: 'admin_create_post', postType: 'normal' });
-  await adminForceReply(ctx, '📢 **Обычный пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 Поддерживается Markdown разметка');
+  await adminForceReply(ctx, '📢 **Обычный пост**\n\nВведите текст поста для канала magnumtap:\n\n💡 Поддерживается Markdown разметка\n\n💡 После текста можно добавить кнопку, написав:\n\nКНОПКА:ТЕКСТ_КНОПКИ:ССЫЛКА\n\nПример:\nКНОПКА:🎮 Играть:https://t.me/bot?start=game');
 });
 
 bot.action('post_type_game', async (ctx) => {
