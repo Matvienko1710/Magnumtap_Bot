@@ -58,44 +58,73 @@ const userStates = new Map();
 async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
   const photoUrl = process.env.BOT_PHOTO_URL;
   
-  if (photoUrl) {
+  if (photoUrl && isEdit) {
     try {
-      if (isEdit) {
-        await ctx.editMessageMedia({
-          type: 'photo',
-          media: photoUrl,
-          caption: text,
-          parse_mode: 'Markdown'
-        }, keyboard);
-      } else {
+      // Пытаемся редактировать как медиа (если сообщение уже с фото)
+      await ctx.editMessageMedia({
+        type: 'photo',
+        media: photoUrl,
+        caption: text,
+        parse_mode: 'Markdown'
+      }, keyboard);
+    } catch (error) {
+      console.log('⚠️ Ошибка редактирования медиа:', error.message);
+      try {
+        // Fallback: пытаемся редактировать как текст (если сообщение текстовое)
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      } catch (textError) {
+        console.log('⚠️ Ошибка редактирования текста:', textError.message);
+        // Последний fallback: удаляем старое и отправляем новое
+        try {
+          await ctx.deleteMessage();
+        } catch (deleteError) {
+          console.log('⚠️ Не удалось удалить сообщение:', deleteError.message);
+        }
         await ctx.replyWithPhoto(photoUrl, {
           caption: text,
           parse_mode: 'Markdown',
           ...keyboard
         });
       }
+    }
+  } else if (photoUrl && !isEdit) {
+    // Новое сообщение с фото
+    try {
+      await ctx.replyWithPhoto(photoUrl, {
+        caption: text,
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
     } catch (error) {
       console.log('⚠️ Ошибка отправки фото, используем текст:', error.message);
-      // Fallback на текст
-      if (isEdit) {
+      await ctx.reply(text, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    }
+  } else {
+    // Без фото или fallback
+    if (isEdit) {
+      try {
         await ctx.editMessageText(text, {
           parse_mode: 'Markdown',
           ...keyboard
         });
-      } else {
+      } catch (error) {
+        console.log('⚠️ Ошибка редактирования текста, отправляем новое:', error.message);
+        try {
+          await ctx.deleteMessage();
+        } catch (deleteError) {
+          console.log('⚠️ Не удалось удалить сообщение:', deleteError.message);
+        }
         await ctx.reply(text, {
           parse_mode: 'Markdown',
           ...keyboard
         });
       }
-    }
-  } else {
-    // Если фото нет, используем обычный текст
-    if (isEdit) {
-      await ctx.editMessageText(text, {
-        parse_mode: 'Markdown',
-        ...keyboard
-      });
     } else {
       await ctx.reply(text, {
         parse_mode: 'Markdown',
@@ -1666,7 +1695,7 @@ async function markDailyTaskCompleted(userId, taskId) {
 async function updateMainMenuBalance(ctx) {
   try {
     const menu = await getMainMenu(ctx, ctx.from.id);
-    await ctx.editMessageText(menu.text, menu.extra);
+    await sendMessageWithPhoto(ctx, menu.text, menu.keyboard);
   } catch (error) {
     console.error('Ошибка обновления баланса в меню:', error);
   }
@@ -3162,33 +3191,28 @@ bot.on('text', async (ctx) => {
 bot.action('admin_panel', async (ctx) => {
   const adminText = '⚙️ *Админ-панель* ⚙️\n\n🎛️ Выберите действие:';
 
-  ctx.editMessageText(adminText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
-      [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
-      [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
-      [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-    ])
-  });
+  await sendMessageWithPhoto(ctx, adminText, Markup.inlineKeyboard([
+    [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
+    [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
+    [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
+    [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
+    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+  ]));
 });
 
 bot.action('admin_cancel', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
   ctx.answerCbQuery();
-  ctx.reply(
+  await sendMessageWithPhoto(ctx, 
     '⚙️ *Админ-панель* ⚙️\n\n🎛️ Выберите действие:',
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
-        [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
-        [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
-        [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-        [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-      ])
-    }
+    Markup.inlineKeyboard([
+      [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
+      [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
+      [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
+      [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ]),
+    false
   );
 });
 
@@ -3518,7 +3542,7 @@ bot.action('exchange_currency', async (ctx) => {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
-  ctx.editMessageText(currencyText, { parse_mode: 'Markdown', ...keyboard });
+  await sendMessageWithPhoto(ctx, currencyText, keyboard);
 });
 
 // P2P торговля
@@ -3545,7 +3569,7 @@ bot.action('exchange_p2p', async (ctx) => {
     [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
   ]);
   
-  ctx.editMessageText(p2pText, { parse_mode: 'Markdown', ...keyboard });
+  await sendMessageWithPhoto(ctx, p2pText, keyboard);
 });
 
 // Инвестиции
@@ -3573,7 +3597,7 @@ bot.action('exchange_invest', async (ctx) => {
     [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
   ]);
   
-  ctx.editMessageText(investText, { parse_mode: 'Markdown', ...keyboard });
+  await sendMessageWithPhoto(ctx, investText, keyboard);
 });
 
 // Заглушки для остальных функций
@@ -3646,7 +3670,7 @@ bot.action('buy_tg_stars', async (ctx) => {
     
     const keyboard = Markup.inlineKeyboard(buttons);
     
-    ctx.editMessageText(currencyText, { parse_mode: 'Markdown', ...keyboard });
+    await sendMessageWithPhoto(ctx, currencyText, keyboard);
   }, 1000);
 });
 
