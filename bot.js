@@ -188,66 +188,111 @@ const photoUrlCache = process.env.BOT_PHOTO_URL;
 
 // Универсальная функция для отправки сообщений с фото (оптимизированная)
 async function sendMessageWithPhoto(ctx, text, keyboard, isEdit = true) {
-  if (photoUrlCache && isEdit) {
-    try {
-      // Пытаемся редактировать как медиа (если сообщение уже с фото)
-      return await ctx.editMessageMedia({
-        type: 'photo',
-        media: photoUrlCache,
-        caption: text,
-        parse_mode: 'Markdown'
-      }, keyboard);
-    } catch (error) {
-      // Быстрый fallback на текст
+  try {
+    if (photoUrlCache && isEdit) {
+      // Попытка 1: редактирование медиа (если сообщение уже с фото)
       try {
-        return await ctx.editMessageText(text, {
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
-      } catch (textError) {
-        // Последний fallback: новое сообщение
-        try { await ctx.deleteMessage(); } catch {}
+        return await ctx.editMessageMedia({
+          type: 'photo',
+          media: photoUrlCache,
+          caption: text,
+          parse_mode: 'Markdown'
+        }, keyboard);
+      } catch (mediaError) {
+        console.log('Не удалось отредактировать медиа:', mediaError.message);
+        
+        // Попытка 2: редактирование текста
+        try {
+          return await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
+        } catch (textError) {
+          console.log('Не удалось отредактировать текст:', textError.message);
+          
+          // Попытка 3: удаляем и создаем новое с фото
+          try {
+            await ctx.deleteMessage();
+          } catch (deleteError) {
+            console.log('Не удалось удалить сообщение:', deleteError.message);
+          }
+          
+          try {
+            return await ctx.replyWithPhoto(photoUrlCache, {
+              caption: text,
+              parse_mode: 'Markdown',
+              ...keyboard
+            });
+          } catch (photoError) {
+            console.log('Не удалось отправить фото:', photoError.message);
+            
+            // Финальный fallback: обычное текстовое сообщение
+            return await ctx.reply(text, {
+              parse_mode: 'Markdown',
+              ...keyboard
+            });
+          }
+        }
+      }
+    } else if (photoUrlCache && !isEdit) {
+      // Новое сообщение с фото
+      try {
         return await ctx.replyWithPhoto(photoUrlCache, {
           caption: text,
           parse_mode: 'Markdown',
           ...keyboard
         });
-      }
-    }
-  } else if (photoUrlCache && !isEdit) {
-    // Новое сообщение с фото
-    try {
-      return await ctx.replyWithPhoto(photoUrlCache, {
-        caption: text,
-        parse_mode: 'Markdown',
-        ...keyboard
-      });
-    } catch {
-      return await ctx.reply(text, {
-        parse_mode: 'Markdown',
-        ...keyboard
-      });
-    }
-  } else {
-    // Без фото
-    if (isEdit) {
-      try {
-        return await ctx.editMessageText(text, {
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
-      } catch {
-        try { await ctx.deleteMessage(); } catch {}
+      } catch (photoError) {
+        console.log('Не удалось отправить новое фото:', photoError.message);
         return await ctx.reply(text, {
           parse_mode: 'Markdown',
           ...keyboard
         });
       }
     } else {
-      return await ctx.reply(text, {
-        parse_mode: 'Markdown',
-        ...keyboard
+      // Без фото
+      if (isEdit) {
+        try {
+          return await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
+        } catch (editError) {
+          console.log('Не удалось отредактировать без фото:', editError.message);
+          
+          try {
+            await ctx.deleteMessage();
+          } catch (deleteError) {
+            console.log('Не удалось удалить без фото:', deleteError.message);
+          }
+          
+          return await ctx.reply(text, {
+            parse_mode: 'Markdown',
+            ...keyboard
+          });
+        }
+      } else {
+        return await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...keyboard
+        });
+      }
+    }
+  } catch (criticalError) {
+    console.error('Критическая ошибка в sendMessageWithPhoto:', criticalError);
+    
+    // Последняя попытка отправить хотя бы базовое уведомление
+    try {
+      return await ctx.reply('⚠️ Временно недоступно. Повторите через пару секунд.', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🔄 Попробовать снова', callback_data: 'main_menu' }
+          ]]
+        }
       });
+    } catch (finalError) {
+      console.error('Полный провал отправки сообщения:', finalError);
+      return null;
     }
   }
 }
@@ -1245,11 +1290,26 @@ async function handleFarmCooldownChange(ctx, text, userState) {
 
 🎛️ **Управление:**`;
 
-    await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
-      [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
-      [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
-      [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
-    ]), false);
+    try {
+      await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
+        [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
+        [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
+      ]), false);
+    } catch (sendError) {
+      console.log('Ошибка отправки настроек фарма:', sendError.message);
+      // Fallback: просто отправляем текстовое сообщение
+      await ctx.reply(farmText, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔄 Переключить кулдаун', callback_data: 'admin_farm_toggle' }],
+            [{ text: '⏱️ Изменить время', callback_data: 'admin_farm_time' }],
+            [{ text: '🔙 Назад в админ-панель', callback_data: 'admin_panel' }]
+          ]
+        }
+      });
+    }
     
   } catch (error) {
     console.error('Ошибка изменения кулдауна фарма:', error);
@@ -4095,23 +4155,28 @@ bot.action('admin_farm', async (ctx) => {
 });
 
 bot.action('admin_farm_toggle', async (ctx) => {
-  farmCooldownEnabled = !farmCooldownEnabled;
-  const statusText = farmCooldownEnabled ? '🟢 Включен' : '🔴 Выключен';
-  
-  await ctx.answerCbQuery(`✅ Кулдаун фарма ${farmCooldownEnabled ? 'включен' : 'выключен'}!`);
-  
-  const farmText = `🌾 **Настройки фарма** 🌾
+  try {
+    farmCooldownEnabled = !farmCooldownEnabled;
+    const statusText = farmCooldownEnabled ? '🟢 Включен' : '🔴 Выключен';
+    
+    await ctx.answerCbQuery(`✅ Кулдаун фарма ${farmCooldownEnabled ? 'включен' : 'выключен'}!`);
+    
+    const farmText = `🌾 **Настройки фарма** 🌾
 
 ⏱️ **Кулдаун фарма:** ${statusText}
 🕐 **Время кулдауна:** ${farmCooldownSeconds} секунд
 
 🎛️ **Управление:**`;
 
-  await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
-    [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
-    [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
-    [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
-  ]));
+    await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
+      [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
+      [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
+      [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
+    ]));
+  } catch (error) {
+    console.error('Ошибка переключения кулдауна фарма:', error);
+    await ctx.answerCbQuery('⚠️ Временно недоступно. Повторите через пару секунд.', { show_alert: true });
+  }
 });
 
 bot.action('admin_farm_time', async (ctx) => {
@@ -5023,4 +5088,47 @@ bot.action(/^ticket_reply_(.+)$/, async (ctx) => {
     console.error('Ошибка отправки приглашения к ответу:', error);
     ctx.answerCbQuery('❌ Ошибка! Убедитесь, что бот может писать в личные сообщения');
   }
+});
+// Глобальная обработка ошибок для предотвращения краха бота
+bot.catch(async (err, ctx) => {
+  console.error('🚨 Глобальная ошибка бота:', err);
+  console.error('📍 Контекст ошибки:', {
+    updateType: ctx.updateType,
+    userId: ctx.from?.id,
+    chatId: ctx.chat?.id,
+    messageText: ctx.message?.text,
+    callbackData: ctx.callbackQuery?.data
+  });
+  
+  // Пытаемся отправить пользователю уведомление об ошибке
+  try {
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('⚠️ Временно недоступно. Повторите через пару секунд.', { show_alert: true });
+    } else if (ctx.message) {
+      await ctx.reply('⚠️ Временно недоступно. Повторите через пару секунд.', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🏠 Главное меню', callback_data: 'main_menu' }
+          ]]
+        }
+      });
+    }
+  } catch (notifyError) {
+    console.error('❌ Не удалось уведомить пользователя об ошибке:', notifyError);
+  }
+});
+
+// Глобальная обработка необработанных промисов
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 Необработанный отказ промиса:', reason);
+  console.error('📍 Promise:', promise);
+});
+
+// Глобальная обработка необработанных исключений
+process.on('uncaughtException', (error) => {
+  console.error('💥 Необработанное исключение:', error);
+  console.error('📍 Stack trace:', error.stack);
+  
+  // Не выходим из процесса, пытаемся продолжить работу
+  console.log('�� Пытаемся продолжить работу бота...');
 });
