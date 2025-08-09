@@ -63,6 +63,10 @@ let botStatsCache = null;
 let botStatsCacheTime = 0;
 const BOT_STATS_CACHE_TTL = 300000; // 5 минут
 
+// Настройки кулдауна фарма
+let farmCooldownEnabled = true;
+let farmCooldownSeconds = 10; // по умолчанию 10 секунд
+
 // Функция для инвалидации кеша пользователя
 function invalidateUserCache(userId) {
   userCache.delete(userId.toString());
@@ -1201,6 +1205,44 @@ function getUserDisplayName(user, userData = null) {
 }
 
 // Обработка заявки на кастомный титул
+async function handleFarmCooldownChange(ctx, text, userState) {
+  const userId = ctx.from.id;
+  
+  try {
+    const newCooldown = parseInt(text.trim());
+    
+    if (isNaN(newCooldown) || newCooldown < 0 || newCooldown > 3600) {
+      await ctx.reply('❌ Неверное значение! Введите число от 0 до 3600 секунд.');
+      return;
+    }
+    
+    farmCooldownSeconds = newCooldown;
+    userStates.delete(userId);
+    
+    await ctx.reply(`✅ Кулдаун фарма изменен на ${newCooldown} секунд!`);
+    
+    // Возвращаемся к настройкам фарма
+    const statusText = farmCooldownEnabled ? '🟢 Включен' : '🔴 Выключен';
+    const farmText = `🌾 **Настройки фарма** 🌾
+
+⏱️ **Кулдаун фарма:** ${statusText}
+🕐 **Время кулдауна:** ${farmCooldownSeconds} секунд
+
+🎛️ **Управление:**`;
+
+    await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
+      [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
+      [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
+      [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
+    ]), false);
+    
+  } catch (error) {
+    console.error('Ошибка изменения кулдауна фарма:', error);
+    await ctx.reply('❌ Произошла ошибка при изменении кулдауна!');
+    userStates.delete(userId);
+  }
+}
+
 async function handleCustomTitleRequest(ctx, text, userState) {
   const userId = ctx.from.id;
   
@@ -1877,6 +1919,15 @@ async function getMainMenu(ctx, userId) {
 }
 
 bot.start(async (ctx) => {
+  // Обрабатываем реферальный параметр
+  const startPayload = ctx.startPayload;
+  let referrerId = null;
+  
+  if (startPayload && !isNaN(startPayload)) {
+    referrerId = parseInt(startPayload);
+    console.log(`🔗 Новый пользователь ${ctx.from.id} пришел по реферальной ссылке от ${referrerId}`);
+  }
+  
   // Проверяем подписку
   const isSubscribed = await checkSubscription(ctx);
   if (!isSubscribed) {
@@ -1885,6 +1936,56 @@ bot.start(async (ctx) => {
   }
   
   const user = await getUser(ctx.from.id, ctx);
+  
+  // Обрабатываем реферальную систему для новых пользователей
+  if (referrerId && referrerId !== ctx.from.id && !user.invitedBy) {
+    try {
+      console.log(`💫 Обрабатываем реферал: ${ctx.from.id} приглашен ${referrerId}`);
+      
+      // Проверяем, существует ли реферер
+      const referrer = await users.findOne({ id: referrerId });
+      if (referrer) {
+        // Обновляем данные нового пользователя
+        await users.updateOne(
+          { id: ctx.from.id },
+          { $set: { invitedBy: referrerId } }
+        );
+        
+        // Обновляем счетчик у реферера
+        await users.updateOne(
+          { id: referrerId },
+          { $inc: { invited: 1 } }
+        );
+        
+        invalidateUserCache(ctx.from.id);
+        invalidateUserCache(referrerId);
+        
+        console.log(`✅ Реферал успешно засчитан: ${referrerId} → ${ctx.from.id}`);
+        
+        // Уведомляем реферера
+        try {
+          await bot.telegram.sendMessage(referrerId, 
+            `🎉 **У вас новый реферал!**\n\n` +
+            `👤 Пользователь: ${ctx.from.first_name || ctx.from.username || 'Пользователь'}\n` +
+            `🎁 Вы получили бонус за приглашение!\n\n` +
+            `📊 Всего приглашений: ${(referrer.invited || 0) + 1}`,
+            { parse_mode: 'Markdown' }
+          );
+          console.log(`📬 Уведомление отправлено рефереру ${referrerId}`);
+        } catch (notifyError) {
+          console.log(`⚠️ Не удалось уведомить реферера ${referrerId}:`, notifyError.message);
+        }
+        
+        // Проверяем и выдаем титулы
+        await checkAndAwardTitles(referrerId);
+        await checkAndAwardTitles(ctx.from.id);
+      } else {
+        console.log(`❌ Реферер ${referrerId} не найден в базе`);
+      }
+    } catch (error) {
+      console.error('Ошибка обработки реферала:', error);
+    }
+  }
   
   // Автоматически отмечаем задание "ежедневный вход"
   await markDailyTaskCompleted(ctx.from.id, 'login');
@@ -2827,6 +2928,12 @@ bot.on('text', async (ctx) => {
     return;
   }
   
+  if (userState && userState.type === 'admin_farm_cooldown') {
+    console.log('🌾 Обрабатываем изменение кулдауна фарма');
+    await handleFarmCooldownChange(ctx, text, userState);
+    return;
+  }
+  
   // Если нет состояния, проверяем reply_to_message (старый способ)
   const replyMsg = ctx.message.reply_to_message;
   if (!replyMsg) {
@@ -3339,8 +3446,8 @@ bot.action('admin_panel', async (ctx) => {
     [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
     [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
     [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
-    [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('🌾 Настройки фарма', 'admin_farm')],
+    [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]));
 });
 
@@ -3353,8 +3460,8 @@ bot.action('admin_cancel', async (ctx) => {
       [Markup.button.callback('📢 Рассылка', 'admin_broadcast'), Markup.button.callback('🎫 Промокод', 'admin_addpromo')],
       [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('⭐ Звёзды', 'admin_stars')],
       [Markup.button.callback('👥 Рефералы', 'admin_refs'), Markup.button.callback('🏆 Титулы', 'admin_titles')],
-      [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      [Markup.button.callback('💫 Статусы', 'admin_statuses'), Markup.button.callback('🌾 Настройки фарма', 'admin_farm')],
+      [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]),
     false
   );
@@ -3928,6 +4035,51 @@ async function showSponsorTask(ctx, taskIndex) {
   await sendMessageWithPhoto(ctx, taskText, Markup.inlineKeyboard(buttons));
 }
 
+// Управление настройками фарма
+bot.action('admin_farm', async (ctx) => {
+  const statusText = farmCooldownEnabled ? '🟢 Включен' : '🔴 Выключен';
+  const farmText = `🌾 **Настройки фарма** 🌾
+
+⏱️ **Кулдаун фарма:** ${statusText}
+🕐 **Время кулдауна:** ${farmCooldownSeconds} секунд
+
+🎛️ **Управление:**`;
+
+  await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
+    [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
+    [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
+  ]));
+});
+
+bot.action('admin_farm_toggle', async (ctx) => {
+  farmCooldownEnabled = !farmCooldownEnabled;
+  const statusText = farmCooldownEnabled ? '🟢 Включен' : '🔴 Выключен';
+  
+  await ctx.answerCbQuery(`✅ Кулдаун фарма ${farmCooldownEnabled ? 'включен' : 'выключен'}!`);
+  
+  const farmText = `🌾 **Настройки фарма** 🌾
+
+⏱️ **Кулдаун фарма:** ${statusText}
+🕐 **Время кулдауна:** ${farmCooldownSeconds} секунд
+
+🎛️ **Управление:**`;
+
+  await sendMessageWithPhoto(ctx, farmText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔄 Переключить кулдаун', 'admin_farm_toggle')],
+    [Markup.button.callback('⏱️ Изменить время', 'admin_farm_time')],
+    [Markup.button.callback('🔙 Назад в админ-панель', 'admin_panel')]
+  ]));
+});
+
+bot.action('admin_farm_time', async (ctx) => {
+  userStates.set(ctx.from.id, { 
+    type: 'admin_farm_cooldown' 
+  });
+  
+  await adminForceReply(ctx, `⏱️ Введите новое время кулдауна фарма в секундах (текущее: ${farmCooldownSeconds} сек):`);
+});
+
 bot.action('faq', async (ctx) => {
   const faqText = `❓ **Справка и помощь** ❓
 
@@ -4433,7 +4585,7 @@ bot.action('farm', async (ctx) => {
   }
   
   const user = await getUser(ctx.from.id, ctx);
-  const canFarm = !user.lastFarm || (now() - user.lastFarm) >= 60;
+  const canFarm = !farmCooldownEnabled || !user.lastFarm || (now() - user.lastFarm) >= farmCooldownSeconds;
   
   if (canFarm) {
     const baseReward = 1;
@@ -4470,7 +4622,7 @@ bot.action('farm', async (ctx) => {
       ctx.answerCbQuery(`[🪙 ${rewardText}]`);
     }
   } else {
-    const timeLeft = 60 - (now() - user.lastFarm);
+    const timeLeft = farmCooldownSeconds - (now() - user.lastFarm);
     ctx.answerCbQuery(`⏳ До следующего фарма: ${timeLeft} сек.`);
   }
 });
