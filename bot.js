@@ -1006,6 +1006,9 @@ function getNextRankInfo(user) {
     const starsToNext = nextRank.requirement - stars;
     const progress = Math.max(0, Math.min(100, (stars - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
     
+    // Отладочная информация
+    console.log(`🔍 Ранг пользователя ${user.id}: ${stars} звёзд, ${currentRank.name} -> ${nextRank.name}, прогресс: ${Math.round(progress)}%`);
+    
     return {
       current: currentRank,
       next: nextRank,
@@ -1897,7 +1900,10 @@ function createProgressBar(current, total, length = 10) {
 }
 
 async function getDetailedProfile(userId, ctx) {
+  // Принудительно очищаем кеш перед получением данных
+  invalidateUserCache(userId);
   const user = await getUserFresh(userId, ctx); // Используем getUserFresh для гарантированно свежих данных
+  console.log(`🔄 getDetailedProfile: Пользователь ${userId} имеет ${user.stars} звёзд`);
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   const friends = user.invited || 0;
@@ -2117,12 +2123,15 @@ async function markDailyTaskCompleted(userId, taskId) {
 
 async function updateMainMenuBalance(ctx) {
   try {
-    // Очищаем кеш
-    invalidateUserCache(ctx.from.id);
-    invalidateBotStatsCache();
+    // Многократно очищаем кеш для гарантии
+    for (let i = 0; i < 5; i++) {
+      invalidateUserCache(ctx.from.id);
+      invalidateBotStatsCache();
+    }
     
     // Получаем АБСОЛЮТНО свежие данные БЕЗ кеша
     const freshUser = await getUserFresh(ctx.from.id, ctx);
+    console.log(`🔄 updateMainMenuBalance: Обновляем для пользователя ${ctx.from.id} с ${freshUser.stars} звёздами`);
     
     // Обновляем кеш свежими данными
     userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
@@ -2137,12 +2146,15 @@ async function updateMainMenuBalance(ctx) {
 // Функция для обновления профиля в реальном времени
 async function updateProfileRealtime(ctx) {
   try {
-    // Очищаем кеш
-    invalidateUserCache(ctx.from.id);
-    invalidateBotStatsCache();
+    // Многократно очищаем кеш для гарантии
+    for (let i = 0; i < 5; i++) {
+      invalidateUserCache(ctx.from.id);
+      invalidateBotStatsCache();
+    }
     
     // Получаем АБСОЛЮТНО свежие данные БЕЗ кеша
     const freshUser = await getUserFresh(ctx.from.id, ctx);
+    console.log(`🔄 updateProfileRealtime: Обновляем профиль для пользователя ${ctx.from.id} с ${freshUser.stars} звёздами`);
     
     // Обновляем кеш свежими данными
     userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
@@ -2275,9 +2287,11 @@ bot.action('check_subscription', async (ctx) => {
 
 bot.action('main_menu', async (ctx) => {
   try { await ctx.deleteMessage(); } catch (e) {}
-  // Принудительно обновляем кеш для актуальных данных
+  // Принудительно обновляем кеш свежими данными
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
+  const freshUser = await getUserFresh(ctx.from.id, ctx);
+  userCache.set(ctx.from.id.toString(), { user: freshUser, timestamp: Date.now() });
   const menu = await getMainMenu(ctx, ctx.from.id);
   await sendMainMenuWithPhoto(ctx, menu.text, menu.keyboard, false);
 });
@@ -2288,7 +2302,7 @@ bot.action('profile', async (ctx) => {
 });
 
 bot.action('my_miners', async (ctx) => {
-  const user = await getUser(ctx.from.id);
+  const user = await getUserFresh(ctx.from.id);
   
   let minerText = '⛏️ **Мои майнеры** ⛏️\n\n';
   
