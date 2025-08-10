@@ -1,17 +1,25 @@
 {
   "name": "magnumtap_bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "Оптимизированный Telegram бот для заработка и обмена валют с улучшенной производительностью",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot-optimized.js",
-    "dev": "node bot-optimized.js",
-    "old": "node bot.js",
+    "start": "node bot.js",
+    "dev": "node bot.js",
     "test": "node test.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "telegram",
+    "bot",
+    "crypto",
+    "exchange",
+    "mining",
+    "optimized",
+    "mongodb",
+    "telegraf"
+  ],
+  "author": "Magnum Tap Team",
+  "license": "MIT",
   "dependencies": {
     "dotenv": "^17.2.1",
     "mongodb": "^6.18.0",
