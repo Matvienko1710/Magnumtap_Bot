@@ -831,26 +831,41 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   const magnumToStarsWithCommission = calculateAmountWithCommission(baseMagnumToStars);
   const starsToMagnumWithCommission = calculateAmountWithCommission(baseStarsToMagnum);
 
-  // Кнопки быстрого обмена (с уведомлениями)
-  if (magnumCoinsBalance >= 100) {
-    const baseStarsToReceive = 100 * magnumToStarsRate;
-    const starsToReceive = calculateAmountWithCommission(baseStarsToReceive);
-    const buttonText = `⭐ Быстрая покупка (100🪙→${starsToReceive.toFixed(2)}⭐)`;
-    console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: buy_tg_stars`);
-    buttons.push([Markup.button.callback(buttonText, 'buy_tg_stars')]);
+  // Кнопки быстрого обмена (с уведомлениями) - 5 фиксированных сумм
+  const quickBuyAmounts = [100, 500, 1000, 5000, 10000];
+  const quickSellAmounts = [10, 50, 100, 500, 1000];
+  
+  // Быстрые покупки звёзд
+  const buyButtons = [];
+  for (const amount of quickBuyAmounts) {
+    if (magnumCoinsBalance >= amount) {
+      const baseStarsToReceive = amount * magnumToStarsRate;
+      const starsToReceive = calculateAmountWithCommission(baseStarsToReceive);
+      const buttonText = `⭐ ${amount}🪙→${starsToReceive.toFixed(2)}⭐`;
+      console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: buy_tg_stars_${amount}`);
+      buyButtons.push(Markup.button.callback(buttonText, `buy_tg_stars_${amount}`));
+    }
+  }
+  if (buyButtons.length > 0) {
+    buttons.push(buyButtons);
   } else {
-    console.log(`🔘 getExchangeButtons: Недостаточно Magnum Coin, создаем кнопку "insufficient_funds"`);
     buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
   }
 
-  if (starsBalance >= 10) {
-    const baseCoinsToReceive = 10 * starsToMagnumRate;
-    const coinsToReceive = calculateAmountWithCommission(baseCoinsToReceive);
-    const buttonText = `🪙 Быстрая продажа (10⭐→${coinsToReceive.toFixed(2)}🪙)`;
-    console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: sell_tg_stars`);
-    buttons.push([Markup.button.callback(buttonText, 'sell_tg_stars')]);
+  // Быстрые продажи звёзд
+  const sellButtons = [];
+  for (const amount of quickSellAmounts) {
+    if (starsBalance >= amount) {
+      const baseCoinsToReceive = amount * starsToMagnumRate;
+      const coinsToReceive = calculateAmountWithCommission(baseCoinsToReceive);
+      const buttonText = `🪙 ${amount}⭐→${coinsToReceive.toFixed(2)}🪙`;
+      console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: sell_tg_stars_${amount}`);
+      sellButtons.push(Markup.button.callback(buttonText, `sell_tg_stars_${amount}`));
+    }
+  }
+  if (sellButtons.length > 0) {
+    buttons.push(sellButtons);
   } else {
-    console.log(`🔘 getExchangeButtons: Недостаточно звёзд, создаем кнопку "insufficient_stars"`);
     buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
   }
 
@@ -2865,6 +2880,144 @@ bot.action('sell_tg_stars_input', async (ctx) => {
   await adminForceReply(ctx, inputText);
 });
 
+// Обработчики для быстрой покупки TG Stars (5 фиксированных сумм)
+bot.action('buy_tg_stars_100', async (ctx) => await handleQuickBuy(ctx, 100));
+bot.action('buy_tg_stars_500', async (ctx) => await handleQuickBuy(ctx, 500));
+bot.action('buy_tg_stars_1000', async (ctx) => await handleQuickBuy(ctx, 1000));
+bot.action('buy_tg_stars_5000', async (ctx) => await handleQuickBuy(ctx, 5000));
+bot.action('buy_tg_stars_10000', async (ctx) => await handleQuickBuy(ctx, 10000));
+
+// Обработчики для быстрой продажи TG Stars (5 фиксированных сумм)
+bot.action('sell_tg_stars_10', async (ctx) => await handleQuickSell(ctx, 10));
+bot.action('sell_tg_stars_50', async (ctx) => await handleQuickSell(ctx, 50));
+bot.action('sell_tg_stars_100', async (ctx) => await handleQuickSell(ctx, 100));
+bot.action('sell_tg_stars_500', async (ctx) => await handleQuickSell(ctx, 500));
+bot.action('sell_tg_stars_1000', async (ctx) => await handleQuickSell(ctx, 1000));
+
+// Функция для быстрой покупки звёзд
+async function handleQuickBuy(ctx, amount) {
+  console.log(`🔘 handleQuickBuy: Быстрая покупка ${amount}🪙`);
+  
+  // Защита от спама
+  const user = await getUser(ctx.from.id, ctx);
+  const now = Math.floor(Date.now() / 1000);
+  const lastExchange = user.lastExchange || 0;
+  const timeSinceLastExchange = now - lastExchange;
+  
+  if (timeSinceLastExchange < 5) {
+    return ctx.answerCbQuery('⏳ Подождите 5 секунд между обменами', { show_alert: true });
+  }
+  
+  const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
+  
+  if (magnumCoinsBalance < amount) {
+    return ctx.answerCbQuery(`❌ Недостаточно Magnum Coin! У вас: ${magnumCoinsBalance}🪙, нужно: ${amount}🪙`, { show_alert: true });
+  }
+  
+  // Обмениваем Magnum Coin на звёзды
+  const magnumToStarsRate = RESERVE_STARS / RESERVE_MAGNUM_COINS;
+  const baseStarsToReceive = amount * magnumToStarsRate;
+  const commission = calculateCommission(baseStarsToReceive);
+  const starsToReceive = calculateAmountWithCommission(baseStarsToReceive);
+  
+  if (starsToReceive <= 0) {
+    return ctx.answerCbQuery('❌ Ошибка расчета курса обмена. Попробуйте позже.', { show_alert: true });
+  }
+  
+  // Обновляем резерв
+  const reserveUpdated = await updateReserve('magnumCoins', 'stars', amount, starsToReceive, commission);
+  if (!reserveUpdated) {
+    return ctx.answerCbQuery('❌ Недостаточно средств в резерве биржи. Попробуйте позже.', { show_alert: true });
+  }
+  
+  // Обновляем баланс пользователя
+  await users.updateOne(
+    { id: ctx.from.id },
+    { 
+      $inc: { magnumCoins: -amount, stars: starsToReceive },
+      $set: { lastExchange: now }
+    }
+  );
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
+  
+  // Показываем уведомление
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
+  const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                          `💰 Потрачено: ${amount}🪙\n` +
+                          `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
+                          `${commissionText}\n` +
+                          `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
+  await ctx.answerCbQuery(notificationText, { show_alert: true });
+  
+  // Обновляем интерфейс
+  setTimeout(async () => {
+    await updateExchangeInterface(ctx, ctx.from.id);
+  }, 1000);
+}
+
+// Функция для быстрой продажи звёзд
+async function handleQuickSell(ctx, amount) {
+  console.log(`🔘 handleQuickSell: Быстрая продажа ${amount}⭐`);
+  
+  // Защита от спама
+  const user = await getUser(ctx.from.id, ctx);
+  const now = Math.floor(Date.now() / 1000);
+  const lastExchange = user.lastExchange || 0;
+  const timeSinceLastExchange = now - lastExchange;
+  
+  if (timeSinceLastExchange < 5) {
+    return ctx.answerCbQuery('⏳ Подождите 5 секунд между обменами', { show_alert: true });
+  }
+  
+  const starsBalance = Math.round((user.stars || 0) * 100) / 100;
+  
+  if (starsBalance < amount) {
+    return ctx.answerCbQuery(`❌ Недостаточно звёзд! У вас: ${starsBalance}⭐, нужно: ${amount}⭐`, { show_alert: true });
+  }
+  
+  // Обмениваем звёзды на Magnum Coin
+  const starsToMagnumRate = RESERVE_MAGNUM_COINS / RESERVE_STARS;
+  const baseCoinsToReceive = amount * starsToMagnumRate;
+  const commission = calculateCommission(baseCoinsToReceive);
+  const coinsToReceive = calculateAmountWithCommission(baseCoinsToReceive);
+  
+  if (coinsToReceive <= 0) {
+    return ctx.answerCbQuery('❌ Ошибка расчета курса обмена. Попробуйте позже.', { show_alert: true });
+  }
+  
+  // Обновляем резерв
+  const reserveUpdated = await updateReserve('stars', 'magnumCoins', amount, coinsToReceive, commission);
+  if (!reserveUpdated) {
+    return ctx.answerCbQuery('❌ Недостаточно средств в резерве биржи. Попробуйте позже.', { show_alert: true });
+  }
+  
+  // Обновляем баланс пользователя
+  await users.updateOne(
+    { id: ctx.from.id },
+    { 
+      $inc: { stars: -amount, magnumCoins: coinsToReceive },
+      $set: { lastExchange: now }
+    }
+  );
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
+  
+  // Показываем уведомление
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
+  const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                          `⭐ Потрачено: ${amount}⭐\n` +
+                          `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
+                          `${commissionText}\n` +
+                          `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
+  await ctx.answerCbQuery(notificationText, { show_alert: true });
+  
+  // Обновляем интерфейс
+  setTimeout(async () => {
+    await updateExchangeInterface(ctx, ctx.from.id);
+  }, 1000);
+}
+
 // Обработчик для покупки TG Stars (старый, оставляем для совместимости)
 bot.action('buy_tg_stars', async (ctx) => {
   console.log('🔘 buy_tg_stars: Обработчик вызван');
@@ -4798,12 +4951,19 @@ bot.on('text', async (ctx) => {
     invalidateBotStatsCache();
     
     const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
-    const notificationText = `✅ **Обмен выполнен успешно!**\n\n` +
-                            `💰 **Потрачено:** ${amount}🪙\n` +
-                            `⭐ **Получено:** ${starsToReceive.toFixed(2)}⭐` +
+    const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                            `💰 Потрачено: ${amount}🪙\n` +
+                            `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
                             `${commissionText}\n` +
-                            `📊 **Курс:** 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
-    await ctx.reply(notificationText);
+                            `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
+    
+    // Отправляем уведомление через callback query
+    try {
+      await ctx.telegram.answerCbQuery(ctx.from.id, notificationText, { show_alert: true });
+    } catch (error) {
+      // Если не удалось отправить уведомление, отправляем сообщение
+      await ctx.reply(notificationText);
+    }
     
     // Обновляем интерфейс обмена
     setTimeout(async () => {
@@ -4871,12 +5031,19 @@ bot.on('text', async (ctx) => {
     invalidateBotStatsCache();
     
     const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
-    const notificationText = `✅ **Обмен выполнен успешно!**\n\n` +
-                            `⭐ **Потрачено:** ${amount}⭐\n` +
-                            `💰 **Получено:** ${coinsToReceive.toFixed(2)}🪙` +
+    const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                            `⭐ Потрачено: ${amount}⭐\n` +
+                            `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
                             `${commissionText}\n` +
-                            `📊 **Курс:** 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
-    await ctx.reply(notificationText);
+                            `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
+    
+    // Отправляем уведомление через callback query
+    try {
+      await ctx.telegram.answerCbQuery(ctx.from.id, notificationText, { show_alert: true });
+    } catch (error) {
+      // Если не удалось отправить уведомление, отправляем сообщение
+      await ctx.reply(notificationText);
+    }
     
     // Обновляем интерфейс обмена
     setTimeout(async () => {
