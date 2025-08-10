@@ -477,6 +477,21 @@ function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount) {
   }
 }
 
+// Функция для генерации текста управления резервом
+function getReserveManagementText() {
+  return `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ БИРЖИ** 🏦\n\n` +
+         `📊 **Текущий резерв биржи:**\n` +
+         `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
+         `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
+         `📈 **Текущие курсы обмена:**\n` +
+         `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
+         `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+         `💡 **Как работает резерв:**\n` +
+         `• Курсы обмена зависят от баланса резерва\n` +
+         `• При обмене резерв автоматически обновляется\n` +
+         `• Больше резерва = лучше курсы для пользователей`;
+}
+
 // Функция для генерации текста курсов обмена
 function getExchangeRatesText() {
   // Рассчитываем динамические курсы на основе резерва
@@ -560,7 +575,7 @@ async function updateExchangeInterface(ctx, userId) {
                       `💰 **Ваши балансы:**\n` +
                       `🪙 ${magnumCoinsBalance} Magnum Coin\n` +
                       `⭐ ${starsBalance} звёзд\n\n` +
-                      `🏦 **Баланс резерва проекта:**\n` +
+                      `🏦 **Резерв биржи:**\n` +
                       `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
                       `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
                       getExchangeRatesText();
@@ -5037,17 +5052,7 @@ bot.action('admin_test_exchange', async (ctx) => {
 bot.action('admin_reserve', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
 
-  const reserveText = `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ** 🏦\n\n` +
-                     `📊 **Текущий баланс резерва:**\n` +
-                     `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-                     `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
-                     `📈 **Текущие курсы обмена:**\n` +
-                     `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
-                     `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
-                     `💡 **Как работает резерв:**\n` +
-                     `• Курсы обмена зависят от баланса резерва\n` +
-                     `• При обмене резерв автоматически обновляется\n` +
-                     `• Больше резерва = лучше курсы для пользователей`;
+  const reserveText = getReserveManagementText();
 
   await sendMessageWithPhoto(ctx, reserveText, Markup.inlineKeyboard([
     [Markup.button.callback('➕ Добавить Magnum Coin', 'admin_add_magnum_reserve')],
@@ -5380,24 +5385,7 @@ bot.action('exchange', async (ctx) => {
 // Обмен валют
 bot.action('exchange_currency', async (ctx) => {
   console.log(`🔘 exchange_currency: Открываем интерфейс обмена для пользователя ${ctx.from.id}`);
-  
-  const user = await getUser(ctx.from.id, ctx);
-  const starsBalance = Math.round((user.stars || 0) * 100) / 100;
-  const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
-  
-  console.log(`🔘 exchange_currency: Баланс ${magnumCoinsBalance}🪙 и ${starsBalance}⭐`);
-  
-  const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
-                      `💰 **Ваши балансы:**\n` +
-                      `🪙 ${magnumCoinsBalance} Magnum Coin\n` +
-                      `⭐ ${starsBalance} звёзд\n\n` +
-                      getExchangeRatesText();
-  
-  const buttons = getExchangeButtons(magnumCoinsBalance, starsBalance);
-  const keyboard = Markup.inlineKeyboard(buttons);
-  
-  console.log(`🔘 exchange_currency: Отправляем интерфейс обмена`);
-  await sendMessageWithPhoto(ctx, currencyText, keyboard);
+  await updateExchangeInterface(ctx, ctx.from.id);
 });
 
 // P2P торговля
