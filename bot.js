@@ -655,6 +655,9 @@ async function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount, com
 
 // Функция для генерации текста управления резервом
 function getReserveManagementText() {
+  const minerReward = calculateMinerReward();
+  const dailyMinerReward = minerReward * 24;
+  
   return `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ БИРЖИ** 🏦\n\n` +
          `📊 **Текущий резерв биржи:**\n` +
          `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
@@ -662,6 +665,9 @@ function getReserveManagementText() {
          `📈 **Текущие курсы обмена:**\n` +
          `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
          `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+         `⛏️ **Доходность майнера:**\n` +
+         `• ${minerReward.toFixed(4)}⭐ в час (${dailyMinerReward.toFixed(4)}⭐ в день)\n` +
+         `• Окупаемость: ~45 дней\n\n` +
          `📊 **Лимиты обмена:**\n` +
          `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙 / ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
          `• Максимум за операцию: ${EXCHANGE_LIMITS.MAX_MAGNUM_COINS}🪙 / ${EXCHANGE_LIMITS.MAX_STARS}⭐\n` +
@@ -670,6 +676,7 @@ function getReserveManagementText() {
          `• Курсы обмена зависят от баланса резерва\n` +
          `• При обмене резерв автоматически обновляется\n` +
          `• Комиссия с пользователей пополняет резерв\n` +
+         `• Доходность майнера зависит от курса\n` +
          `• Больше резерва = лучше курсы для пользователей`;
 }
 
@@ -693,6 +700,10 @@ function getExchangeRatesText() {
     const magnumToStarsWithCommission = calculateAmountWithCommission(baseMagnumToStars);
     const starsToMagnumWithCommission = calculateAmountWithCommission(baseStarsToMagnum);
     
+    // Рассчитываем доходность майнера
+    const minerReward = calculateMinerReward();
+    const dailyMinerReward = minerReward * 24;
+    
                     return `🔄 **Доступные курсы:**\n\n` +
                        `⭐ **Telegram Stars:**\n` +
                        `• Курс: 100🪙 = ${magnumToStarsWithCommission.toFixed(2)}⭐ TG Stars\n` +
@@ -700,6 +711,14 @@ function getExchangeRatesText() {
                        `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
                        `• Максимум за операцию: ${EXCHANGE_LIMITS.MAX_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MAX_STARS}⭐\n` +
                        `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
+                       `⛏️ **Доходность майнера:**\n` +
+                       `• ${minerReward.toFixed(4)}⭐ в час (${dailyMinerReward.toFixed(4)}⭐ в день)\n` +
+                       `• Окупаемость: ~45 дней\n\n` +
+                       `💡 **От чего зависит курс:**\n` +
+                       `• Баланс резерва биржи\n` +
+                       `• Количество обменов\n` +
+                       `• Комиссии с обменов\n` +
+                       `• Управление администраторами\n\n` +
                        `💵 **USDT TRC-20:**\n` +
                        `• Курс: скоро\n` +
                        `• Статус: в разработке\n\n` +
