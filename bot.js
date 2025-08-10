@@ -452,7 +452,7 @@ let EXCHANGE_COMMISSION = 0; // Комиссия в процентах (0 = бе
 const EXCHANGE_LIMITS = {
   MIN_MAGNUM_COINS: 100, // Минимум Magnum Coin для обмена
   MAX_MAGNUM_COINS: 10000, // Максимум Magnum Coin за одну операцию
-  MIN_STARS: 10, // Минимум звёзд для обмена
+  MIN_STARS: 0.01, // Минимум звёзд для обмена
   MAX_STARS: 1000 // Максимум звёзд за одну операцию
 };
 
