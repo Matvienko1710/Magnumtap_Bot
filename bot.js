@@ -2086,11 +2086,11 @@ async function handlePromoCreation(ctx, text, userState) {
       return;
     }
     
-    const [code, stars, maxActivations] = parts;
-    const starsNum = Number(stars);
+    const [code, magnumCoins, maxActivations] = parts;
+    const magnumCoinsNum = Number(magnumCoins);
     const maxNum = Number(maxActivations);
     
-    if (!code || isNaN(starsNum) || isNaN(maxNum) || starsNum <= 0 || maxNum <= 0) {
+    if (!code || isNaN(magnumCoinsNum) || isNaN(maxNum) || magnumCoinsNum <= 0 || maxNum <= 0) {
       await ctx.reply('❌ Неверные данные!\n\n✅ Правильный формат:\n• НАЗВАНИЕ - любой текст\n• MAGNUM_КОИНЫ - положительное число\n• ЛИМИТ - положительное число\n\nПример: NEWCODE 25 100');
       return;
     }
@@ -2103,11 +2103,12 @@ async function handlePromoCreation(ctx, text, userState) {
       return;
     }
     
-    console.log('💾 Сохраняем промокод в базу:', { code: code.toUpperCase(), stars: starsNum, max: maxNum });
+    console.log('💾 Сохраняем промокод в базу:', { code: code.toUpperCase(), magnumCoins: magnumCoinsNum, max: maxNum });
     
     await promocodes.insertOne({
       code: code.toUpperCase(),
-      stars: starsNum,
+      magnumCoins: magnumCoinsNum,
+      rewardType: 'magnum',
       max: maxNum,
       used: 0,
       created: now()
@@ -2118,7 +2119,7 @@ async function handlePromoCreation(ctx, text, userState) {
     
     await ctx.reply(`✅ Промокод создан успешно!\n\n` +
                     `🏷️ **Код:** \`${code.toUpperCase()}\`\n` +
-                    `🪙 **Награда:** ${starsNum} Magnum Coin\n` +
+                    `🪙 **Награда:** ${magnumCoinsNum} Magnum Coin\n` +
                     `🔢 **Лимит активаций:** ${maxNum}\n` +
                     `📅 **Создан:** ${new Date().toLocaleString('ru-RU')}\n\n` +
                     `📋 Пользователи могут ввести код: \`${code.toUpperCase()}\``, 
@@ -4308,7 +4309,7 @@ bot.on('text', async (ctx) => {
   
   if (userState && userState.type === 'admin_create_promo') {
     console.log('🎫 Обрабатываем создание промокода через состояние');
-    await handlePromoCreation(ctx, text, userState);
+    await handlePromoCodeCreation(ctx, text, userState);
     return;
   }
   
