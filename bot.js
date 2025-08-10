@@ -2400,17 +2400,11 @@ bot.command('give', async (ctx) => {
         `• 🎵 Музыкант\n` +
         `• 🎬 Режиссёр\n\n` +
         `<b>Доступные статусы:</b>\n` +
-        `• 👑 Владелец (owner)\n` +
-        `• ⚡ Администратор (admin)\n` +
-        `• 🛡️ Модератор (moderator)\n` +
-        `• 🎖️ Ветеран (veteran)\n` +
-        `• 🤝 Волонтер (volunteer)\n` +
-        `• ⭐ Элита (elite)\n` +
-        `• 🛡️ Хранитель (guardian)\n` +
-        `• 💎 VIP Gold (vip_gold)\n` +
-        `• 💫 VIP (vip)\n` +
-        `• ✅ Верифицированный (verified)\n` +
-        `• 🎮 Участник (member)`;
+        `• 👑 Владелец\n` +
+        `• 🔥 Администратор\n` +
+        `• ⭐ Модератор\n` +
+        `• 💎 VIP\n` +
+        `• 🎯 Игрок`;
       
       return ctx.reply(helpText, { parse_mode: 'HTML' });
     }
@@ -2458,31 +2452,26 @@ bot.command('give', async (ctx) => {
       await ctx.reply(successText, { parse_mode: 'Markdown' });
       
     } else if (type === 'status') {
-      // Выдаем статус - используем ключи статусов
-      const statusKey = titleName.toLowerCase().replace(/[^a-z_]/g, '');
-      const availableStatusKeys = Object.keys(USER_STATUSES);
+      // Выдаем статус
+      const availableStatuses = [
+        '👑 Владелец', '🔥 Администратор', '⭐ Модератор', '💎 VIP', '🎯 Игрок'
+      ];
       
-      if (!availableStatusKeys.includes(statusKey)) {
-        const availableStatusesList = availableStatusKeys.map(key => {
-          const status = USER_STATUSES[key];
-          return `• ${status.color} ${status.name} (${key})`;
-        }).join('\n');
-        
-        return ctx.reply(`❌ Неизвестный статус "${titleName}"\n\nДоступные статусы:\n${availableStatusesList}`, { parse_mode: 'HTML' });
+      if (!availableStatuses.includes(titleName)) {
+        return ctx.reply(`❌ Неизвестный статус "${titleName}"\n\nДоступные статусы:\n${availableStatuses.map(s => `• ${s}`).join('\n')}`, { parse_mode: 'HTML' });
       }
       
       // Обновляем статус пользователя
       await users.updateOne(
         { id: userId },
-        { $set: { status: statusKey } }
+        { $set: { status: titleName } }
       );
       
       invalidateUserCache(userId);
       
-      const statusInfo = USER_STATUSES[statusKey];
       const successText = `✅ **Статус выдан!**\n\n` +
         `👤 **Пользователь:** ${user.username || userId}\n` +
-        `💫 **Статус:** ${statusInfo.color} ${statusInfo.name}\n` +
+        `💫 **Статус:** ${titleName}\n` +
         `👑 **Выдал:** ${ctx.from.first_name || 'Администратор'}\n\n` +
         `💡 Пользователь получил новый статус в боте!`;
       
