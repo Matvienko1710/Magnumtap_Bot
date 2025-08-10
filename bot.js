@@ -567,25 +567,24 @@ async function resetDatabase() {
     
     // Очищаем все коллекции, но оставляем структуру
     const collections = [
-      { name: 'users', description: 'Пользователи' },
-      { name: 'promoCodes', description: 'Промокоды' },
-      { name: 'withdrawalRequests', description: 'Заявки на вывод' },
-      { name: 'supportTickets', description: 'Тикеты поддержки' },
-      { name: 'taskChecks', description: 'Проверки заданий' },
-      { name: 'achievements', description: 'Достижения' },
-      { name: 'reserve', description: 'Резерв биржи' }
+      { collection: users, description: 'Пользователи' },
+      { collection: promoCodes, description: 'Промокоды' },
+      { collection: withdrawalRequests, description: 'Заявки на вывод' },
+      { collection: supportTickets, description: 'Тикеты поддержки' },
+      { collection: taskChecks, description: 'Проверки заданий' },
+      { collection: achievements, description: 'Достижения' },
+      { collection: reserve, description: 'Резерв биржи' }
     ];
     
     let deletedCount = 0;
     
-    for (const collection of collections) {
+    for (const item of collections) {
       try {
-        const dbCollection = db.collection(collection.name);
-        const result = await dbCollection.deleteMany({});
-        console.log(`✅ ${collection.description}: удалено ${result.deletedCount} записей`);
+        const result = await item.collection.deleteMany({});
+        console.log(`✅ ${item.description}: удалено ${result.deletedCount} записей`);
         deletedCount += result.deletedCount;
       } catch (error) {
-        console.error(`❌ Ошибка очистки ${collection.description}:`, error);
+        console.error(`❌ Ошибка очистки ${item.description}:`, error);
       }
     }
     
