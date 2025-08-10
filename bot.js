@@ -2356,15 +2356,15 @@ bot.command('give', async (ctx) => {
     const match = text.match(/^\/give\s+(title|status)\s+(\d+)\s+(.+)$/);
     
     if (!match) {
-      const helpText = `🎁 **Команда выдачи наград**\n\n` +
-        `**Формат:** /give <тип> <ID_пользователя> <название>\n\n` +
-        `**Типы наград:**\n` +
-        `• \`title\` - выдать титул\n` +
-        `• \`status\` - выдать статус\n\n` +
-        `**Примеры:**\n` +
-        `• \`/give title 123456789 🌟 Звёздный лорд\`\n` +
-        `• \`/give status 123456789 👑 Владелец\`\n\n` +
-        `**Доступные титулы:**\n` +
+      const helpText = `🎁 <b>Команда выдачи наград</b>\n\n` +
+        `<b>Формат:</b> /give &lt;тип&gt; &lt;ID_пользователя&gt; &lt;название&gt;\n\n` +
+        `<b>Типы наград:</b>\n` +
+        `• <code>title</code> - выдать титул\n` +
+        `• <code>status</code> - выдать статус\n\n` +
+        `<b>Примеры:</b>\n` +
+        `• <code>/give title 123456789 🌟 Звёздный лорд</code>\n` +
+        `• <code>/give status 123456789 👑 Владелец</code>\n\n` +
+        `<b>Доступные титулы:</b>\n` +
         `• 🌟 Звёздный лорд\n` +
         `• 🏆 Чемпион\n` +
         `• 👑 Король\n` +
@@ -2375,14 +2375,14 @@ bot.command('give', async (ctx) => {
         `• 🎨 Художник\n` +
         `• 🎵 Музыкант\n` +
         `• 🎬 Режиссёр\n\n` +
-        `**Доступные статусы:**\n` +
+        `<b>Доступные статусы:</b>\n` +
         `• 👑 Владелец\n` +
         `• 🔥 Администратор\n` +
         `• ⭐ Модератор\n` +
         `• 💎 VIP\n` +
         `• 🎯 Игрок`;
       
-      return ctx.reply(helpText, { parse_mode: 'Markdown' });
+      return ctx.reply(helpText, { parse_mode: 'HTML' });
     }
     
     const [, type, userIdStr, titleName] = match;
@@ -2408,7 +2408,7 @@ bot.command('give', async (ctx) => {
       ];
       
       if (!availableTitles.includes(titleName)) {
-        return ctx.reply(`❌ Неизвестный титул "${titleName}"\n\nДоступные титулы:\n${availableTitles.map(t => `• ${t}`).join('\n')}`);
+        return ctx.reply(`❌ Неизвестный титул "${titleName}"\n\nДоступные титулы:\n${availableTitles.map(t => `• ${t}`).join('\n')}`, { parse_mode: 'HTML' });
       }
       
       // Добавляем титул к пользователю
@@ -2434,7 +2434,7 @@ bot.command('give', async (ctx) => {
       ];
       
       if (!availableStatuses.includes(titleName)) {
-        return ctx.reply(`❌ Неизвестный статус "${titleName}"\n\nДоступные статусы:\n${availableStatuses.map(s => `• ${s}`).join('\n')}`);
+        return ctx.reply(`❌ Неизвестный статус "${titleName}"\n\nДоступные статусы:\n${availableStatuses.map(s => `• ${s}`).join('\n')}`, { parse_mode: 'HTML' });
       }
       
       // Обновляем статус пользователя
@@ -2454,7 +2454,7 @@ bot.command('give', async (ctx) => {
       await ctx.reply(successText, { parse_mode: 'Markdown' });
       
     } else {
-      return ctx.reply('❌ Неверный тип награды. Используйте `title` или `status`', { parse_mode: 'Markdown' });
+      return ctx.reply('❌ Неверный тип награды. Используйте <code>title</code> или <code>status</code>', { parse_mode: 'HTML' });
     }
     
   } catch (error) {
@@ -3979,13 +3979,23 @@ bot.on('text', async (ctx) => {
         const user = await users.findOne({ id: userId });
         
         if (user) {
-          const { statusText, titleText } = getUserChatInfo(user);
+          console.log(`📋 Пользователь найден в базе: ${userId}`);
+          console.log(`📋 Данные пользователя:`, { 
+            status: user.status, 
+            titles: user.titles,
+            username: user.username 
+          });
+          
+          const chatInfo = getUserChatInfo(user);
+          console.log(`📋 Полученные данные: statusText="${chatInfo.statusText}", titleText="${chatInfo.titleText}"`);
           
           // Формируем префикс с информацией о пользователе
           let userPrefix = '';
-          if (statusText || titleText) {
-            userPrefix = `${statusText} ${titleText}`.trim();
+          if (chatInfo.statusText || chatInfo.titleText) {
+            userPrefix = `${chatInfo.statusText} ${chatInfo.titleText}`.trim();
           }
+          
+          console.log(`📋 Сформированный префикс: "${userPrefix}"`);
           
           // Если есть префикс, отправляем сообщение с информацией о пользователе
           if (userPrefix) {
@@ -4000,7 +4010,14 @@ bot.on('text', async (ctx) => {
             
             await ctx.reply(userInfo, { parse_mode: 'Markdown' });
             return; // Прерываем дальнейшую обработку
+          } else {
+            console.log(`📋 У пользователя ${userId} нет статуса или титула`);
+            console.log(`📋 Статус в базе: ${user.status || 'не установлен'}`);
+            console.log(`📋 Титулы в базе: ${user.titles ? user.titles.join(', ') : 'нет'}`);
+            console.log(`📋 Отправляем обычное сообщение без префикса`);
           }
+        } else {
+          console.log(`❌ Пользователь ${userId} не найден в базе данных`);
         }
       } catch (error) {
         console.error('❌ Ошибка при обработке сообщения в чате уведомлений:', error);
