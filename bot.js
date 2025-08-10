@@ -4448,6 +4448,38 @@ bot.on('text', async (ctx) => {
     return;
   }
   
+  if (userState && userState.type === 'admin_view_referrals') {
+    console.log('👥 Обрабатываем просмотр рефералов пользователя');
+    const userId = text.trim();
+    
+    if (!userId || isNaN(userId)) {
+      return ctx.reply('❌ Неверный ID пользователя! Введите корректный числовой ID.');
+    }
+    
+    try {
+      const refs = await users.find({ invitedBy: userId }).toArray();
+      if (!refs.length) {
+        await ctx.reply(`👥 У пользователя ${userId} нет рефералов.`);
+      } else {
+        let msg = `👥 **Рефералы пользователя ${userId}:**\n\n`;
+        refs.forEach((u, i) => { 
+          msg += `${i + 1}. ID: ${u.id}\n`;
+          if (u.username) msg += `   @${u.username}\n`;
+          msg += `   Звёзд: ${u.stars || 0}\n`;
+          msg += `   Magnum Coin: ${u.magnumCoins || 0}\n\n`;
+        });
+        msg += `📊 **Всего рефералов:** ${refs.length}`;
+        await ctx.reply(msg);
+      }
+    } catch (error) {
+      console.error('❌ Ошибка при поиске рефералов:', error);
+      await ctx.reply('❌ Произошла ошибка при поиске рефералов.');
+    }
+    
+    userStates.delete(ctx.from.id);
+    return;
+  }
+  
   if (userState && userState.type === 'admin_change_commission') {
     console.log('💰 Обрабатываем изменение комиссии');
     const newCommission = parseFloat(text);
@@ -5766,7 +5798,8 @@ bot.action('admin_stars', async (ctx) => {
 // Рефералы пользователя
 bot.action('admin_refs', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
-  await adminForceReply(ctx, '👥 Введите ID пользователя для просмотра его рефералов:');
+  userStates.set(ctx.from.id, { type: 'admin_view_referrals' });
+  await adminForceReply(ctx, '👥 **Просмотр рефералов пользователя**\n\nВведите ID пользователя для просмотра его рефералов:\n\n💡 Примеры:\n• 123456789 - просмотр рефералов пользователя с ID 123456789\n• 987654321 - просмотр рефералов пользователя с ID 987654321\n\n⚠️ Введите только числовой ID пользователя');
 });
 
 // Добавляем управление титулами в админ-панель
