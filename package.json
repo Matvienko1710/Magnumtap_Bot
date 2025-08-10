@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node bot.js",
     "dev": "node bot.js",
-    "test": "node test.js"
+    "test": "node test.js",
+    "optimized": "node bot-optimized.js"
   },
   "keywords": [
     "telegram",

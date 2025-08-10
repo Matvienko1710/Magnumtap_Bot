@@ -3,36 +3,36 @@ const config = require('./config');
 
 class Database {
   constructor() {
-    this.client = new MongoClient(config.MONGODB_URI);
+    this.client = null;
     this.db = null;
     this.collections = {};
-    this.isConnected = false;
   }
 
   async connect() {
     try {
-      console.log('🔌 Подключаемся к MongoDB...');
+      console.log('🗄️ Подключение к MongoDB...');
+      this.client = new MongoClient(config.MONGODB_URI);
       await this.client.connect();
+      
       this.db = this.client.db();
-      this.isConnected = true;
+      console.log('✅ Подключение к MongoDB установлено');
       
       // Инициализируем коллекции
       this.collections = {
         users: this.db.collection('users'),
         promocodes: this.db.collection('promocodes'),
-        tasks: this.db.collection('tasks'),
-        titles: this.db.collection('titles'),
+        withdrawalRequests: this.db.collection('withdrawalRequests'),
         supportTickets: this.db.collection('supportTickets'),
         taskChecks: this.db.collection('taskChecks'),
-        withdrawalRequests: this.db.collection('withdrawalRequests'),
         reserve: this.db.collection('reserve')
       };
       
-      // Создаем индексы для оптимизации
+      // Создаем индексы
       await this.createIndexes();
       
-      console.log('✅ MongoDB подключен и индексы созданы');
-      return true;
+      // Инициализируем резерв если его нет
+      await this.initializeReserve();
+      
     } catch (error) {
       console.error('❌ Ошибка подключения к MongoDB:', error);
       throw error;
@@ -41,236 +41,448 @@ class Database {
 
   async createIndexes() {
     try {
+      console.log('📊 Создание индексов...');
+      
       // Индексы для пользователей
       await this.collections.users.createIndex({ id: 1 }, { unique: true });
       await this.collections.users.createIndex({ username: 1 });
       await this.collections.users.createIndex({ 'miner.active': 1 });
-      await this.collections.users.createIndex({ lastSeen: -1 });
+      await this.collections.users.createIndex({ created: 1 });
       
       // Индексы для промокодов
       await this.collections.promocodes.createIndex({ code: 1 }, { unique: true });
-      await this.collections.promocodes.createIndex({ isActive: 1 });
-      await this.collections.promocodes.createIndex({ expiresAt: 1 });
+      await this.collections.promocodes.createIndex({ created: 1 });
       
-      // Индексы для заявок
+      // Индексы для заявок на вывод
       await this.collections.withdrawalRequests.createIndex({ userId: 1 });
       await this.collections.withdrawalRequests.createIndex({ status: 1 });
-      await this.collections.withdrawalRequests.createIndex({ createdAt: -1 });
+      await this.collections.withdrawalRequests.createIndex({ created: 1 });
       
       // Индексы для тикетов поддержки
       await this.collections.supportTickets.createIndex({ userId: 1 });
       await this.collections.supportTickets.createIndex({ status: 1 });
-      await this.collections.supportTickets.createIndex({ createdAt: -1 });
+      await this.collections.supportTickets.createIndex({ created: 1 });
       
-      // Индексы для проверок заданий
-      await this.collections.taskChecks.createIndex({ userId: 1 });
-      await this.collections.taskChecks.createIndex({ status: 1 });
-      await this.collections.taskChecks.createIndex({ createdAt: -1 });
+      // Индексы для заданий
+      await this.collections.taskChecks.createIndex({ userId: 1, date: 1 }, { unique: true });
       
-      console.log('📊 Индексы созданы успешно');
+      console.log('✅ Индексы созданы');
     } catch (error) {
       console.error('❌ Ошибка создания индексов:', error);
     }
   }
 
-  async disconnect() {
-    if (this.isConnected) {
-      await this.client.close();
-      this.isConnected = false;
-      console.log('🔌 Соединение с MongoDB закрыто');
+  async initializeReserve() {
+    try {
+      const existingReserve = await this.collections.reserve.findOne({});
+      if (!existingReserve) {
+        await this.collections.reserve.insertOne({
+          magnumCoins: config.INITIAL_RESERVE_MAGNUM_COINS,
+          stars: config.INITIAL_RESERVE_STARS,
+          updated: Date.now()
+        });
+        console.log('💰 Резерв биржи инициализирован');
+      }
+    } catch (error) {
+      console.error('❌ Ошибка инициализации резерва:', error);
     }
   }
 
-  // Оптимизированные методы для работы с пользователями
+  // ==================== ПОЛЬЗОВАТЕЛИ ====================
+
   async getUserById(id) {
-    return await this.collections.users.findOne({ id });
+    try {
+      return await this.collections.users.findOne({ id: parseInt(id) });
+    } catch (error) {
+      console.error('Ошибка получения пользователя:', error);
+      return null;
+    }
   }
 
   async createUser(userData) {
-    const newUser = {
-      id: userData.id,
-      username: userData.username || '',
-      first_name: userData.first_name || '',
-      stars: 100,
-      magnumCoins: 0,
-      totalEarnedMagnumCoins: 0,
-      lastFarm: 0,
-      lastBonus: 0,
-      lastExchange: 0,
-      created: Math.floor(Date.now() / 1000),
-      invited: 0,
-      invitedBy: null,
-      titles: [],
-      achievements: [],
-      farmCount: 0,
-      bonusCount: 0,
-      promoCount: 0,
-      taskCount: 0,
-      dailyStreak: 0,
-      lastSeen: Math.floor(Date.now() / 1000),
-      status: 'member',
-      dailyTasks: {},
-      dailyFarms: 0,
-      miner: { active: false, totalEarned: 0, lastReward: 0 }
-    };
-    
-    await this.collections.users.insertOne(newUser);
-    return newUser;
+    try {
+      const result = await this.collections.users.insertOne(userData);
+      return result.insertedId;
+    } catch (error) {
+      console.error('Ошибка создания пользователя:', error);
+      throw error;
+    }
   }
 
   async updateUser(id, updates) {
-    const result = await this.collections.users.updateOne(
-      { id },
-      { $set: { ...updates, lastSeen: Math.floor(Date.now() / 1000) } }
-    );
-    return result.modifiedCount > 0;
+    try {
+      const result = await this.collections.users.updateOne(
+        { id: parseInt(id) },
+        { $set: updates }
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Ошибка обновления пользователя:', error);
+      throw error;
+    }
   }
 
   async incrementUserField(id, field, amount) {
-    const result = await this.collections.users.updateOne(
-      { id },
-      { 
-        $inc: { [field]: amount },
-        $set: { lastSeen: Math.floor(Date.now() / 1000) }
-      }
-    );
-    return result.modifiedCount > 0;
+    try {
+      const result = await this.collections.users.updateOne(
+        { id: parseInt(id) },
+        { $inc: { [field]: amount } }
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Ошибка инкремента поля:', error);
+      throw error;
+    }
   }
 
-  // Методы для работы с промокодами
+  // ==================== ПРОМОКОДЫ ====================
+
   async getPromocode(code) {
-    return await this.collections.promocodes.findOne({ 
-      code: code.toUpperCase(),
-      isActive: true,
-      $or: [
-        { expiresAt: { $exists: false } },
-        { expiresAt: { $gt: new Date() } }
-      ]
-    });
+    try {
+      return await this.collections.promocodes.findOne({ code: code.toUpperCase() });
+    } catch (error) {
+      console.error('Ошибка получения промокода:', error);
+      return null;
+    }
+  }
+
+  async activatePromocode(code) {
+    try {
+      const result = await this.collections.promocodes.updateOne(
+        { code: code.toUpperCase() },
+        { $inc: { used: 1 } }
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Ошибка активации промокода:', error);
+      throw error;
+    }
   }
 
   async createPromocode(promoData) {
-    const promocode = {
-      code: promoData.code.toUpperCase(),
-      reward: promoData.reward,
-      rewardType: promoData.rewardType || 'stars',
-      maxUses: promoData.maxUses || -1,
-      usedCount: 0,
-      isActive: true,
-      createdBy: promoData.createdBy,
-      createdAt: new Date(),
-      expiresAt: promoData.expiresAt || null,
-      usedBy: []
-    };
-    
-    await this.collections.promocodes.insertOne(promocode);
-    return promocode;
-  }
-
-  // Методы для работы с заявками на вывод
-  async createWithdrawalRequest(requestData) {
-    const request = {
-      userId: requestData.userId,
-      username: requestData.username,
-      method: requestData.method,
-      amount: requestData.amount,
-      address: requestData.address,
-      status: 'pending',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
-    const result = await this.collections.withdrawalRequests.insertOne(request);
-    request._id = result.insertedId;
-    return request;
-  }
-
-  async updateWithdrawalStatus(requestId, status, adminId, reason = null) {
-    const updates = {
-      status,
-      updatedAt: new Date()
-    };
-    
-    if (adminId) updates.adminId = adminId;
-    if (reason) updates.reason = reason;
-    
-    const result = await this.collections.withdrawalRequests.updateOne(
-      { _id: new ObjectId(requestId) },
-      { $set: updates }
-    );
-    return result.modifiedCount > 0;
-  }
-
-  // Методы для работы с резервом
-  async getReserve() {
-    const reserve = await this.collections.reserve.findOne({ _id: 'main' });
-    if (!reserve) {
-      // Создаем начальный резерв
-      const initialReserve = {
-        _id: 'main',
-        magnumCoins: config.INITIAL_RESERVE_MAGNUM_COINS,
-        stars: config.INITIAL_RESERVE_STARS,
-        commission: config.EXCHANGE_COMMISSION,
-        updatedAt: new Date()
-      };
-      await this.collections.reserve.insertOne(initialReserve);
-      return initialReserve;
+    try {
+      const result = await this.collections.promocodes.insertOne({
+        ...promoData,
+        code: promoData.code.toUpperCase(),
+        used: 0,
+        created: Date.now()
+      });
+      return result.insertedId;
+    } catch (error) {
+      console.error('Ошибка создания промокода:', error);
+      throw error;
     }
-    return reserve;
+  }
+
+  // ==================== ЗАЯВКИ НА ВЫВОД ====================
+
+  async createWithdrawal(withdrawalData) {
+    try {
+      const result = await this.collections.withdrawalRequests.insertOne({
+        ...withdrawalData,
+        id: new ObjectId().toString(),
+        created: Date.now()
+      });
+      return result.insertedId;
+    } catch (error) {
+      console.error('Ошибка создания заявки на вывод:', error);
+      throw error;
+    }
+  }
+
+  async getUserWithdrawals(userId) {
+    try {
+      return await this.collections.withdrawalRequests
+        .find({ userId: parseInt(userId) })
+        .sort({ created: -1 })
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка получения заявок на вывод:', error);
+      return [];
+    }
+  }
+
+  async updateWithdrawalStatus(withdrawalId, status, adminResponse = null) {
+    try {
+      const updates = { status, updated: Date.now() };
+      if (adminResponse) updates.adminResponse = adminResponse;
+      
+      const result = await this.collections.withdrawalRequests.updateOne(
+        { _id: new ObjectId(withdrawalId) },
+        { $set: updates }
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Ошибка обновления статуса заявки:', error);
+      throw error;
+    }
+  }
+
+  // ==================== ТИКЕТЫ ПОДДЕРЖКИ ====================
+
+  async createSupportTicket(ticketData) {
+    try {
+      const result = await this.collections.supportTickets.insertOne({
+        ...ticketData,
+        id: new ObjectId().toString(),
+        created: Date.now(),
+        updated: Date.now()
+      });
+      return result.insertedId;
+    } catch (error) {
+      console.error('Ошибка создания тикета:', error);
+      throw error;
+    }
+  }
+
+  async getUserTickets(userId) {
+    try {
+      return await this.collections.supportTickets
+        .find({ userId: parseInt(userId) })
+        .sort({ created: -1 })
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка получения тикетов:', error);
+      return [];
+    }
+  }
+
+  async updateTicketStatus(ticketId, status, adminResponse = null) {
+    try {
+      const updates = { status, updated: Date.now() };
+      if (adminResponse) updates.adminResponse = adminResponse;
+      
+      const result = await this.collections.supportTickets.updateOne(
+        { _id: new ObjectId(ticketId) },
+        { $set: updates }
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Ошибка обновления статуса тикета:', error);
+      throw error;
+    }
+  }
+
+  // ==================== ЗАДАНИЯ ====================
+
+  async getUserTasks(userId, date) {
+    try {
+      return await this.collections.taskChecks.findOne({
+        userId: parseInt(userId),
+        date: date
+      });
+    } catch (error) {
+      console.error('Ошибка получения заданий:', error);
+      return null;
+    }
+  }
+
+  async createUserTasks(taskData) {
+    try {
+      const result = await this.collections.taskChecks.insertOne(taskData);
+      return result.insertedId;
+    } catch (error) {
+      console.error('Ошибка создания заданий:', error);
+      throw error;
+    }
+  }
+
+  async updateUserTasks(userId, date, updates) {
+    try {
+      const result = await this.collections.taskChecks.updateOne(
+        { userId: parseInt(userId), date: date },
+        { $set: updates }
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Ошибка обновления заданий:', error);
+      throw error;
+    }
+  }
+
+  // ==================== РЕЗЕРВ БИРЖИ ====================
+
+  async getReserve() {
+    try {
+      const reserve = await this.collections.reserve.findOne({});
+      return reserve || {
+        magnumCoins: config.INITIAL_RESERVE_MAGNUM_COINS,
+        stars: config.INITIAL_RESERVE_STARS
+      };
+    } catch (error) {
+      console.error('Ошибка получения резерва:', error);
+      return {
+        magnumCoins: config.INITIAL_RESERVE_MAGNUM_COINS,
+        stars: config.INITIAL_RESERVE_STARS
+      };
+    }
   }
 
   async updateReserve(updates) {
-    const result = await this.collections.reserve.updateOne(
-      { _id: 'main' },
-      { 
-        $set: { 
-          ...updates, 
-          updatedAt: new Date() 
-        } 
-      }
-    );
-    return result.modifiedCount > 0;
-  }
-
-  // Методы для статистики
-  async getBotStatistics() {
-    const stats = await this.collections.users.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalUsers: { $sum: 1 },
-          totalMagnumCoins: { $sum: { $ifNull: ['$totalEarnedMagnumCoins', '$magnumCoins'] } },
-          totalStars: { $sum: { $ifNull: ['$stars', 0] } },
-          activeMiners: { $sum: { $cond: [{ $eq: ['$miner.active', true] }, 1, 0] } }
-        }
-      }
-    ]).toArray();
-    
-    return stats[0] || {
-      totalUsers: 0,
-      totalMagnumCoins: 0,
-      totalStars: 0,
-      activeMiners: 0
-    };
-  }
-
-  // Методы для майнеров
-  async getActiveMiners() {
-    return await this.collections.users.find({ 'miner.active': true }).toArray();
-  }
-
-  async updateMinerReward(userId, reward, lastReward) {
-    const result = await this.collections.users.updateOne(
-      { id: userId },
-      {
-        $inc: { 
-          stars: reward,
-          'miner.totalEarned': reward
+    try {
+      const result = await this.collections.reserve.updateOne(
+        {},
+        { 
+          $set: { ...updates, updated: Date.now() }
         },
-        $set: { 'miner.lastReward': lastReward }
-      }
-    );
-    return result.modifiedCount > 0;
+        { upsert: true }
+      );
+      return result.modifiedCount > 0 || result.upsertedCount > 0;
+    } catch (error) {
+      console.error('Ошибка обновления резерва:', error);
+      throw error;
+    }
+  }
+
+  // ==================== МАЙНЕРЫ ====================
+
+  async getActiveMiners() {
+    try {
+      return await this.collections.users
+        .find({ 'miner.active': true })
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка получения активных майнеров:', error);
+      return [];
+    }
+  }
+
+  async updateMinerReward(userId, reward, timestamp) {
+    try {
+      const result = await this.collections.users.updateOne(
+        { id: parseInt(userId) },
+        {
+          $inc: { 'miner.totalEarned': reward },
+          $set: { 'miner.lastReward': timestamp }
+        }
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('Ошибка обновления награды майнера:', error);
+      throw error;
+    }
+  }
+
+  // ==================== СТАТИСТИКА ====================
+
+  async getBotStatistics() {
+    try {
+      const stats = await this.collections.users.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalUsers: { $sum: 1 },
+            totalStars: { $sum: '$stars' },
+            totalMagnumCoins: { $sum: '$magnumCoins' },
+            activeMiners: {
+              $sum: {
+                $cond: [{ $eq: ['$miner.active', true] }, 1, 0]
+              }
+            }
+          }
+        }
+      ]).toArray();
+
+      return stats[0] || {
+        totalUsers: 0,
+        totalStars: 0,
+        totalMagnumCoins: 0,
+        activeMiners: 0
+      };
+    } catch (error) {
+      console.error('Ошибка получения статистики:', error);
+      return {
+        totalUsers: 0,
+        totalStars: 0,
+        totalMagnumCoins: 0,
+        activeMiners: 0
+      };
+    }
+  }
+
+  // ==================== АДМИН ФУНКЦИИ ====================
+
+  async getAllUsers(limit = 100, skip = 0) {
+    try {
+      return await this.collections.users
+        .find({})
+        .sort({ created: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка получения пользователей:', error);
+      return [];
+    }
+  }
+
+  async searchUsers(query) {
+    try {
+      const filter = {
+        $or: [
+          { username: { $regex: query, $options: 'i' } },
+          { id: parseInt(query) || 0 }
+        ]
+      };
+      
+      return await this.collections.users
+        .find(filter)
+        .limit(10)
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка поиска пользователей:', error);
+      return [];
+    }
+  }
+
+  async getAllWithdrawals(status = null, limit = 100) {
+    try {
+      const filter = status ? { status } : {};
+      return await this.collections.withdrawalRequests
+        .find(filter)
+        .sort({ created: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка получения заявок на вывод:', error);
+      return [];
+    }
+  }
+
+  async getAllTickets(status = null, limit = 100) {
+    try {
+      const filter = status ? { status } : {};
+      return await this.collections.supportTickets
+        .find(filter)
+        .sort({ created: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка получения тикетов:', error);
+      return [];
+    }
+  }
+
+  async getAllPromocodes(limit = 100) {
+    try {
+      return await this.collections.promocodes
+        .find({})
+        .sort({ created: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      console.error('Ошибка получения промокодов:', error);
+      return [];
+    }
+  }
+
+  // ==================== УТИЛИТЫ ====================
+
+  async close() {
+    if (this.client) {
+      await this.client.close();
+      console.log('🔌 Соединение с MongoDB закрыто');
+    }
   }
 }
 

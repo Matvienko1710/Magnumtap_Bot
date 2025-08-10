@@ -25,8 +25,6 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-// ==================== ОСНОВНЫЕ КОМАНДЫ ====================
-
 // Обработка команды /start
 bot.start(async (ctx) => {
   if (ctx.chat.type !== 'private') return;
@@ -58,214 +56,20 @@ bot.start(async (ctx) => {
   }
 });
 
-// Команда /help
-bot.command('help', async (ctx) => {
-  const helpText = `🤖 **Magnum Tap Bot - Помощь**
-
-📋 **Основные команды:**
-/start - Запуск бота
-/help - Эта справка
-/profile - Ваш профиль
-/farm - Фарм звезд
-/bonus - Ежедневный бонус
-/tasks - Ежедневные задания
-/promo - Активировать промокод
-/referral - Ваша реферальная ссылка
-
-🎮 **Игровые функции:**
-⭐ Фарм звезд каждую минуту
-🎁 Ежедневный бонус
-📋 Ежедневные задания
-🎯 Задания от спонсоров
-🎫 Система промокодов
-👑 Система титулов
-
-💬 **Поддержка:**
-Если у вас есть вопросы, используйте кнопку "📞 Поддержка" в главном меню.`;
-
-  await ctx.reply(helpText, { parse_mode: 'Markdown' });
-});
-
-// Команда /profile
-bot.command('profile', async (ctx) => {
-  try {
-    const userId = ctx.from.id;
-    const profile = await userService.getProfile(userId, ctx);
-    await showProfile(ctx, profile);
-  } catch (error) {
-    console.error('Ошибка профиля:', error);
-    await ctx.reply('❌ Произошла ошибка при загрузке профиля.');
-  }
-});
-
-// Команда /farm
-bot.command('farm', async (ctx) => {
-  try {
-    const userId = ctx.from.id;
-    const result = await userService.farmStars(userId, ctx);
-    
-    if (result.success) {
-      await ctx.reply(
-        `✅ **Фарм завершен!**\n\n` +
-        `⭐ Получено: +${utils.formatNumber(result.reward)} звезд\n` +
-        `💰 Новый баланс: ${utils.formatNumber(result.newBalance)} звезд\n\n` +
-        `⏰ Следующий фарм через ${config.FARM_COOLDOWN_DEFAULT} секунд`,
-        { parse_mode: 'Markdown' }
-      );
-    } else {
-      await ctx.reply(result.error, { parse_mode: 'Markdown' });
-    }
-  } catch (error) {
-    console.error('Ошибка фарма:', error);
-    await ctx.reply('❌ Произошла ошибка при фарме.');
-  }
-});
-
-// Команда /bonus
-bot.command('bonus', async (ctx) => {
-  try {
-    const userId = ctx.from.id;
-    const result = await userService.claimDailyBonus(userId, ctx);
-    
-    if (result.success) {
-      await ctx.reply(
-        `🎁 **Ежедневный бонус получен!**\n\n` +
-        `⭐ Награда: +${utils.formatNumber(result.reward)} звезд\n` +
-        `💰 Новый баланс: ${utils.formatNumber(result.newBalance)} звезд\n` +
-        `🔥 Серия дней: ${result.streak} дней\n\n` +
-        `⏰ Следующий бонус через 24 часа`,
-        { parse_mode: 'Markdown' }
-      );
-    } else {
-      await ctx.reply(result.error, { parse_mode: 'Markdown' });
-    }
-  } catch (error) {
-    console.error('Ошибка бонуса:', error);
-    await ctx.reply('❌ Произошла ошибка при получении бонуса.');
-  }
-});
-
-// Команда /tasks
-bot.command('tasks', async (ctx) => {
-  try {
-    const userId = ctx.from.id;
-    const tasks = await userService.getDailyTasks(userId);
-    await showDailyTasks(ctx, tasks);
-  } catch (error) {
-    console.error('Ошибка заданий:', error);
-    await ctx.reply('❌ Произошла ошибка при загрузке заданий.');
-  }
-});
-
-// Команда /promo
-bot.command('promo', async (ctx) => {
-  await ctx.reply(
-    `🎫 **Активация промокода**\n\n` +
-    `Введите промокод для получения награды:\n\n` +
-    `💡 Промокоды можно найти в нашем канале или получить от друзей.`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-// Команда /referral
-bot.command('referral', async (ctx) => {
-  try {
-    const userId = ctx.from.id;
-    const user = await userService.getUser(userId);
-    const referralLink = `https://t.me/${ctx.botInfo.username}?start=${userId}`;
-    
-    await ctx.reply(
-      `👥 **Ваша реферальная ссылка**\n\n` +
-      `🔗 Ссылка: \`${referralLink}\`\n\n` +
-      `📊 Статистика:\n` +
-      `👤 Приглашено друзей: ${user.invited || 0}\n` +
-      `⭐ Заработано с рефералов: ${utils.formatNumber((user.invited || 0) * 5)} звезд\n\n` +
-      `💡 За каждого приглашенного друга вы получаете +5 звезд!`,
-      { 
-        parse_mode: 'Markdown',
-        reply_markup: Markup.inlineKeyboard([
-          [Markup.button.url('🔗 Поделиться ссылкой', `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Присоединяйся к Magnum Tap Bot! 🚀')}`)]
-        ]).reply_markup
-      }
-    );
-  } catch (error) {
-    console.error('Ошибка реферальной ссылки:', error);
-    await ctx.reply('❌ Произошла ошибка при генерации ссылки.');
-  }
-});
-
-// ==================== АДМИН КОМАНДЫ ====================
-
-// Команда /admin (только для админов)
-bot.command('admin', async (ctx) => {
-  if (!utils.isAdmin(ctx.from.id)) {
-    return ctx.reply('❌ У вас нет доступа к админ-панели.');
-  }
-  
-  await showAdminPanel(ctx);
-});
-
-// Команда /stats (статистика бота)
-bot.command('stats', async (ctx) => {
-  if (!utils.isAdmin(ctx.from.id)) {
-    return ctx.reply('❌ У вас нет доступа к статистике.');
-  }
-  
-  try {
-    const stats = await database.getBotStatistics();
-    const cacheStats = cache.getCacheStats();
-    
-    const statsText = `📊 **Статистика бота**\n\n` +
-                     `👥 Пользователей: ${utils.formatNumber(stats.totalUsers)}\n` +
-                     `💰 Всего звезд: ${utils.formatNumber(stats.totalStars)}\n` +
-                     `🪙 Всего Magnum Coins: ${utils.formatNumber(stats.totalMagnumCoins)}\n` +
-                     `⛏️ Активных майнеров: ${utils.formatNumber(stats.activeMiners)}\n\n` +
-                     `💾 **Кеш:**\n` +
-                     `👤 Пользователей в кеше: ${cacheStats.userCacheSize}\n` +
-                     `🚦 Rate limit записей: ${cacheStats.rateLimitCacheSize}\n` +
-                     `💾 Память: ${Math.round(cacheStats.memoryUsage.heapUsed / 1024 / 1024)}MB`;
-    
-    await ctx.reply(statsText, { parse_mode: 'Markdown' });
-  } catch (error) {
-    console.error('Ошибка статистики:', error);
-    await ctx.reply('❌ Произошла ошибка при загрузке статистики.');
-  }
-});
-
-// Команда /broadcast (массовая рассылка)
-bot.command('broadcast', async (ctx) => {
-  if (!utils.isAdmin(ctx.from.id)) {
-    return ctx.reply('❌ У вас нет доступа к рассылке.');
-  }
-  
-  await ctx.reply(
-    `📢 **Массовая рассылка**\n\n` +
-    `Введите сообщение для отправки всем пользователям:\n\n` +
-    `💡 Поддерживается Markdown форматирование.`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-// ==================== ОБРАБОТЧИКИ КНОПОК ====================
-
 // Главное меню
 async function showMainMenu(ctx, user) {
   const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('⭐ Фарм', 'farm'),
-      Markup.button.callback('🎁 Бонус', 'bonus')
+      Markup.button.callback('💰 Обмен', 'exchange')
     ],
     [
-      Markup.button.callback('📋 Задания', 'tasks'),
-      Markup.button.callback('🎫 Промокод', 'promocode')
+      Markup.button.callback('🎁 Промокод', 'promocode'),
+      Markup.button.callback('👤 Профиль', 'profile')
     ],
     [
-      Markup.button.callback('👤 Профиль', 'profile'),
-      Markup.button.callback('👥 Рефералы', 'referrals')
-    ],
-    [
-      Markup.button.callback('⛏️ Майнер', 'miner'),
-      Markup.button.callback('💱 Обмен', 'exchange')
+      Markup.button.callback('🏆 Достижения', 'achievements'),
+      Markup.button.callback('⛏️ Майнер', 'miner')
     ],
     [
       Markup.button.callback('💳 Вывод', 'withdrawal'),
@@ -313,39 +117,97 @@ bot.action('farm', async (ctx) => {
   }
 });
 
-// Обработчик бонуса
-bot.action('bonus', async (ctx) => {
+// Обработчик обмена
+bot.action('exchange', async (ctx) => {
   try {
     const userId = ctx.from.id;
-    const result = await userService.claimDailyBonus(userId, ctx);
+    const user = await userService.getUser(userId);
+    const reserve = await database.getReserve();
     
-    if (result.success) {
-      await ctx.answerCbQuery(
-        `🎁 +${utils.formatNumber(result.reward)}⭐\n` +
-        `🔥 Серия: ${result.streak} дней`,
-        { show_alert: true }
-      );
-      
-      // Обновляем меню
-      const user = await userService.getUser(userId);
-      await updateMainMenu(ctx, user);
-    } else {
-      await ctx.answerCbQuery(result.error, { show_alert: true });
-    }
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🪙 → ⭐ Купить звезды', 'buy_stars'),
+        Markup.button.callback('⭐ → 🪙 Продать звезды', 'sell_stars')
+      ],
+      [
+        Markup.button.callback('📊 Курсы валют', 'exchange_rates'),
+        Markup.button.callback('🏦 Резерв биржи', 'reserve_info')
+      ],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ]);
+    
+    const text = `💱 **Обмен валют**\n\n` +
+                 `💰 Ваши Magnum Coins: ${utils.formatNumber(user.magnumCoins || 0)}🪙\n` +
+                 `⭐ Ваши звезды: ${utils.formatNumber(user.stars || 0)}⭐\n\n` +
+                 `📊 Текущий курс: 1🪙 = ${utils.formatNumber(reserve.stars / reserve.magnumCoins)}⭐\n` +
+                 `💰 Комиссия: ${config.EXCHANGE_COMMISSION}%\n\n` +
+                 `Выберите операцию:`;
+    
+    await ctx.editMessageText(text, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
   } catch (error) {
-    console.error('Ошибка бонуса:', error);
+    console.error('Ошибка обмена:', error);
     await ctx.answerCbQuery('❌ Произошла ошибка', { show_alert: true });
   }
 });
 
-// Обработчик заданий
-bot.action('tasks', async (ctx) => {
+// Быстрая покупка звезд
+bot.action(/^buy_stars_(\d+)$/, async (ctx) => {
   try {
+    const amount = parseInt(ctx.match[1]);
     const userId = ctx.from.id;
-    const tasks = await userService.getDailyTasks(userId);
-    await showDailyTasks(ctx, tasks);
+    const user = await userService.getUser(userId);
+    
+    // Проверяем кулдаун
+    const cooldown = utils.checkCooldown(user.lastExchange || 0, config.EXCHANGE_COOLDOWN);
+    if (!cooldown.canAct) {
+      return ctx.answerCbQuery(
+        `⏳ Подождите ${utils.formatTime(cooldown.remaining)} между обменами`,
+        { show_alert: true }
+      );
+    }
+    
+    // Проверяем баланс
+    if ((user.magnumCoins || 0) < amount) {
+      return ctx.answerCbQuery(
+        `❌ Недостаточно Magnum Coins! У вас: ${utils.formatNumber(user.magnumCoins || 0)}🪙`,
+        { show_alert: true }
+      );
+    }
+    
+    // Выполняем обмен
+    const reserve = await database.getReserve();
+    const rate = reserve.stars / reserve.magnumCoins;
+    const starsToReceive = amount * rate * (1 - config.EXCHANGE_COMMISSION / 100);
+    
+    if (starsToReceive <= 0) {
+      return ctx.answerCbQuery('❌ Ошибка расчета курса', { show_alert: true });
+    }
+    
+    // Обновляем резерв и пользователя
+    await database.updateReserve({
+      magnumCoins: reserve.magnumCoins + amount,
+      stars: reserve.stars - starsToReceive
+    });
+    
+    await userService.incrementUserField(userId, 'magnumCoins', -amount);
+    await userService.incrementUserField(userId, 'stars', starsToReceive);
+    await userService.updateUser(userId, { lastExchange: utils.now() });
+    
+    await ctx.answerCbQuery(
+      `✅ Обмен выполнен!\n` +
+      `💰 Потрачено: ${amount}🪙\n` +
+      `⭐ Получено: ${utils.formatNumber(starsToReceive)}⭐`,
+      { show_alert: true }
+    );
+    
+    // Обновляем интерфейс
+    setTimeout(() => updateExchangeInterface(ctx, userId), 1000);
+    
   } catch (error) {
-    console.error('Ошибка заданий:', error);
+    console.error('Ошибка покупки звезд:', error);
     await ctx.answerCbQuery('❌ Произошла ошибка', { show_alert: true });
   }
 });
@@ -355,11 +217,10 @@ bot.action('promocode', async (ctx) => {
   try {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🎁 Активировать промокод', 'activate_promo')],
-      [Markup.button.callback('📊 Статистика промокодов', 'promo_stats')],
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]);
     
-    const text = `🎫 **Промокоды**\n\n` +
+    const text = `🎁 **Промокоды**\n\n` +
                  `Введите промокод для получения награды!\n\n` +
                  `💡 Промокоды можно найти в нашем канале или получить от друзей.`;
     
@@ -378,39 +239,39 @@ bot.action('profile', async (ctx) => {
   try {
     const userId = ctx.from.id;
     const profile = await userService.getProfile(userId, ctx);
-    await showProfile(ctx, profile);
-  } catch (error) {
-    console.error('Ошибка профиля:', error);
-    await ctx.answerCbQuery('❌ Произошла ошибка', { show_alert: true });
-  }
-});
-
-// Обработчик рефералов
-bot.action('referrals', async (ctx) => {
-  try {
-    const userId = ctx.from.id;
-    const user = await userService.getUser(userId);
-    const referralLink = `https://t.me/${ctx.botInfo.username}?start=${userId}`;
+    const { user, stats, rank, mainTitle } = profile;
     
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.url('🔗 Поделиться ссылкой', `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Присоединяйся к Magnum Tap Bot! 🚀')}`)],
-      [Markup.button.callback('📊 Статистика рефералов', 'referral_stats')],
+      [
+        Markup.button.callback('📊 Статистика', 'statistics'),
+        Markup.button.callback('🏆 Достижения', 'achievements')
+      ],
+      [
+        Markup.button.callback('👥 Рефералы', 'referrals'),
+        Markup.button.callback('⚙️ Настройки', 'settings')
+      ],
       [Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]);
     
-    const text = `👥 **Реферальная система**\n\n` +
-                 `🔗 Ваша ссылка: \`${referralLink}\`\n\n` +
-                 `📊 Статистика:\n` +
-                 `👤 Приглашено друзей: ${user.invited || 0}\n` +
-                 `⭐ Заработано с рефералов: ${utils.formatNumber((user.invited || 0) * 5)} звезд\n\n` +
-                 `💡 За каждого приглашенного друга вы получаете +5 звезд!`;
+    const titleText = mainTitle ? `\n🏆 Титул: ${mainTitle.name}` : '';
+    
+    const text = `👤 **Профиль**\n\n` +
+                 `👤 Имя: ${ctx.from.first_name}\n` +
+                 `🆔 ID: ${userId}\n` +
+                 `⭐ Ранг: ${rank.name}\n` +
+                 `💰 Magnum Coins: ${utils.formatNumber(user.magnumCoins || 0)}🪙\n` +
+                 `⭐ Звезды: ${utils.formatNumber(user.stars || 0)}⭐\n` +
+                 `👥 Приглашено: ${user.invited || 0} человек\n` +
+                 `🌾 Фармов: ${user.farmCount || 0}\n` +
+                 `🎁 Промокодов: ${user.promoCount || 0}${titleText}\n\n` +
+                 `📊 Всего пользователей: ${utils.formatNumber(stats.totalUsers)}`;
     
     await ctx.editMessageText(text, {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
   } catch (error) {
-    console.error('Ошибка рефералов:', error);
+    console.error('Ошибка профиля:', error);
     await ctx.answerCbQuery('❌ Произошла ошибка', { show_alert: true });
   }
 });
@@ -454,38 +315,41 @@ bot.action('miner', async (ctx) => {
   }
 });
 
-// Обработчик обмена
-bot.action('exchange', async (ctx) => {
+// Запуск майнера
+bot.action('start_miner', async (ctx) => {
   try {
     const userId = ctx.from.id;
-    const user = await userService.getUser(userId);
-    const reserve = await database.getReserve();
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('🪙 → ⭐ Купить звезды', 'buy_stars'),
-        Markup.button.callback('⭐ → 🪙 Продать звезды', 'sell_stars')
-      ],
-      [
-        Markup.button.callback('📊 Курсы валют', 'exchange_rates'),
-        Markup.button.callback('🏦 Резерв биржи', 'reserve_info')
-      ],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-    ]);
-    
-    const text = `💱 **Обмен валют**\n\n` +
-                 `💰 Ваши Magnum Coins: ${utils.formatNumber(user.magnumCoins || 0)}🪙\n` +
-                 `⭐ Ваши звезды: ${utils.formatNumber(user.stars || 0)}⭐\n\n` +
-                 `📊 Текущий курс: 1🪙 = ${utils.formatNumber(reserve.stars / reserve.magnumCoins)}⭐\n` +
-                 `💰 Комиссия: ${config.EXCHANGE_COMMISSION}%\n\n` +
-                 `Выберите операцию:`;
-    
-    await ctx.editMessageText(text, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
+    await userService.updateUser(userId, {
+      'miner.active': true,
+      'miner.lastReward': utils.now()
     });
+    
+    await ctx.answerCbQuery('✅ Майнер запущен!', { show_alert: true });
+    
+    // Обновляем интерфейс
+    const user = await userService.getUser(userId);
+    await updateMinerInterface(ctx, user);
   } catch (error) {
-    console.error('Ошибка обмена:', error);
+    console.error('Ошибка запуска майнера:', error);
+    await ctx.answerCbQuery('❌ Произошла ошибка', { show_alert: true });
+  }
+});
+
+// Остановка майнера
+bot.action('stop_miner', async (ctx) => {
+  try {
+    const userId = ctx.from.id;
+    await userService.updateUser(userId, {
+      'miner.active': false
+    });
+    
+    await ctx.answerCbQuery('⏹️ Майнер остановлен', { show_alert: true });
+    
+    // Обновляем интерфейс
+    const user = await userService.getUser(userId);
+    await updateMinerInterface(ctx, user);
+  } catch (error) {
+    console.error('Ошибка остановки майнера:', error);
     await ctx.answerCbQuery('❌ Произошла ошибка', { show_alert: true });
   }
 });
@@ -568,9 +432,7 @@ bot.action('main_menu', async (ctx) => {
   }
 });
 
-// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-
-// Проверка подписки
+// Вспомогательные функции
 async function checkSubscription(ctx) {
   if (!config.REQUIRED_CHANNEL) return true;
   
@@ -585,7 +447,6 @@ async function checkSubscription(ctx) {
   }
 }
 
-// Показать сообщение о подписке
 async function showSubscriptionMessage(ctx) {
   const message = `🔔 **Обязательная подписка**\n\n` +
                   `Для использования бота необходимо:\n\n` +
@@ -608,7 +469,6 @@ async function showSubscriptionMessage(ctx) {
   });
 }
 
-// Обработка реферала
 async function handleReferral(userId, referrerId) {
   try {
     const referrer = await userService.getUser(referrerId);
@@ -624,116 +484,20 @@ async function handleReferral(userId, referrerId) {
   }
 }
 
-// Показать профиль
-async function showProfile(ctx, profile) {
-  const { user, stats, rank, mainTitle } = profile;
-  
-  const keyboard = Markup.inlineKeyboard([
-    [
-      Markup.button.callback('📊 Статистика', 'statistics'),
-      Markup.button.callback('🏆 Достижения', 'achievements')
-    ],
-    [
-      Markup.button.callback('👥 Рефералы', 'referrals'),
-      Markup.button.callback('⚙️ Настройки', 'settings')
-    ],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-  ]);
-  
-  const titleText = mainTitle ? `\n🏆 Титул: ${mainTitle.name}` : '';
-  
-  const text = `👤 **Профиль**\n\n` +
-               `👤 Имя: ${ctx.from.first_name}\n` +
-               `🆔 ID: ${ctx.from.id}\n` +
-               `⭐ Ранг: ${rank.name}\n` +
-               `💰 Magnum Coins: ${utils.formatNumber(user.magnumCoins || 0)}🪙\n` +
-               `⭐ Звезды: ${utils.formatNumber(user.stars || 0)}⭐\n` +
-               `👥 Приглашено: ${user.invited || 0} человек\n` +
-               `🌾 Фармов: ${user.farmCount || 0}\n` +
-               `🎁 Промокодов: ${user.promoCount || 0}${titleText}\n\n` +
-               `📊 Всего пользователей: ${utils.formatNumber(stats.totalUsers)}`;
-  
-  await ctx.editMessageText(text, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard.reply_markup
-  });
-}
-
-// Показать ежедневные задания
-async function showDailyTasks(ctx, tasks) {
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('🔄 Обновить', 'refresh_tasks')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-  ]);
-  
-  let text = `📋 **Ежедневные задания**\n\n`;
-  
-  if (tasks && tasks.length > 0) {
-    tasks.forEach((task, index) => {
-      const status = task.completed ? '✅' : '⏳';
-      text += `${status} ${task.title}\n`;
-      if (task.reward) {
-        text += `   💰 Награда: ${task.reward}\n`;
-      }
-      text += '\n';
-    });
-  } else {
-    text += `🎉 Все задания выполнены!\n\n` +
-            `💡 Задания обновляются каждый день в 00:00 UTC.`;
-  }
-  
-  await ctx.editMessageText(text, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard.reply_markup
-  });
-}
-
-// Показать админ-панель
-async function showAdminPanel(ctx) {
-  const keyboard = Markup.inlineKeyboard([
-    [
-      Markup.button.callback('📊 Статистика', 'admin_stats'),
-      Markup.button.callback('📢 Рассылка', 'admin_broadcast')
-    ],
-    [
-      Markup.button.callback('🎫 Промокоды', 'admin_promocodes'),
-      Markup.button.callback('👑 Титулы', 'admin_titles')
-    ],
-    [
-      Markup.button.callback('👥 Пользователи', 'admin_users'),
-      Markup.button.callback('📞 Поддержка', 'admin_support')
-    ],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
-  ]);
-  
-  const text = `⚙️ **Админ-панель**\n\n` +
-               `Добро пожаловать в панель администратора!\n\n` +
-               `Выберите действие:`;
-  
-  await ctx.editMessageText(text, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard.reply_markup
-  });
-}
-
-// Обновить главное меню
 async function updateMainMenu(ctx, user) {
+  // Обновляем главное меню с новыми данными
   const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('⭐ Фарм', 'farm'),
-      Markup.button.callback('🎁 Бонус', 'bonus')
+      Markup.button.callback('💰 Обмен', 'exchange')
     ],
     [
-      Markup.button.callback('📋 Задания', 'tasks'),
-      Markup.button.callback('🎫 Промокод', 'promocode')
+      Markup.button.callback('🎁 Промокод', 'promocode'),
+      Markup.button.callback('👤 Профиль', 'profile')
     ],
     [
-      Markup.button.callback('👤 Профиль', 'profile'),
-      Markup.button.callback('👥 Рефералы', 'referrals')
-    ],
-    [
-      Markup.button.callback('⛏️ Майнер', 'miner'),
-      Markup.button.callback('💱 Обмен', 'exchange')
+      Markup.button.callback('🏆 Достижения', 'achievements'),
+      Markup.button.callback('⛏️ Майнер', 'miner')
     ],
     [
       Markup.button.callback('💳 Вывод', 'withdrawal'),
@@ -753,7 +517,72 @@ async function updateMainMenu(ctx, user) {
   });
 }
 
-// ==================== ОБРАБОТКА МАЙНЕРОВ ====================
+async function updateExchangeInterface(ctx, userId) {
+  try {
+    const user = await userService.getUser(userId);
+    const reserve = await database.getReserve();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🪙 → ⭐ Купить звезды', 'buy_stars'),
+        Markup.button.callback('⭐ → 🪙 Продать звезды', 'sell_stars')
+      ],
+      [
+        Markup.button.callback('📊 Курсы валют', 'exchange_rates'),
+        Markup.button.callback('🏦 Резерв биржи', 'reserve_info')
+      ],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ]);
+    
+    const text = `💱 **Обмен валют**\n\n` +
+                 `💰 Ваши Magnum Coins: ${utils.formatNumber(user.magnumCoins || 0)}🪙\n` +
+                 `⭐ Ваши звезды: ${utils.formatNumber(user.stars || 0)}⭐\n\n` +
+                 `📊 Текущий курс: 1🪙 = ${utils.formatNumber(reserve.stars / reserve.magnumCoins)}⭐\n` +
+                 `💰 Комиссия: ${config.EXCHANGE_COMMISSION}%\n\n` +
+                 `Выберите операцию:`;
+    
+    await ctx.editMessageText(text, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    console.error('Ошибка обновления интерфейса обмена:', error);
+  }
+}
+
+async function updateMinerInterface(ctx, user) {
+  try {
+    const keyboard = Markup.inlineKeyboard([
+      [
+        user.miner?.active ? 
+          Markup.button.callback('⏹️ Остановить майнер', 'stop_miner') :
+          Markup.button.callback('▶️ Запустить майнер', 'start_miner')
+      ],
+      [
+        Markup.button.callback('📊 Статистика майнера', 'miner_stats'),
+        Markup.button.callback('⚡ Улучшить майнер', 'upgrade_miner')
+      ],
+      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    ]);
+    
+    const status = user.miner?.active ? '🟢 Активен' : '🔴 Неактивен';
+    const totalEarned = user.miner?.totalEarned || 0;
+    const rewardPerHour = utils.calculateMinerReward();
+    
+    const text = `⛏️ **Майнер**\n\n` +
+                 `📊 Статус: ${status}\n` +
+                 `💰 Доход в час: ${utils.formatNumber(rewardPerHour)}⭐\n` +
+                 `💎 Всего заработано: ${utils.formatNumber(totalEarned)}⭐\n\n` +
+                 `💡 Майнер автоматически добывает звезды каждые 30 минут.`;
+    
+    await ctx.editMessageText(text, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    console.error('Ошибка обновления интерфейса майнера:', error);
+  }
+}
 
 // Обработка майнеров каждые 30 минут
 async function processMinerRewards() {
@@ -803,8 +632,6 @@ async function processMinerRewards() {
   }
 }
 
-// ==================== ОБРАБОТКА ОШИБОК ====================
-
 // Глобальная обработка ошибок
 bot.catch(async (err, ctx) => {
   console.error('🚨 Глобальная ошибка бота:', err);
@@ -845,8 +672,6 @@ process.on('uncaughtException', (error) => {
   console.error('📍 Stack trace:', error.stack);
   console.log('🔄 Пытаемся продолжить работу бота...');
 });
-
-// ==================== ЗАПУСК БОТА ====================
 
 // Запуск бота
 async function startBot() {
