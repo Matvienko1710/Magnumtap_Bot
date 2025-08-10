@@ -560,6 +560,53 @@ async function loadReserveFromDB() {
   }
 }
 
+// Функция для сброса базы данных (очистка всех данных, но сохранение структуры)
+async function resetDatabase() {
+  try {
+    console.log('🗄️ Начинаем сброс базы данных...');
+    
+    // Очищаем все коллекции, но оставляем структуру
+    const collections = [
+      { name: 'users', description: 'Пользователи' },
+      { name: 'promoCodes', description: 'Промокоды' },
+      { name: 'withdrawalRequests', description: 'Заявки на вывод' },
+      { name: 'supportTickets', description: 'Тикеты поддержки' },
+      { name: 'taskChecks', description: 'Проверки заданий' },
+      { name: 'achievements', description: 'Достижения' },
+      { name: 'reserve', description: 'Резерв биржи' }
+    ];
+    
+    let deletedCount = 0;
+    
+    for (const collection of collections) {
+      try {
+        const dbCollection = db.collection(collection.name);
+        const result = await dbCollection.deleteMany({});
+        console.log(`✅ ${collection.description}: удалено ${result.deletedCount} записей`);
+        deletedCount += result.deletedCount;
+      } catch (error) {
+        console.error(`❌ Ошибка очистки ${collection.description}:`, error);
+      }
+    }
+    
+    // Сбрасываем кеши
+    userCache.clear();
+    botStatsCache = null;
+    botStatsCacheTime = 0;
+    
+    // Инициализируем резерв заново
+    await initializeReserve();
+    await initializeCommission();
+    
+    console.log(`🗄️ Сброс базы данных завершен! Удалено ${deletedCount} записей`);
+    return { success: true, deletedCount };
+    
+  } catch (error) {
+    console.error('❌ Ошибка сброса базы данных:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // Улучшенная функция для расчета курса обмена на основе резерва
 function calculateExchangeRate(fromCurrency, toCurrency, amount) {
   try {
@@ -595,6 +642,24 @@ function calculateCommission(amount) {
 function calculateAmountWithCommission(amount) {
   if (EXCHANGE_COMMISSION <= 0) return amount;
   return amount * (1 - EXCHANGE_COMMISSION / 100);
+}
+
+// Функция для форматирования чисел с правильным количеством знаков
+function formatNumber(num) {
+  if (num === 0) return '0';
+  if (num < 0.01) {
+    // Для очень маленьких чисел показываем до 6 знаков
+    return num.toFixed(6).replace(/\.?0+$/, '');
+  } else if (num < 1) {
+    // Для чисел меньше 1 показываем до 4 знаков
+    return num.toFixed(4).replace(/\.?0+$/, '');
+  } else if (num < 100) {
+    // Для чисел до 100 показываем до 2 знаков
+    return num.toFixed(2).replace(/\.?0+$/, '');
+  } else {
+    // Для больших чисел показываем до 2 знаков
+    return num.toFixed(2).replace(/\.?0+$/, '');
+  }
 }
 
 // Функция для расчета дохода майнера на основе курса звёзд
@@ -731,17 +796,17 @@ function getReserveManagementText() {
   
   return `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ БИРЖИ** 🏦\n\n` +
          `📊 **Текущий резерв биржи:**\n` +
-         `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-         `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
+         `🪙 ${formatNumber(RESERVE_MAGNUM_COINS)} Magnum Coin\n` +
+         `⭐ ${formatNumber(RESERVE_STARS)} звёзд\n\n` +
          `📈 **Текущие курсы обмена:**\n` +
-         `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
-         `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+         `• 100🪙 = ${formatNumber(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS))}⭐\n` +
+         `• 10⭐ = ${formatNumber(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS))}🪙\n\n` +
          `🌾 **Награды за активность:**\n` +
-         `• Фарм: ${farmReward.toFixed(2)}🪙 за клик\n` +
-         `• Бонус: ${bonusReward.toFixed(2)}🪙 в день\n` +
+         `• Фарм: ${formatNumber(farmReward)}🪙 за клик\n` +
+         `• Бонус: ${formatNumber(bonusReward)}🪙 в день\n` +
          `• Зависят от курса обмена\n\n` +
          `⛏️ **Доходность майнера:**\n` +
-         `• ${minerReward.toFixed(4)}⭐ в час (${dailyMinerReward.toFixed(4)}⭐ в день)\n` +
+         `• ${formatNumber(minerReward)}⭐ в час (${formatNumber(dailyMinerReward)}⭐ в день)\n` +
          `• Окупаемость: ~45 дней\n\n` +
          `📊 **Лимиты обмена:**\n` +
          `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙 / ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
@@ -784,17 +849,17 @@ function getExchangeRatesText() {
     
                     return `🔄 **Доступные курсы:**\n\n` +
                        `⭐ **Telegram Stars:**\n` +
-                       `• Курс: 100🪙 = ${magnumToStarsWithCommission.toFixed(2)}⭐ TG Stars\n` +
-                       `• Обратный курс: 10⭐ = ${starsToMagnumWithCommission.toFixed(2)}🪙\n` +
+                       `• Курс: 100🪙 = ${formatNumber(magnumToStarsWithCommission)}⭐ TG Stars\n` +
+                       `• Обратный курс: 10⭐ = ${formatNumber(starsToMagnumWithCommission)}🪙\n` +
                        `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
                        `• Максимум за операцию: ${EXCHANGE_LIMITS.MAX_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MAX_STARS}⭐\n` +
                        `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
                        `🌾 **Награды за активность:**\n` +
-                       `• Фарм: ${farmReward.toFixed(2)}🪙 за клик\n` +
-                       `• Бонус: ${bonusReward.toFixed(2)}🪙 в день\n` +
+                       `• Фарм: ${formatNumber(farmReward)}🪙 за клик\n` +
+                       `• Бонус: ${formatNumber(bonusReward)}🪙 в день\n` +
                        `• Зависят от курса обмена\n\n` +
                        `⛏️ **Доходность майнера:**\n` +
-                       `• ${minerReward.toFixed(4)}⭐ в час (${dailyMinerReward.toFixed(4)}⭐ в день)\n` +
+                       `• ${formatNumber(minerReward)}⭐ в час (${formatNumber(dailyMinerReward)}⭐ в день)\n` +
                        `• Окупаемость: ~45 дней\n\n` +
                        `💡 **От чего зависит курс:**\n` +
                        `• Баланс резерва биржи\n` +
@@ -841,7 +906,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
     if (magnumCoinsBalance >= amount) {
       const baseStarsToReceive = amount * magnumToStarsRate;
       const starsToReceive = calculateAmountWithCommission(baseStarsToReceive);
-      const buttonText = `${amount}🪙→${starsToReceive.toFixed(2)}⭐`;
+      const buttonText = `${amount}🪙→${formatNumber(starsToReceive)}⭐`;
       console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: buy_tg_stars_${amount}`);
       buyButtons.push(Markup.button.callback(buttonText, `buy_tg_stars_${amount}`));
     }
@@ -858,7 +923,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
     if (starsBalance >= amount) {
       const baseCoinsToReceive = amount * starsToMagnumRate;
       const coinsToReceive = calculateAmountWithCommission(baseCoinsToReceive);
-      const buttonText = `${amount}⭐→${coinsToReceive.toFixed(2)}🪙`;
+      const buttonText = `${amount}⭐→${formatNumber(coinsToReceive)}🪙`;
       console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: sell_tg_stars_${amount}`);
       sellButtons.push(Markup.button.callback(buttonText, `sell_tg_stars_${amount}`));
     }
@@ -2921,12 +2986,12 @@ async function handleQuickBuy(ctx, amount) {
   invalidateBotStatsCache();
   
   // Показываем уведомление
-  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${formatNumber(commission)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
   const notificationText = `✅ Обмен выполнен успешно!\n\n` +
                           `💰 Потрачено: ${amount}🪙\n` +
-                          `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
+                          `⭐ Получено: ${formatNumber(starsToReceive)}⭐` +
                           `${commissionText}\n` +
-                          `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
+                          `📊 Курс: 1🪙 = ${formatNumber(magnumToStarsRate)}⭐`;
   await ctx.answerCbQuery(notificationText, { show_alert: true });
   
   // Обновляем интерфейс
@@ -2983,12 +3048,12 @@ async function handleQuickSell(ctx, amount) {
   invalidateBotStatsCache();
   
   // Показываем уведомление
-  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${formatNumber(commission)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
   const notificationText = `✅ Обмен выполнен успешно!\n\n` +
                           `⭐ Потрачено: ${amount}⭐\n` +
-                          `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
+                          `💰 Получено: ${formatNumber(coinsToReceive)}🪙` +
                           `${commissionText}\n` +
-                          `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
+                          `📊 Курс: 1⭐ = ${formatNumber(starsToMagnumRate)}🪙`;
   await ctx.answerCbQuery(notificationText, { show_alert: true });
   
   // Обновляем интерфейс
@@ -3046,12 +3111,12 @@ bot.action('buy_tg_stars', async (ctx) => {
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   
-  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${(100 * magnumToStarsRate * (EXCHANGE_COMMISSION / 100)).toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${formatNumber(100 * magnumToStarsRate * (EXCHANGE_COMMISSION / 100))}⭐ (${EXCHANGE_COMMISSION}%)` : '';
   const notificationText = `✅ Обмен выполнен успешно!\n\n` +
                           `💰 Потрачено: 100🪙\n` +
-                          `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
+                          `⭐ Получено: ${formatNumber(starsToReceive)}⭐` +
                           `${commissionText}\n` +
-                          `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
+                          `📊 Курс: 1🪙 = ${formatNumber(magnumToStarsRate)}⭐`;
   await ctx.answerCbQuery(notificationText, { show_alert: true });
   
   console.log(`🔘 buy_tg_stars: Обмен завершен, обновляем интерфейс`);
@@ -4929,12 +4994,12 @@ bot.on('text', async (ctx) => {
     invalidateUserCache(ctx.from.id);
     invalidateBotStatsCache();
     
-    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
+    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${formatNumber(commission)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
     const notificationText = `✅ Обмен выполнен успешно!\n\n` +
                             `💰 Потрачено: ${amount}🪙\n` +
-                            `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
+                            `⭐ Получено: ${formatNumber(starsToReceive)}⭐` +
                             `${commissionText}\n` +
-                            `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
+                            `📊 Курс: 1🪙 = ${formatNumber(magnumToStarsRate)}⭐`;
     
     // Отправляем уведомление через callback query
     try {
@@ -5009,12 +5074,12 @@ bot.on('text', async (ctx) => {
     invalidateUserCache(ctx.from.id);
     invalidateBotStatsCache();
     
-    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
+    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${formatNumber(commission)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
     const notificationText = `✅ Обмен выполнен успешно!\n\n` +
                             `⭐ Потрачено: ${amount}⭐\n` +
-                            `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
+                            `💰 Получено: ${formatNumber(coinsToReceive)}🪙` +
                             `${commissionText}\n` +
-                            `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
+                            `📊 Курс: 1⭐ = ${formatNumber(starsToMagnumRate)}🪙`;
     
     // Отправляем уведомление через callback query
     try {
@@ -5551,8 +5616,8 @@ bot.action('admin_panel', async (ctx) => {
     [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
     [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
     [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('💰 Комиссия', 'admin_commission')],
-    [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('🗄️ Сброс БД', 'admin_reset_db')],
+    [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]));
 });
 
@@ -5567,8 +5632,8 @@ bot.action('admin_cancel', async (ctx) => {
       [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
       [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
       [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('💰 Комиссия', 'admin_commission')],
-      [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('🗄️ Сброс БД', 'admin_reset_db')],
+      [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]),
     false
   );
@@ -5872,6 +5937,93 @@ bot.action('admin_reset_reserve', async (ctx) => {
       [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
     ]));
   }, 1000);
+});
+
+// Сброс базы данных
+bot.action('admin_reset_db', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+
+  // Показываем предупреждение
+  await ctx.answerCbQuery('⚠️ ВНИМАНИЕ! Это действие удалит ВСЕ данные из базы данных!\n\nНажмите кнопку еще раз для подтверждения.', { show_alert: true });
+
+  // Устанавливаем состояние для подтверждения
+  userStates.set(ctx.from.id, { type: 'admin_confirm_reset_db' });
+
+  setTimeout(async () => {
+    await sendMessageWithPhoto(ctx, 
+      '🗄️ **СБРОС БАЗЫ ДАННЫХ** 🗄️\n\n' +
+      '⚠️ **ВНИМАНИЕ!** Это действие:\n' +
+      '• Удалит ВСЕХ пользователей\n' +
+      '• Удалит ВСЕ промокоды\n' +
+      '• Удалит ВСЕ заявки на вывод\n' +
+      '• Удалит ВСЕ тикеты поддержки\n' +
+      '• Удалит ВСЕ проверки заданий\n' +
+      '• Удалит ВСЕ достижения\n' +
+      '• Сбросит резерв биржи\n\n' +
+      '🔒 **Структура коллекций останется!**\n\n' +
+      '❓ **Вы уверены, что хотите продолжить?**',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ ДА, сбросить базу данных', 'admin_confirm_reset_db')],
+        [Markup.button.callback('❌ НЕТ, отменить', 'admin_panel')]
+      ])
+    );
+  }, 1000);
+});
+
+// Подтверждение сброса базы данных
+bot.action('admin_confirm_reset_db', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+
+  await ctx.answerCbQuery('🗄️ Начинаем сброс базы данных...', { show_alert: true });
+
+  try {
+    const result = await resetDatabase();
+    
+    if (result.success) {
+      await ctx.answerCbQuery(`✅ База данных успешно сброшена!\n\nУдалено ${result.deletedCount} записей`, { show_alert: true });
+      
+      setTimeout(async () => {
+        await sendMessageWithPhoto(ctx, 
+          '🗄️ **СБРОС БАЗЫ ДАННЫХ ЗАВЕРШЕН** 🗄️\n\n' +
+          `✅ Успешно удалено: **${result.deletedCount}** записей\n\n` +
+          '📋 **Что было очищено:**\n' +
+          '• 👥 Все пользователи\n' +
+          '• 🎫 Все промокоды\n' +
+          '• 💸 Все заявки на вывод\n' +
+          '• 🎫 Все тикеты поддержки\n' +
+          '• 📋 Все проверки заданий\n' +
+          '• 🏆 Все достижения\n' +
+          '• 🏦 Резерв биржи (восстановлен)\n\n' +
+          '🔄 **Бот готов к работе с чистой базой данных!**',
+          Markup.inlineKeyboard([
+            [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+          ])
+        );
+      }, 1000);
+    } else {
+      await ctx.answerCbQuery(`❌ Ошибка сброса базы данных: ${result.error}`, { show_alert: true });
+      
+      setTimeout(async () => {
+        await sendMessageWithPhoto(ctx, 
+          '❌ **ОШИБКА СБРОСА БАЗЫ ДАННЫХ** ❌\n\n' +
+          `🔍 **Причина:** ${result.error}\n\n` +
+          '💡 **Рекомендации:**\n' +
+          '• Проверьте подключение к MongoDB\n' +
+          '• Убедитесь в правах доступа\n' +
+          '• Попробуйте позже',
+          Markup.inlineKeyboard([
+            [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+          ])
+        );
+      }, 1000);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка в обработчике сброса БД:', error);
+    await ctx.answerCbQuery('❌ Произошла ошибка при сбросе базы данных', { show_alert: true });
+  }
+
+  // Очищаем состояние
+  userStates.delete(ctx.from.id);
 });
 
 bot.action('admin_faq', async (ctx) => {
@@ -6260,12 +6412,12 @@ bot.action('sell_tg_stars', async (ctx) => {
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   
-  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${(10 * starsToMagnumRate * (EXCHANGE_COMMISSION / 100)).toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${formatNumber(10 * starsToMagnumRate * (EXCHANGE_COMMISSION / 100))}🪙 (${EXCHANGE_COMMISSION}%)` : '';
   const notificationText = `✅ Обмен выполнен успешно!\n\n` +
                           `⭐ Потрачено: 10⭐\n` +
-                          `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
+                          `💰 Получено: ${formatNumber(coinsToReceive)}🪙` +
                           `${commissionText}\n` +
-                          `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
+                          `📊 Курс: 1⭐ = ${formatNumber(starsToMagnumRate)}🪙`;
   await ctx.answerCbQuery(notificationText, { show_alert: true });
   
   console.log(`🔘 sell_tg_stars: Обмен завершен, обновляем интерфейс`);
