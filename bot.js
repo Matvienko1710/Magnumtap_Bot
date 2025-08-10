@@ -492,6 +492,30 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   return buttons;
 }
 
+// Функция для обновления интерфейса обмена валют
+async function updateExchangeInterface(ctx, userId) {
+  const user = await getUser(userId, ctx);
+  const starsBalance = Math.round((user.stars || 0) * 100) / 100;
+  const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
+  
+  const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
+                      `💰 **Ваши балансы:**\n` +
+                      `🪙 ${magnumCoinsBalance} Magnum Coin\n` +
+                      `⭐ ${starsBalance} звёзд\n\n` +
+                      getExchangeRatesText();
+  
+  const buttons = getExchangeButtons(magnumCoinsBalance, starsBalance);
+  const keyboard = Markup.inlineKeyboard(buttons);
+  
+  await sendMessageWithPhoto(ctx, currencyText, keyboard);
+}
+
+// Функция для замены старых блоков обновления интерфейса
+function replaceOldExchangeInterface() {
+  // Эта функция будет использоваться для замены старых блоков кода
+  // на использование updateExchangeInterface
+}
+
 // Система статусов пользователей
 const USER_STATUSES = {
   'owner': { 
