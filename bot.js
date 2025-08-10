@@ -465,29 +465,53 @@ const USER_STATUSES = {
     color: '🛡️',
     priority: 3
   },
+  'veteran': { 
+    name: 'Ветеран', 
+    description: 'Долгосрочный активный участник сообщества', 
+    color: '🎖️',
+    priority: 4
+  },
+  'volunteer': { 
+    name: 'Волонтер', 
+    description: 'Помощник в поддержании проекта', 
+    color: '🤝',
+    priority: 5
+  },
+  'elite': { 
+    name: 'Элита', 
+    description: 'Эксклюзивный статус для избранных', 
+    color: '⭐',
+    priority: 6
+  },
+  'guardian': { 
+    name: 'Хранитель', 
+    description: 'Защитник и покровитель сообщества', 
+    color: '🛡️',
+    priority: 7
+  },
   'vip_gold': { 
     name: 'VIP Gold', 
     description: 'Премиум статус высшего уровня', 
     color: '💎',
-    priority: 4
+    priority: 8
   },
   'vip': { 
     name: 'VIP', 
     description: 'Премиум пользователь', 
     color: '💫',
-    priority: 5
+    priority: 9
   },
   'verified': { 
     name: 'Верифицированный', 
     description: 'Проверенный активный пользователь', 
     color: '✅',
-    priority: 6
+    priority: 10
   },
   'member': { 
     name: 'Участник', 
     description: 'Обычный участник сообщества', 
     color: '🎮',
-    priority: 7
+    priority: 11
   }
 };
 
@@ -2376,11 +2400,17 @@ bot.command('give', async (ctx) => {
         `• 🎵 Музыкант\n` +
         `• 🎬 Режиссёр\n\n` +
         `<b>Доступные статусы:</b>\n` +
-        `• 👑 Владелец\n` +
-        `• 🔥 Администратор\n` +
-        `• ⭐ Модератор\n` +
-        `• 💎 VIP\n` +
-        `• 🎯 Игрок`;
+        `• 👑 Владелец (owner)\n` +
+        `• ⚡ Администратор (admin)\n` +
+        `• 🛡️ Модератор (moderator)\n` +
+        `• 🎖️ Ветеран (veteran)\n` +
+        `• 🤝 Волонтер (volunteer)\n` +
+        `• ⭐ Элита (elite)\n` +
+        `• 🛡️ Хранитель (guardian)\n` +
+        `• 💎 VIP Gold (vip_gold)\n` +
+        `• 💫 VIP (vip)\n` +
+        `• ✅ Верифицированный (verified)\n` +
+        `• 🎮 Участник (member)`;
       
       return ctx.reply(helpText, { parse_mode: 'HTML' });
     }
@@ -2428,26 +2458,31 @@ bot.command('give', async (ctx) => {
       await ctx.reply(successText, { parse_mode: 'Markdown' });
       
     } else if (type === 'status') {
-      // Выдаем статус
-      const availableStatuses = [
-        '👑 Владелец', '🔥 Администратор', '⭐ Модератор', '💎 VIP', '🎯 Игрок'
-      ];
+      // Выдаем статус - используем ключи статусов
+      const statusKey = titleName.toLowerCase().replace(/[^a-z_]/g, '');
+      const availableStatusKeys = Object.keys(USER_STATUSES);
       
-      if (!availableStatuses.includes(titleName)) {
-        return ctx.reply(`❌ Неизвестный статус "${titleName}"\n\nДоступные статусы:\n${availableStatuses.map(s => `• ${s}`).join('\n')}`, { parse_mode: 'HTML' });
+      if (!availableStatusKeys.includes(statusKey)) {
+        const availableStatusesList = availableStatusKeys.map(key => {
+          const status = USER_STATUSES[key];
+          return `• ${status.color} ${status.name} (${key})`;
+        }).join('\n');
+        
+        return ctx.reply(`❌ Неизвестный статус "${titleName}"\n\nДоступные статусы:\n${availableStatusesList}`, { parse_mode: 'HTML' });
       }
       
       // Обновляем статус пользователя
       await users.updateOne(
         { id: userId },
-        { $set: { status: titleName } }
+        { $set: { status: statusKey } }
       );
       
       invalidateUserCache(userId);
       
+      const statusInfo = USER_STATUSES[statusKey];
       const successText = `✅ **Статус выдан!**\n\n` +
         `👤 **Пользователь:** ${user.username || userId}\n` +
-        `💫 **Статус:** ${titleName}\n` +
+        `💫 **Статус:** ${statusInfo.color} ${statusInfo.name}\n` +
         `👑 **Выдал:** ${ctx.from.first_name || 'Администратор'}\n\n` +
         `💡 Пользователь получил новый статус в боте!`;
       
