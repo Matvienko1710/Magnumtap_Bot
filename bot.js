@@ -2400,10 +2400,9 @@ async function getMainMenu(ctx, userId) {
   };
 }
 
-// Обработчик для покупки TG Stars - ПЕРЕМЕЩЕН В НАЧАЛО ДЛЯ ИСПРАВЛЕНИЯ
+// Обработчик для покупки TG Stars
 bot.action('buy_tg_stars', async (ctx) => {
-  console.log('🔘 buy_tg_stars: Обработчик вызван - ПЕРЕМЕЩЕН В НАЧАЛО');
-  await ctx.answerCbQuery('🔘 buy_tg_stars: Обработчик работает!', { show_alert: true });
+  console.log('🔘 buy_tg_stars: Обработчик вызван');
   
   const user = await getUser(ctx.from.id, ctx);
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
