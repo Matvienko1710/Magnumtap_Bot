@@ -448,6 +448,46 @@ const SHOP_ITEMS = {
 // Система комиссий обмена
 let EXCHANGE_COMMISSION = 0; // Комиссия в процентах (0 = без комиссии)
 
+// Функция для инициализации комиссии в БД
+async function initializeCommission() {
+  try {
+    const existingCommission = await reserve.findOne({ type: 'commission' });
+    if (!existingCommission) {
+      await reserve.insertOne({
+        type: 'commission',
+        value: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      console.log('✅ Комиссия инициализирована в БД: 0%');
+    } else {
+      EXCHANGE_COMMISSION = existingCommission.value;
+      console.log(`✅ Комиссия загружена из БД: ${EXCHANGE_COMMISSION}%`);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка инициализации комиссии:', error);
+  }
+}
+
+// Функция для сохранения комиссии в БД
+async function saveCommissionToDB() {
+  try {
+    await reserve.updateOne(
+      { type: 'commission' },
+      {
+        $set: {
+          value: EXCHANGE_COMMISSION,
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+    console.log(`💾 Комиссия сохранена в БД: ${EXCHANGE_COMMISSION}%`);
+  } catch (error) {
+    console.error('❌ Ошибка сохранения комиссии в БД:', error);
+  }
+}
+
 // Лимиты обмена
 const EXCHANGE_LIMITS = {
   MIN_MAGNUM_COINS: 100, // Минимум Magnum Coin для обмена
@@ -1454,11 +1494,13 @@ async function connectDB() {
   
   console.log('📋 Коллекции инициализированы');
   
-  // Инициализируем резерв
+  // Инициализируем резерв и комиссию
   await initializeReserve();
+  await initializeCommission();
   
   console.log('🎯 Система вывода готова к работе');
   console.log('🏦 Резерв биржи инициализирован');
+  console.log('💰 Комиссия обмена инициализирована');
 }
 
 function now() { return Math.floor(Date.now() / 1000); }
@@ -4406,6 +4448,38 @@ bot.on('text', async (ctx) => {
     return;
   }
   
+  if (userState && userState.type === 'admin_view_referrals') {
+    console.log('👥 Обрабатываем просмотр рефералов пользователя');
+    const userId = text.trim();
+    
+    if (!userId || isNaN(userId)) {
+      return ctx.reply('❌ Неверный ID пользователя! Введите корректный числовой ID.');
+    }
+    
+    try {
+      const refs = await users.find({ invitedBy: userId }).toArray();
+      if (!refs.length) {
+        await ctx.reply(`👥 У пользователя ${userId} нет рефералов.`);
+      } else {
+        let msg = `👥 **Рефералы пользователя ${userId}:**\n\n`;
+        refs.forEach((u, i) => { 
+          msg += `${i + 1}. ID: ${u.id}\n`;
+          if (u.username) msg += `   @${u.username}\n`;
+          msg += `   Звёзд: ${u.stars || 0}\n`;
+          msg += `   Magnum Coin: ${u.magnumCoins || 0}\n\n`;
+        });
+        msg += `📊 **Всего рефералов:** ${refs.length}`;
+        await ctx.reply(msg);
+      }
+    } catch (error) {
+      console.error('❌ Ошибка при поиске рефералов:', error);
+      await ctx.reply('❌ Произошла ошибка при поиске рефералов.');
+    }
+    
+    userStates.delete(ctx.from.id);
+    return;
+  }
+  
   if (userState && userState.type === 'admin_change_commission') {
     console.log('💰 Обрабатываем изменение комиссии');
     const newCommission = parseFloat(text);
@@ -4414,6 +4488,7 @@ bot.on('text', async (ctx) => {
     }
     
     EXCHANGE_COMMISSION = newCommission;
+    await saveCommissionToDB(); // Сохраняем комиссию в БД
     await ctx.reply(`✅ Комиссия изменена на ${newCommission}%`);
     
     // Возвращаемся к панели комиссии
@@ -5456,6 +5531,7 @@ bot.action('admin_reset_commission', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
   
   EXCHANGE_COMMISSION = 0;
+  await saveCommissionToDB(); // Сохраняем комиссию в БД
   await ctx.answerCbQuery('✅ Комиссия сброшена до 0%', { show_alert: true });
   
   // Возвращаемся к панели комиссии
@@ -5722,7 +5798,8 @@ bot.action('admin_stars', async (ctx) => {
 // Рефералы пользователя
 bot.action('admin_refs', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
-  await adminForceReply(ctx, '👥 Введите ID пользователя для просмотра его рефералов:');
+  userStates.set(ctx.from.id, { type: 'admin_view_referrals' });
+  await adminForceReply(ctx, '👥 **Просмотр рефералов пользователя**\n\nВведите ID пользователя для просмотра его рефералов:\n\n💡 Примеры:\n• 123456789 - просмотр рефералов пользователя с ID 123456789\n• 987654321 - просмотр рефералов пользователя с ID 987654321\n\n⚠️ Введите только числовой ID пользователя');
 });
 
 // Добавляем управление титулами в админ-панель
