@@ -5133,7 +5133,8 @@ bot.action('buy_ton', async (ctx) => {
 });
 
 bot.action('buy_tg_stars', async (ctx) => {
-  console.log('🔘 buy_tg_stars: Обработчик вызван');
+  console.log('🔘 buy_tg_stars: Обработчик вызван - ТЕСТ');
+  await ctx.answerCbQuery('🔘 buy_tg_stars: Обработчик работает!', { show_alert: true });
   
   const user = await getUser(ctx.from.id, ctx);
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
