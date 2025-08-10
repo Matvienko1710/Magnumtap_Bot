@@ -841,7 +841,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
     if (magnumCoinsBalance >= amount) {
       const baseStarsToReceive = amount * magnumToStarsRate;
       const starsToReceive = calculateAmountWithCommission(baseStarsToReceive);
-      const buttonText = `⭐ ${amount}🪙→${starsToReceive.toFixed(2)}⭐`;
+      const buttonText = `${amount}🪙→${starsToReceive.toFixed(2)}⭐`;
       console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: buy_tg_stars_${amount}`);
       buyButtons.push(Markup.button.callback(buttonText, `buy_tg_stars_${amount}`));
     }
@@ -858,7 +858,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
     if (starsBalance >= amount) {
       const baseCoinsToReceive = amount * starsToMagnumRate;
       const coinsToReceive = calculateAmountWithCommission(baseCoinsToReceive);
-      const buttonText = `🪙 ${amount}⭐→${coinsToReceive.toFixed(2)}🪙`;
+      const buttonText = `${amount}⭐→${coinsToReceive.toFixed(2)}🪙`;
       console.log(`🔘 getExchangeButtons: Создаем кнопку быстрого обмена "${buttonText}" с callback_data: sell_tg_stars_${amount}`);
       sellButtons.push(Markup.button.callback(buttonText, `sell_tg_stars_${amount}`));
     }
