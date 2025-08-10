@@ -452,7 +452,7 @@ let EXCHANGE_COMMISSION = 0; // Комиссия в процентах (0 = бе
 const EXCHANGE_LIMITS = {
   MIN_MAGNUM_COINS: 100, // Минимум Magnum Coin для обмена
   MAX_MAGNUM_COINS: 10000, // Максимум Magnum Coin за одну операцию
-  MIN_STARS: 10, // Минимум звёзд для обмена
+  MIN_STARS: 0.01, // Минимум звёзд для обмена
   MAX_STARS: 1000 // Максимум звёзд за одну операцию
 };
 
@@ -694,9 +694,11 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   const magnumToStarsRate = RESERVE_STARS / RESERVE_MAGNUM_COINS;
   const starsToMagnumRate = RESERVE_MAGNUM_COINS / RESERVE_STARS;
   
-  // Применяем комиссию к курсам
-  const magnumToStarsWithCommission = magnumToStarsRate * (1 - EXCHANGE_COMMISSION / 100);
-  const starsToMagnumWithCommission = starsToMagnumRate * (1 - EXCHANGE_COMMISSION / 100);
+  // Рассчитываем курсы с учетом комиссии
+  const baseMagnumToStars = EXCHANGE_LIMITS.MIN_MAGNUM_COINS * magnumToStarsRate;
+  const baseStarsToMagnum = EXCHANGE_LIMITS.MIN_STARS * starsToMagnumRate;
+  const magnumToStarsWithCommission = calculateAmountWithCommission(baseMagnumToStars);
+  const starsToMagnumWithCommission = calculateAmountWithCommission(baseStarsToMagnum);
 
   // Кнопка покупки звёзд за Magnum Coin
   if (magnumCoinsBalance >= EXCHANGE_LIMITS.MIN_MAGNUM_COINS) {
