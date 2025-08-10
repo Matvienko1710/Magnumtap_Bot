@@ -560,6 +560,53 @@ async function loadReserveFromDB() {
   }
 }
 
+// Функция для сброса базы данных (очистка всех данных, но сохранение структуры)
+async function resetDatabase() {
+  try {
+    console.log('🗄️ Начинаем сброс базы данных...');
+    
+    // Очищаем все коллекции, но оставляем структуру
+    const collections = [
+      { name: 'users', description: 'Пользователи' },
+      { name: 'promoCodes', description: 'Промокоды' },
+      { name: 'withdrawalRequests', description: 'Заявки на вывод' },
+      { name: 'supportTickets', description: 'Тикеты поддержки' },
+      { name: 'taskChecks', description: 'Проверки заданий' },
+      { name: 'achievements', description: 'Достижения' },
+      { name: 'reserve', description: 'Резерв биржи' }
+    ];
+    
+    let deletedCount = 0;
+    
+    for (const collection of collections) {
+      try {
+        const dbCollection = db.collection(collection.name);
+        const result = await dbCollection.deleteMany({});
+        console.log(`✅ ${collection.description}: удалено ${result.deletedCount} записей`);
+        deletedCount += result.deletedCount;
+      } catch (error) {
+        console.error(`❌ Ошибка очистки ${collection.description}:`, error);
+      }
+    }
+    
+    // Сбрасываем кеши
+    userCache.clear();
+    botStatsCache = null;
+    botStatsCacheTime = 0;
+    
+    // Инициализируем резерв заново
+    await initializeReserve();
+    await initializeCommission();
+    
+    console.log(`🗄️ Сброс базы данных завершен! Удалено ${deletedCount} записей`);
+    return { success: true, deletedCount };
+    
+  } catch (error) {
+    console.error('❌ Ошибка сброса базы данных:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // Улучшенная функция для расчета курса обмена на основе резерва
 function calculateExchangeRate(fromCurrency, toCurrency, amount) {
   try {
@@ -5569,8 +5616,8 @@ bot.action('admin_panel', async (ctx) => {
     [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
     [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
     [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('💰 Комиссия', 'admin_commission')],
-    [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('🗄️ Сброс БД', 'admin_reset_db')],
+    [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]));
 });
 
@@ -5585,8 +5632,8 @@ bot.action('admin_cancel', async (ctx) => {
       [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
       [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
       [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('💰 Комиссия', 'admin_commission')],
-      [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      [Markup.button.callback('🏦 Резерв', 'admin_reserve'), Markup.button.callback('🗄️ Сброс БД', 'admin_reset_db')],
+      [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]),
     false
   );
@@ -5890,6 +5937,93 @@ bot.action('admin_reset_reserve', async (ctx) => {
       [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
     ]));
   }, 1000);
+});
+
+// Сброс базы данных
+bot.action('admin_reset_db', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+
+  // Показываем предупреждение
+  await ctx.answerCbQuery('⚠️ ВНИМАНИЕ! Это действие удалит ВСЕ данные из базы данных!\n\nНажмите кнопку еще раз для подтверждения.', { show_alert: true });
+
+  // Устанавливаем состояние для подтверждения
+  userStates.set(ctx.from.id, { type: 'admin_confirm_reset_db' });
+
+  setTimeout(async () => {
+    await sendMessageWithPhoto(ctx, 
+      '🗄️ **СБРОС БАЗЫ ДАННЫХ** 🗄️\n\n' +
+      '⚠️ **ВНИМАНИЕ!** Это действие:\n' +
+      '• Удалит ВСЕХ пользователей\n' +
+      '• Удалит ВСЕ промокоды\n' +
+      '• Удалит ВСЕ заявки на вывод\n' +
+      '• Удалит ВСЕ тикеты поддержки\n' +
+      '• Удалит ВСЕ проверки заданий\n' +
+      '• Удалит ВСЕ достижения\n' +
+      '• Сбросит резерв биржи\n\n' +
+      '🔒 **Структура коллекций останется!**\n\n' +
+      '❓ **Вы уверены, что хотите продолжить?**',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ ДА, сбросить базу данных', 'admin_confirm_reset_db')],
+        [Markup.button.callback('❌ НЕТ, отменить', 'admin_panel')]
+      ])
+    );
+  }, 1000);
+});
+
+// Подтверждение сброса базы данных
+bot.action('admin_confirm_reset_db', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+
+  await ctx.answerCbQuery('🗄️ Начинаем сброс базы данных...', { show_alert: true });
+
+  try {
+    const result = await resetDatabase();
+    
+    if (result.success) {
+      await ctx.answerCbQuery(`✅ База данных успешно сброшена!\n\nУдалено ${result.deletedCount} записей`, { show_alert: true });
+      
+      setTimeout(async () => {
+        await sendMessageWithPhoto(ctx, 
+          '🗄️ **СБРОС БАЗЫ ДАННЫХ ЗАВЕРШЕН** 🗄️\n\n' +
+          `✅ Успешно удалено: **${result.deletedCount}** записей\n\n` +
+          '📋 **Что было очищено:**\n' +
+          '• 👥 Все пользователи\n' +
+          '• 🎫 Все промокоды\n' +
+          '• 💸 Все заявки на вывод\n' +
+          '• 🎫 Все тикеты поддержки\n' +
+          '• 📋 Все проверки заданий\n' +
+          '• 🏆 Все достижения\n' +
+          '• 🏦 Резерв биржи (восстановлен)\n\n' +
+          '🔄 **Бот готов к работе с чистой базой данных!**',
+          Markup.inlineKeyboard([
+            [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+          ])
+        );
+      }, 1000);
+    } else {
+      await ctx.answerCbQuery(`❌ Ошибка сброса базы данных: ${result.error}`, { show_alert: true });
+      
+      setTimeout(async () => {
+        await sendMessageWithPhoto(ctx, 
+          '❌ **ОШИБКА СБРОСА БАЗЫ ДАННЫХ** ❌\n\n' +
+          `🔍 **Причина:** ${result.error}\n\n` +
+          '💡 **Рекомендации:**\n' +
+          '• Проверьте подключение к MongoDB\n' +
+          '• Убедитесь в правах доступа\n' +
+          '• Попробуйте позже',
+          Markup.inlineKeyboard([
+            [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+          ])
+        );
+      }, 1000);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка в обработчике сброса БД:', error);
+    await ctx.answerCbQuery('❌ Произошла ошибка при сбросе базы данных', { show_alert: true });
+  }
+
+  // Очищаем состояние
+  userStates.delete(ctx.from.id);
 });
 
 bot.action('admin_faq', async (ctx) => {
