@@ -2567,11 +2567,11 @@ async function getDetailedProfile(userId, ctx) {
   const nextRankInfo = getNextRankInfo(user);
   
   // КРИТИЧЕСКАЯ ПРОВЕРКА: Пересчитываем с самыми свежими данными
-  console.log(`🔥 ПРОВЕРКА РАНГА: Пользователь ${userId} имеет ${user.magnumCoins} MC`);
-  console.log(`🔥 ТЕКУЩИЙ РАНГ: ${rank.name} (требует ${rank.requirement} MC)`);
+  console.log(`🔥 ПРОВЕРКА РАНГА: Пользователь ${userId} имеет ${user.stars}⭐`);
+  console.log(`🔥 ТЕКУЩИЙ РАНГ: ${rank.name} (требует ${rank.requirement}⭐)`);
   if (nextRankInfo.next) {
-    console.log(`🔥 СЛЕДУЮЩИЙ РАНГ: ${nextRankInfo.next.name} (требует ${nextRankInfo.next.requirement} MC)`);
-    console.log(`🔥 ПРОГРЕСС: ${nextRankInfo.progress}%, до следующего: ${nextRankInfo.starsToNext} MC`);
+    console.log(`🔥 СЛЕДУЮЩИЙ РАНГ: ${nextRankInfo.next.name} (требует ${nextRankInfo.next.requirement}⭐)`);
+    console.log(`🔥 ПРОГРЕСС: ${nextRankInfo.progress}%, до следующего: ${nextRankInfo.starsToNext}⭐`);
   }
   const status = getUserStatus(user);
   
@@ -2584,7 +2584,7 @@ async function getDetailedProfile(userId, ctx) {
     const progressBar = createProgressBar(nextRankInfo.progress, 100) + ` ${nextRankInfo.progress}%`;
     progressText = `📊 **Прогресс уровня:**  
 ${progressBar}
-До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} 🪙 Magnum Coin`;
+До ${nextRankInfo.next.name}: ${nextRankInfo.starsToNext} ⭐ звезд`;
   } else {
     progressText = '🏆 **Максимальный уровень достигнут!**';
   }
