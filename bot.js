@@ -627,6 +627,35 @@ function calculateMinerReward() {
   }
 }
 
+// Функция для расчета награды за фарм на основе курса обмена
+function calculateFarmReward() {
+  try {
+    // Базовая награда за фарм (в Magnum Coin)
+    const baseReward = 1;
+    
+    // Рассчитываем курс обмена
+    const magnumToStarsRate = RESERVE_STARS / RESERVE_MAGNUM_COINS;
+    
+    // Если курс высокий (много звёзд за Magnum Coin), то награда увеличивается
+    // Если курс низкий (мало звёзд за Magnum Coin), то награда уменьшается
+    const rateMultiplier = Math.max(0.5, Math.min(2.0, magnumToStarsRate * 100));
+    
+    const dynamicReward = baseReward * rateMultiplier;
+    
+    // Округляем до 2 знаков после запятой
+    const roundedReward = Math.round(dynamicReward * 100) / 100;
+    
+    // Минимальная награда 0.5, максимальная 2.0
+    const minReward = 0.5;
+    const maxReward = 2.0;
+    
+    return Math.max(minReward, Math.min(maxReward, roundedReward));
+  } catch (error) {
+    console.error('❌ Ошибка расчета награды за фарм:', error);
+    return 1; // Возвращаем базовую награду при ошибке
+  }
+}
+
 // Улучшенная функция для обновления резерва после обмена
 async function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount, commissionAmount = 0) {
   try {
@@ -697,6 +726,8 @@ async function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount, com
 function getReserveManagementText() {
   const minerReward = calculateMinerReward();
   const dailyMinerReward = minerReward * 24;
+  const farmReward = calculateFarmReward();
+  const bonusReward = farmReward * 3;
   
   return `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ БИРЖИ** 🏦\n\n` +
          `📊 **Текущий резерв биржи:**\n` +
@@ -705,6 +736,10 @@ function getReserveManagementText() {
          `📈 **Текущие курсы обмена:**\n` +
          `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
          `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+         `🌾 **Награды за активность:**\n` +
+         `• Фарм: ${farmReward.toFixed(2)}🪙 за клик\n` +
+         `• Бонус: ${bonusReward.toFixed(2)}🪙 в день\n` +
+         `• Зависят от курса обмена\n\n` +
          `⛏️ **Доходность майнера:**\n` +
          `• ${minerReward.toFixed(4)}⭐ в час (${dailyMinerReward.toFixed(4)}⭐ в день)\n` +
          `• Окупаемость: ~45 дней\n\n` +
@@ -716,6 +751,7 @@ function getReserveManagementText() {
          `• Курсы обмена зависят от баланса резерва\n` +
          `• При обмене резерв автоматически обновляется\n` +
          `• Комиссия с пользователей пополняет резерв\n` +
+         `• Награды за фарм зависят от курса\n` +
          `• Доходность майнера зависит от курса\n` +
          `• Больше резерва = лучше курсы для пользователей`;
 }
@@ -740,9 +776,11 @@ function getExchangeRatesText() {
     const magnumToStarsWithCommission = calculateAmountWithCommission(baseMagnumToStars);
     const starsToMagnumWithCommission = calculateAmountWithCommission(baseStarsToMagnum);
     
-    // Рассчитываем доходность майнера
+    // Рассчитываем доходность майнера и награды за фарм
     const minerReward = calculateMinerReward();
     const dailyMinerReward = minerReward * 24;
+    const farmReward = calculateFarmReward();
+    const bonusReward = farmReward * 3;
     
                     return `🔄 **Доступные курсы:**\n\n` +
                        `⭐ **Telegram Stars:**\n` +
@@ -751,6 +789,10 @@ function getExchangeRatesText() {
                        `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
                        `• Максимум за операцию: ${EXCHANGE_LIMITS.MAX_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MAX_STARS}⭐\n` +
                        `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
+                       `🌾 **Награды за активность:**\n` +
+                       `• Фарм: ${farmReward.toFixed(2)}🪙 за клик\n` +
+                       `• Бонус: ${bonusReward.toFixed(2)}🪙 в день\n` +
+                       `• Зависят от курса обмена\n\n` +
                        `⛏️ **Доходность майнера:**\n` +
                        `• ${minerReward.toFixed(4)}⭐ в час (${dailyMinerReward.toFixed(4)}⭐ в день)\n` +
                        `• Окупаемость: ~45 дней\n\n` +
@@ -2483,6 +2525,12 @@ ${progressBar}
   // Получаем общую статистику бота
   const botStats = await getBotStatistics();
   
+  // Получаем ссылки на чат и канал
+  const channelLink = REQUIRED_CHANNEL ? `https://t.me/${REQUIRED_CHANNEL.replace('@', '')}` : 'https://t.me/magnumtap';
+  const chatLink = process.env.PROMO_NOTIFICATIONS_CHAT && process.env.PROMO_NOTIFICATIONS_CHAT !== 'disabled' 
+    ? `https://t.me/${process.env.PROMO_NOTIFICATIONS_CHAT.replace('@', '')}` 
+    : 'https://t.me/magnumtapchat';
+  
   return `👑 **Профиль игрока MagnumTap** 👑
 
 👋 **Приветствую, ${userInfo}!**
@@ -2502,17 +2550,28 @@ ${progressText}
 [💎 ${botStats.totalStars}] звёзд заработано  
 [💸 ${botStats.totalWithdrawn}] звёзд выведено  
 [🛒 ${botStats.totalStarsSpent}] звёзд потрачено  
-[💰 ${botStats.totalMagnumCoinsSpent}] Magnum Coin потрачено`;
+[💰 ${botStats.totalMagnumCoinsSpent}] Magnum Coin потрачено
+
+🔗 **Полезные ссылки:**
+[💬 Наш чат](${chatLink}) | [📢 Наш канал](${channelLink})`;
 }
 
 function getWelcomeText(magnumCoins, stars, invited) {
+  // Получаем ссылки на чат и канал
+  const channelLink = REQUIRED_CHANNEL ? `https://t.me/${REQUIRED_CHANNEL.replace('@', '')}` : 'https://t.me/magnumtap';
+  const chatLink = process.env.PROMO_NOTIFICATIONS_CHAT && process.env.PROMO_NOTIFICATIONS_CHAT !== 'disabled' 
+    ? `https://t.me/${process.env.PROMO_NOTIFICATIONS_CHAT.replace('@', '')}` 
+    : 'https://t.me/magnumtapchat';
+  
   return (
     "👋 Добро пожаловать в *MagnumTapBot*! 🌟\n\n" +
     "Ты в игре, где можно зарабатывать Magnum Coin 🪙, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n" +
     "[🪙 " + magnumCoins + "] Magnum Coin\n" +
     "[💎 " + stars + "] звёзд\n" +
     "[👥 " + invited + "] друзей приглашено\n\n" +
-    "Выбери действие и стань звездой MagnumTapBot! 🌟"
+    "Выбери действие и стань звездой MagnumTapBot! 🌟\n\n" +
+    "🔗 **Полезные ссылки:**\n" +
+    "[💬 Наш чат](" + chatLink + ") | [📢 Наш канал](" + channelLink + ")"
   );
 }
 
@@ -6783,7 +6842,7 @@ bot.action('farm', async (ctx) => {
   const canFarm = !farmCooldownEnabled || !user.lastFarm || (now() - user.lastFarm) >= farmCooldownSeconds;
   
   if (canFarm) {
-    const baseReward = 1;
+    const baseReward = calculateFarmReward(); // Используем динамическую награду
     const boostedReward = applyBoostMultiplier(baseReward, user, 'farm');
     
     await users.updateOne({ id: ctx.from.id }, { 
@@ -6849,7 +6908,7 @@ bot.action('bonus', async (ctx) => {
       dailyStreak = (user.dailyStreak || 0) + 1;
     }
     
-    const baseReward = 3;
+    const baseReward = calculateFarmReward() * 3; // Бонус в 3 раза больше фарма
     const boostedReward = applyBoostMultiplier(baseReward, user, 'bonus');
     
     await users.updateOne({ id: ctx.from.id }, { 
