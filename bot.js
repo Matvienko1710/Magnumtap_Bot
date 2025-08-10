@@ -2624,21 +2624,21 @@ ${progressBar}
 👋 **Приветствую, ${userInfo}!**
 
 **Статус:** [${status.color} ${status.name}]  
-[🪙 ${magnumCoinsBalance}] Magnum Coin  
-[💎 ${starsBalance}] звёзд  
-[👥 ${friends}] друзей приглашено  
+[🪙 ${formatLargeNumber(magnumCoinsBalance)}] Magnum Coin  
+[💎 ${formatLargeNumber(starsBalance)}] звёзд  
+[👥 ${formatLargeNumber(friends)}] друзей приглашено  
 **Уровень:** [${rank.color} ${rank.name}]  
 **Титул:** [${title}]${minerText}
 
 ${progressText}
 
 📊 **Статистика MagnumTap:**
-[👥 ${botStats.totalUsers}] пользователей в боте  
-[🪙 ${botStats.totalMagnumCoins}] Magnum Coin заработано  
-[💎 ${botStats.totalStars}] звёзд заработано  
-[💸 ${botStats.totalWithdrawn}] звёзд выведено  
-[🛒 ${botStats.totalStarsSpent}] звёзд потрачено  
-[💰 ${botStats.totalMagnumCoinsSpent}] Magnum Coin потрачено
+[👥 ${formatLargeNumber(botStats.totalUsers)}] пользователей в боте  
+[🪙 ${formatLargeNumber(botStats.totalMagnumCoins)}] Magnum Coin заработано  
+[💎 ${formatLargeNumber(botStats.totalStars)}] звёзд заработано  
+[💸 ${formatLargeNumber(botStats.totalWithdrawn)}] звёзд выведено  
+[🛒 ${formatLargeNumber(botStats.totalStarsSpent)}] звёзд потрачено  
+[💰 ${formatLargeNumber(botStats.totalMagnumCoinsSpent)}] Magnum Coin потрачено
 
 🔗 **Полезные ссылки:**
 [💬 Наш чат](${chatLink}) | [📢 Наш канал](${channelLink})`;
@@ -2654,9 +2654,9 @@ function getWelcomeText(magnumCoins, stars, invited) {
   return (
     "👋 Добро пожаловать в *MagnumTapBot*! 🌟\n\n" +
     "Ты в игре, где можно зарабатывать Magnum Coin 🪙, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n" +
-    "[🪙 " + magnumCoins + "] Magnum Coin\n" +
-    "[💎 " + stars + "] звёзд\n" +
-    "[👥 " + invited + "] друзей приглашено\n\n" +
+    "[🪙 " + formatLargeNumber(magnumCoins) + "] Magnum Coin\n" +
+    "[💎 " + formatLargeNumber(stars) + "] звёзд\n" +
+    "[👥 " + formatLargeNumber(invited) + "] друзей приглашено\n\n" +
     "Выбери действие и стань звездой MagnumTapBot! 🌟\n\n" +
     "🔗 **Полезные ссылки:**\n" +
     "[💬 Наш чат](" + chatLink + ") | [📢 Наш канал](" + channelLink + ")"
@@ -4810,16 +4810,16 @@ bot.on('text', async (ctx) => {
     
     RESERVE_MAGNUM_COINS += amount;
     await saveReserveToDB();
-    await ctx.reply(`✅ Добавлено ${amount.toFixed(2)} Magnum Coin в резерв. Новый баланс: ${RESERVE_MAGNUM_COINS.toFixed(2)}🪙`);
+    await ctx.reply(`✅ Добавлено ${formatLargeNumber(amount)} Magnum Coin в резерв. Новый баланс: ${formatLargeNumber(RESERVE_MAGNUM_COINS)}🪙`);
     
     setTimeout(async () => {
       const reserveText = `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ** 🏦\n\n` +
                          `📊 **Текущий баланс резерва:**\n` +
-                         `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-                         `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
+                         `🪙 ${formatLargeNumber(RESERVE_MAGNUM_COINS)} Magnum Coin\n` +
+                         `⭐ ${formatLargeNumber(RESERVE_STARS)} звёзд\n\n` +
                          `📈 **Текущие курсы обмена:**\n` +
-                         `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
-                         `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+                         `• 100🪙 = ${formatNumber(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS))}⭐\n` +
+                         `• 10⭐ = ${formatNumber(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS))}🪙\n\n` +
                          `💡 **Как работает резерв:**\n` +
                          `• Курсы обмена зависят от баланса резерва\n` +
                          `• При обмене резерв автоматически обновляется\n` +
@@ -4846,21 +4846,21 @@ bot.on('text', async (ctx) => {
     }
     
     if (amount > RESERVE_MAGNUM_COINS) {
-      return ctx.reply(`❌ Недостаточно Magnum Coin в резерве! Доступно: ${RESERVE_MAGNUM_COINS.toFixed(2)}🪙`);
+      return ctx.reply(`❌ Недостаточно Magnum Coin в резерве! Доступно: ${formatLargeNumber(RESERVE_MAGNUM_COINS)}🪙`);
     }
     
     RESERVE_MAGNUM_COINS -= amount;
     await saveReserveToDB();
-    await ctx.reply(`✅ Убрано ${amount.toFixed(2)} Magnum Coin из резерва. Новый баланс: ${RESERVE_MAGNUM_COINS.toFixed(2)}🪙`);
+    await ctx.reply(`✅ Убрано ${formatLargeNumber(amount)} Magnum Coin из резерва. Новый баланс: ${formatLargeNumber(RESERVE_MAGNUM_COINS)}🪙`);
     
     setTimeout(async () => {
       const reserveText = `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ** 🏦\n\n` +
                          `📊 **Текущий баланс резерва:**\n` +
-                         `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-                         `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
+                         `🪙 ${formatLargeNumber(RESERVE_MAGNUM_COINS)} Magnum Coin\n` +
+                         `⭐ ${formatLargeNumber(RESERVE_STARS)} звёзд\n\n` +
                          `📈 **Текущие курсы обмена:**\n` +
-                         `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
-                         `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+                         `• 100🪙 = ${formatNumber(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS))}⭐\n` +
+                         `• 10⭐ = ${formatNumber(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS))}🪙\n\n` +
                          `💡 **Как работает резерв:**\n` +
                          `• Курсы обмена зависят от баланса резерва\n` +
                          `• При обмене резерв автоматически обновляется\n` +
@@ -4888,16 +4888,16 @@ bot.on('text', async (ctx) => {
     
     RESERVE_STARS += amount;
     await saveReserveToDB();
-    await ctx.reply(`✅ Добавлено ${amount.toFixed(2)} звёзд в резерв. Новый баланс: ${RESERVE_STARS.toFixed(2)}⭐`);
+    await ctx.reply(`✅ Добавлено ${formatLargeNumber(amount)} звёзд в резерв. Новый баланс: ${formatLargeNumber(RESERVE_STARS)}⭐`);
     
     setTimeout(async () => {
       const reserveText = `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ** 🏦\n\n` +
                          `📊 **Текущий баланс резерва:**\n` +
-                         `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-                         `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
+                         `🪙 ${formatLargeNumber(RESERVE_MAGNUM_COINS)} Magnum Coin\n` +
+                         `⭐ ${formatLargeNumber(RESERVE_STARS)} звёзд\n\n` +
                          `📈 **Текущие курсы обмена:**\n` +
-                         `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
-                         `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+                         `• 100🪙 = ${formatNumber(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS))}⭐\n` +
+                         `• 10⭐ = ${formatNumber(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS))}🪙\n\n` +
                          `💡 **Как работает резерв:**\n` +
                          `• Курсы обмена зависят от баланса резерва\n` +
                          `• При обмене резерв автоматически обновляется\n` +
@@ -4924,12 +4924,12 @@ bot.on('text', async (ctx) => {
     }
     
     if (amount > RESERVE_STARS) {
-      return ctx.reply(`❌ Недостаточно звёзд в резерве! Доступно: ${RESERVE_STARS.toFixed(2)}⭐`);
+      return ctx.reply(`❌ Недостаточно звёзд в резерве! Доступно: ${formatLargeNumber(RESERVE_STARS)}⭐`);
     }
     
     RESERVE_STARS -= amount;
     await saveReserveToDB();
-    await ctx.reply(`✅ Убрано ${amount.toFixed(2)} звёзд из резерва. Новый баланс: ${RESERVE_STARS.toFixed(2)}⭐`);
+    await ctx.reply(`✅ Убрано ${formatLargeNumber(amount)} звёзд из резерва. Новый баланс: ${formatLargeNumber(RESERVE_STARS)}⭐`);
     
     setTimeout(async () => {
       const reserveText = getReserveManagementText();
@@ -4964,7 +4964,7 @@ bot.on('text', async (ctx) => {
     const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
     
     if (amount > magnumCoinsBalance) {
-      return ctx.reply(`❌ Недостаточно Magnum Coin! У вас: ${magnumCoinsBalance}🪙, нужно: ${amount}🪙`);
+      return ctx.reply(`❌ Недостаточно Magnum Coin! У вас: ${formatLargeNumber(magnumCoinsBalance)}🪙, нужно: ${formatLargeNumber(amount)}🪙`);
     }
     
     // Проверяем время последнего обмена
@@ -5005,7 +5005,7 @@ bot.on('text', async (ctx) => {
     
     const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${formatNumber(commission)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
     const notificationText = `✅ Обмен выполнен успешно!\n\n` +
-                            `💰 Потрачено: ${amount}🪙\n` +
+                            `💰 Потрачено: ${formatLargeNumber(amount)}🪙\n` +
                             `⭐ Получено: ${formatNumber(starsToReceive)}⭐` +
                             `${commissionText}\n` +
                             `📊 Курс: 1🪙 = ${formatNumber(magnumToStarsRate)}⭐`;
@@ -6263,8 +6263,8 @@ bot.action('exchange', async (ctx) => {
   
   const exchangeText = `📈 **БИРЖА MAGNUMTAP** 📈\n\n` +
                       `💰 **Ваши балансы:**\n` +
-                      `[🪙 ${magnumCoinsBalance}] Magnum Coin\n` +
-                      `[⭐ ${starsBalance}] звёзд\n\n` +
+                      `[🪙 ${formatLargeNumber(magnumCoinsBalance)}] Magnum Coin\n` +
+                      `[⭐ ${formatLargeNumber(starsBalance)}] звёзд\n\n` +
                       `🔄 **Доступные операции:**\n\n` +
                       `💎 **Обмен валют:**\n` +
                       `• [🪙 100] → [⭐ 10] Telegram Stars\n` +
@@ -6370,7 +6370,7 @@ bot.action('insufficient_funds', async (ctx) => {
   const user = await getUser(ctx.from.id, ctx);
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   
-  ctx.answerCbQuery(`❌ Недостаточно средств! У вас: ${magnumCoinsBalance}🪙, нужно: 100🪙\n\nЗарабатывайте Magnum Coin через фарм и бонусы!`, { show_alert: true });
+  ctx.answerCbQuery(`❌ Недостаточно средств! У вас: ${formatLargeNumber(magnumCoinsBalance)}🪙, нужно: 100🪙\n\nЗарабатывайте Magnum Coin через фарм и бонусы!`, { show_alert: true });
 });
 
 bot.action('sell_tg_stars', async (ctx) => {
@@ -6441,7 +6441,7 @@ bot.action('insufficient_stars', async (ctx) => {
   const user = await getUser(ctx.from.id, ctx);
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   
-  ctx.answerCbQuery(`❌ Недостаточно звёзд! У вас: ${starsBalance}⭐, нужно: 10⭐\n\nЗарабатывайте звёзды через задания и майнер!`, { show_alert: true });
+  ctx.answerCbQuery(`❌ Недостаточно звёзд! У вас: ${formatLargeNumber(starsBalance)}⭐, нужно: 10⭐\n\nЗарабатывайте звёзды через задания и майнер!`, { show_alert: true });
 });
 
 bot.action('create_p2p_offer', async (ctx) => {
