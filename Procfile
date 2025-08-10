@@ -1,1 +1,1 @@
-start: node bot.js
+start: node bot-optimized.js

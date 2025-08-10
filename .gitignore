@@ -1,1 +1,51 @@
+# Переменные окружения
 .env
+.env.local
+.env.production
+.env.development
+
+# Логи
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Временные файлы
+tmp/
+temp/
+.tmp/
+
+# Кеш
+.cache/
+.parcel-cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Базы данных
+*.db
+*.sqlite
+*.sqlite3
+
+# Тестовые файлы
+coverage/
+.nyc_output/
+
+# Сборка
+dist/
+build/
