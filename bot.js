@@ -51,7 +51,7 @@ if (!MONGODB_URI) throw new Error('Не задан MONGODB_URI!');
 
 const bot = new Telegraf(BOT_TOKEN);
 const mongo = new MongoClient(MONGODB_URI);
-let users, promocodes, taskChecks, withdrawalRequests;
+let users, promocodes, taskChecks, withdrawalRequests, reserve;
 
 // Состояния пользователей для обработки ввода
 const userStates = new Map();
@@ -448,9 +448,77 @@ const SHOP_ITEMS = {
 // Система комиссий обмена
 let EXCHANGE_COMMISSION = 0; // Комиссия в процентах (0 = без комиссии)
 
-// Баланс резерва проекта
+// Лимиты обмена
+const EXCHANGE_LIMITS = {
+  MIN_MAGNUM_COINS: 100, // Минимум Magnum Coin для обмена
+  MAX_MAGNUM_COINS: 10000, // Максимум Magnum Coin за одну операцию
+  MIN_STARS: 10, // Минимум звёзд для обмена
+  MAX_STARS: 1000 // Максимум звёзд за одну операцию
+};
+
+// Баланс резерва проекта (временные переменные для кеширования)
 let RESERVE_MAGNUM_COINS = 10000; // Начальный резерв Magnum Coin
 let RESERVE_STARS = 1000; // Начальный резерв звёзд
+
+// Функция для инициализации резерва в БД
+async function initializeReserve() {
+  try {
+    const existingReserve = await reserve.findOne({});
+    if (!existingReserve) {
+      await reserve.insertOne({
+        magnumCoins: 10000,
+        stars: 1000,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      console.log('✅ Резерв инициализирован в БД');
+    } else {
+      // Загружаем существующий резерв в память
+      RESERVE_MAGNUM_COINS = existingReserve.magnumCoins;
+      RESERVE_STARS = existingReserve.stars;
+      console.log(`✅ Резерв загружен из БД: ${RESERVE_MAGNUM_COINS}🪙, ${RESERVE_STARS}⭐`);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка инициализации резерва:', error);
+  }
+}
+
+// Функция для сохранения резерва в БД
+async function saveReserveToDB() {
+  try {
+    await reserve.updateOne(
+      {},
+      {
+        $set: {
+          magnumCoins: RESERVE_MAGNUM_COINS,
+          stars: RESERVE_STARS,
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+    console.log(`💾 Резерв сохранен в БД: ${RESERVE_MAGNUM_COINS}🪙, ${RESERVE_STARS}⭐`);
+  } catch (error) {
+    console.error('❌ Ошибка сохранения резерва в БД:', error);
+  }
+}
+
+// Функция для загрузки резерва из БД
+async function loadReserveFromDB() {
+  try {
+    const reserveData = await reserve.findOne({});
+    if (reserveData) {
+      RESERVE_MAGNUM_COINS = reserveData.magnumCoins;
+      RESERVE_STARS = reserveData.stars;
+      console.log(`📥 Резерв загружен из БД: ${RESERVE_MAGNUM_COINS}🪙, ${RESERVE_STARS}⭐`);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ Ошибка загрузки резерва из БД:', error);
+    return false;
+  }
+}
 
 // Улучшенная функция для расчета курса обмена на основе резерва
 function calculateExchangeRate(fromCurrency, toCurrency, amount) {
@@ -478,7 +546,7 @@ function calculateExchangeRate(fromCurrency, toCurrency, amount) {
 }
 
 // Улучшенная функция для обновления резерва после обмена
-function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount) {
+async function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount) {
   try {
     // Проверка входных данных
     if (fromAmount <= 0 || toAmount <= 0) {
@@ -518,6 +586,9 @@ function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount) {
       return false;
     }
     
+    // Сохраняем резерв в БД
+    await saveReserveToDB();
+    
     console.log(`✅ Резерв обновлен: ${RESERVE_MAGNUM_COINS.toFixed(2)}🪙, ${RESERVE_STARS.toFixed(2)}⭐`);
     return true;
   } catch (error) {
@@ -535,6 +606,10 @@ function getReserveManagementText() {
          `📈 **Текущие курсы обмена:**\n` +
          `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
          `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
+         `📊 **Лимиты обмена:**\n` +
+         `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙 / ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
+         `• Максимум за операцию: ${EXCHANGE_LIMITS.MAX_MAGNUM_COINS}🪙 / ${EXCHANGE_LIMITS.MAX_STARS}⭐\n` +
+         `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
          `💡 **Как работает резерв:**\n` +
          `• Курсы обмена зависят от баланса резерва\n` +
          `• При обмене резерв автоматически обновляется\n` +
@@ -559,18 +634,19 @@ function getExchangeRatesText() {
     const magnumToStarsWithCommission = magnumToStarsRate * (1 - EXCHANGE_COMMISSION / 100);
     const starsToMagnumWithCommission = starsToMagnumRate * (1 - EXCHANGE_COMMISSION / 100);
     
-    return `🔄 **Доступные курсы:**\n\n` +
-           `⭐ **Telegram Stars:**\n` +
-           `• Курс: 100🪙 = ${(100 * magnumToStarsWithCommission).toFixed(2)}⭐ TG Stars\n` +
-           `• Обратный курс: 10⭐ = ${(10 * starsToMagnumWithCommission).toFixed(2)}🪙\n` +
-           `• Минимум: 100🪙 или 10⭐\n` +
-           `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
-           `💵 **USDT TRC-20:**\n` +
-           `• Курс: скоро\n` +
-           `• Статус: в разработке\n\n` +
-           `💎 **TON Coin:**\n` +
-           `• Курс: скоро\n` +
-           `• Статус: в разработке`;
+                    return `🔄 **Доступные курсы:**\n\n` +
+                       `⭐ **Telegram Stars:**\n` +
+                       `• Курс: 100🪙 = ${(100 * magnumToStarsWithCommission).toFixed(2)}⭐ TG Stars\n` +
+                       `• Обратный курс: 10⭐ = ${(10 * starsToMagnumWithCommission).toFixed(2)}🪙\n` +
+                       `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
+                       `• Максимум за операцию: ${EXCHANGE_LIMITS.MAX_MAGNUM_COINS}🪙 или ${EXCHANGE_LIMITS.MAX_STARS}⭐\n` +
+                       `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
+                       `💵 **USDT TRC-20:**\n` +
+                       `• Курс: скоро\n` +
+                       `• Статус: в разработке\n\n` +
+                       `💎 **TON Coin:**\n` +
+                       `• Курс: скоро\n` +
+                       `• Статус: в разработке`;
   } catch (error) {
     console.error('❌ Ошибка генерации текста курсов:', error);
     return `🔄 **Доступные курсы:**\n\n` +
@@ -594,22 +670,22 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   const starsToMagnumWithCommission = starsToMagnumRate * (1 - EXCHANGE_COMMISSION / 100);
 
   // Кнопка покупки звёзд за Magnum Coin
-  if (magnumCoinsBalance >= 100) {
-    const starsToReceive = (100 * magnumToStarsWithCommission).toFixed(2);
-    const buttonText = `⭐ Купить TG Stars (100🪙→${starsToReceive}⭐)`;
-    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: buy_tg_stars`);
-    buttons.push([Markup.button.callback(buttonText, 'buy_tg_stars')]);
+  if (magnumCoinsBalance >= EXCHANGE_LIMITS.MIN_MAGNUM_COINS) {
+    const starsToReceive = (EXCHANGE_LIMITS.MIN_MAGNUM_COINS * magnumToStarsWithCommission).toFixed(2);
+    const buttonText = `⭐ Купить TG Stars (${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙→${starsToReceive}⭐)`;
+    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: buy_tg_stars_input`);
+    buttons.push([Markup.button.callback(buttonText, 'buy_tg_stars_input')]);
   } else {
     console.log(`🔘 getExchangeButtons: Недостаточно Magnum Coin, создаем кнопку "insufficient_funds"`);
     buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
   }
 
   // Кнопка продажи звёзд за Magnum Coin
-  if (starsBalance >= 10) {
-    const coinsToReceive = (10 * starsToMagnumWithCommission).toFixed(2);
-    const buttonText = `🪙 Продать TG Stars (10⭐→${coinsToReceive}🪙)`;
-    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: sell_tg_stars`);
-    buttons.push([Markup.button.callback(buttonText, 'sell_tg_stars')]);
+  if (starsBalance >= EXCHANGE_LIMITS.MIN_STARS) {
+    const coinsToReceive = (EXCHANGE_LIMITS.MIN_STARS * starsToMagnumWithCommission).toFixed(2);
+    const buttonText = `🪙 Продать TG Stars (${EXCHANGE_LIMITS.MIN_STARS}⭐→${coinsToReceive}🪙)`;
+    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: sell_tg_stars_input`);
+    buttons.push([Markup.button.callback(buttonText, 'sell_tg_stars_input')]);
   } else {
     console.log(`🔘 getExchangeButtons: Недостаточно звёзд, создаем кнопку "insufficient_stars"`);
     buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
@@ -1292,9 +1368,15 @@ async function connectDB() {
   supportTickets = db.collection('supportTickets'); // добавляем коллекцию заявок
   taskChecks = db.collection('taskChecks'); // коллекция проверок заданий
   withdrawalRequests = db.collection('withdrawalRequests'); // коллекция заявок на вывод
+  reserve = db.collection('reserve'); // коллекция резерва биржи
   
   console.log('📋 Коллекции инициализированы');
+  
+  // Инициализируем резерв
+  await initializeReserve();
+  
   console.log('🎯 Система вывода готова к работе');
+  console.log('🏦 Резерв биржи инициализирован');
 }
 
 function now() { return Math.floor(Date.now() / 1000); }
@@ -2526,7 +2608,63 @@ async function getMainMenu(ctx, userId) {
   };
 }
 
-// Обработчик для покупки TG Stars
+// Обработчик для ввода количества Magnum Coin для покупки звёзд
+bot.action('buy_tg_stars_input', async (ctx) => {
+  console.log('🔘 buy_tg_stars_input: Обработчик вызван');
+  
+  const user = await getUser(ctx.from.id, ctx);
+  const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
+  
+  if (magnumCoinsBalance < EXCHANGE_LIMITS.MIN_MAGNUM_COINS) {
+    return ctx.answerCbQuery(`❌ Недостаточно Magnum Coin! У вас: ${magnumCoinsBalance}🪙, минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙`, { show_alert: true });
+  }
+  
+  // Устанавливаем состояние для ввода количества
+  userStates.set(ctx.from.id, { type: 'buy_tg_stars_amount' });
+  
+  const inputText = `⭐ **ПОКУПКА TG STARS** ⭐\n\n` +
+                   `💰 **Ваш баланс:** ${magnumCoinsBalance}🪙\n\n` +
+                   `📝 **Введите количество Magnum Coin для обмена:**\n\n` +
+                   `📊 **Лимиты:**\n` +
+                   `• Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙\n` +
+                   `• Максимум: ${Math.min(EXCHANGE_LIMITS.MAX_MAGNUM_COINS, magnumCoinsBalance)}🪙\n\n` +
+                   `💡 **Примеры:**\n` +
+                   `• 100 - обменять 100🪙\n` +
+                   `• 500 - обменять 500🪙\n` +
+                   `• 1000 - обменять 1000🪙`;
+  
+  await adminForceReply(ctx, inputText);
+});
+
+// Обработчик для ввода количества звёзд для продажи
+bot.action('sell_tg_stars_input', async (ctx) => {
+  console.log('🔘 sell_tg_stars_input: Обработчик вызван');
+  
+  const user = await getUser(ctx.from.id, ctx);
+  const starsBalance = Math.round((user.stars || 0) * 100) / 100;
+  
+  if (starsBalance < EXCHANGE_LIMITS.MIN_STARS) {
+    return ctx.answerCbQuery(`❌ Недостаточно звёзд! У вас: ${starsBalance}⭐, минимум: ${EXCHANGE_LIMITS.MIN_STARS}⭐`, { show_alert: true });
+  }
+  
+  // Устанавливаем состояние для ввода количества
+  userStates.set(ctx.from.id, { type: 'sell_tg_stars_amount' });
+  
+  const inputText = `🪙 **ПРОДАЖА TG STARS** 🪙\n\n` +
+                   `⭐ **Ваш баланс:** ${starsBalance}⭐\n\n` +
+                   `📝 **Введите количество звёзд для обмена:**\n\n` +
+                   `📊 **Лимиты:**\n` +
+                   `• Минимум: ${EXCHANGE_LIMITS.MIN_STARS}⭐\n` +
+                   `• Максимум: ${Math.min(EXCHANGE_LIMITS.MAX_STARS, starsBalance)}⭐\n\n` +
+                   `💡 **Примеры:**\n` +
+                   `• 10 - продать 10⭐\n` +
+                   `• 50 - продать 50⭐\n` +
+                   `• 100 - продать 100⭐`;
+  
+  await adminForceReply(ctx, inputText);
+});
+
+// Обработчик для покупки TG Stars (старый, оставляем для совместимости)
 bot.action('buy_tg_stars', async (ctx) => {
   console.log('🔘 buy_tg_stars: Обработчик вызван');
   
@@ -4215,6 +4353,7 @@ bot.on('text', async (ctx) => {
     }
     
     RESERVE_MAGNUM_COINS += amount;
+    await saveReserveToDB();
     await ctx.reply(`✅ Добавлено ${amount.toFixed(2)} Magnum Coin в резерв. Новый баланс: ${RESERVE_MAGNUM_COINS.toFixed(2)}🪙`);
     
     setTimeout(async () => {
@@ -4255,6 +4394,7 @@ bot.on('text', async (ctx) => {
     }
     
     RESERVE_MAGNUM_COINS -= amount;
+    await saveReserveToDB();
     await ctx.reply(`✅ Убрано ${amount.toFixed(2)} Magnum Coin из резерва. Новый баланс: ${RESERVE_MAGNUM_COINS.toFixed(2)}🪙`);
     
     setTimeout(async () => {
@@ -4291,6 +4431,7 @@ bot.on('text', async (ctx) => {
     }
     
     RESERVE_STARS += amount;
+    await saveReserveToDB();
     await ctx.reply(`✅ Добавлено ${amount.toFixed(2)} звёзд в резерв. Новый баланс: ${RESERVE_STARS.toFixed(2)}⭐`);
     
     setTimeout(async () => {
@@ -4331,20 +4472,11 @@ bot.on('text', async (ctx) => {
     }
     
     RESERVE_STARS -= amount;
+    await saveReserveToDB();
     await ctx.reply(`✅ Убрано ${amount.toFixed(2)} звёзд из резерва. Новый баланс: ${RESERVE_STARS.toFixed(2)}⭐`);
     
     setTimeout(async () => {
-      const reserveText = `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ** 🏦\n\n` +
-                         `📊 **Текущий баланс резерва:**\n` +
-                         `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-                         `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
-                         `📈 **Текущие курсы обмена:**\n` +
-                         `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
-                         `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
-                         `💡 **Как работает резерв:**\n` +
-                         `• Курсы обмена зависят от баланса резерва\n` +
-                         `• При обмене резерв автоматически обновляется\n` +
-                         `• Больше резерва = лучше курсы для пользователей`;
+      const reserveText = getReserveManagementText();
 
       await sendMessageWithPhoto(ctx, reserveText, Markup.inlineKeyboard([
         [Markup.button.callback('➕ Добавить Magnum Coin', 'admin_add_magnum_reserve')],
@@ -4355,6 +4487,144 @@ bot.on('text', async (ctx) => {
         [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
       ]));
     }, 1000);
+    userStates.delete(ctx.from.id);
+    return;
+  }
+  
+  // Обработка ввода количества для покупки звёзд
+  if (userState && userState.type === 'buy_tg_stars_amount') {
+    console.log('🔘 Обрабатываем ввод количества для покупки звёзд');
+    const amount = parseFloat(text);
+    
+    if (isNaN(amount) || amount < EXCHANGE_LIMITS.MIN_MAGNUM_COINS) {
+      return ctx.reply(`❌ Неверная сумма! Минимум: ${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙`);
+    }
+    
+    if (amount > EXCHANGE_LIMITS.MAX_MAGNUM_COINS) {
+      return ctx.reply(`❌ Слишком большая сумма! Максимум: ${EXCHANGE_LIMITS.MAX_MAGNUM_COINS}🪙`);
+    }
+    
+    const user = await getUser(ctx.from.id, ctx);
+    const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
+    
+    if (amount > magnumCoinsBalance) {
+      return ctx.reply(`❌ Недостаточно Magnum Coin! У вас: ${magnumCoinsBalance}🪙, нужно: ${amount}🪙`);
+    }
+    
+    // Проверяем время последнего обмена
+    const now = Math.floor(Date.now() / 1000);
+    const lastExchange = user.lastExchange || 0;
+    const timeSinceLastExchange = now - lastExchange;
+    
+    if (timeSinceLastExchange < 5) {
+      return ctx.reply('⏳ Подождите 5 секунд между обменами');
+    }
+    
+    // Рассчитываем курс и количество звёзд
+    const magnumToStarsRate = RESERVE_STARS / RESERVE_MAGNUM_COINS;
+    const starsToReceive = amount * magnumToStarsRate * (1 - EXCHANGE_COMMISSION / 100);
+    
+    if (starsToReceive <= 0) {
+      return ctx.reply('❌ Ошибка расчета курса обмена. Попробуйте позже.');
+    }
+    
+    // Обновляем резерв с проверкой
+    const reserveUpdated = await updateReserve('magnumCoins', 'stars', amount, starsToReceive);
+    if (!reserveUpdated) {
+      return ctx.reply('❌ Недостаточно средств в резерве биржи. Попробуйте позже.');
+    }
+    
+    // Обновляем баланс пользователя
+    await users.updateOne(
+      { id: ctx.from.id },
+      { 
+        $inc: { magnumCoins: -amount, stars: starsToReceive },
+        $set: { lastExchange: now }
+      }
+    );
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
+    
+    const commissionText = EXCHANGE_COMMISSION > 0 ? ` (комиссия: ${EXCHANGE_COMMISSION}%)` : '';
+    await ctx.reply(`✅ **Обмен выполнен успешно!**\n\n` +
+                   `💰 **Потрачено:** ${amount}🪙\n` +
+                   `⭐ **Получено:** ${starsToReceive.toFixed(2)}⭐\n` +
+                   `📊 **Курс:** ${magnumToStarsRate.toFixed(4)}${commissionText}`);
+    
+    // Обновляем интерфейс обмена
+    setTimeout(async () => {
+      await updateExchangeInterface(ctx, ctx.from.id);
+    }, 1000);
+    
+    userStates.delete(ctx.from.id);
+    return;
+  }
+  
+  // Обработка ввода количества для продажи звёзд
+  if (userState && userState.type === 'sell_tg_stars_amount') {
+    console.log('🔘 Обрабатываем ввод количества для продажи звёзд');
+    const amount = parseFloat(text);
+    
+    if (isNaN(amount) || amount < EXCHANGE_LIMITS.MIN_STARS) {
+      return ctx.reply(`❌ Неверная сумма! Минимум: ${EXCHANGE_LIMITS.MIN_STARS}⭐`);
+    }
+    
+    if (amount > EXCHANGE_LIMITS.MAX_STARS) {
+      return ctx.reply(`❌ Слишком большая сумма! Максимум: ${EXCHANGE_LIMITS.MAX_STARS}⭐`);
+    }
+    
+    const user = await getUser(ctx.from.id, ctx);
+    const starsBalance = Math.round((user.stars || 0) * 100) / 100;
+    
+    if (amount > starsBalance) {
+      return ctx.reply(`❌ Недостаточно звёзд! У вас: ${starsBalance}⭐, нужно: ${amount}⭐`);
+    }
+    
+    // Проверяем время последнего обмена
+    const now = Math.floor(Date.now() / 1000);
+    const lastExchange = user.lastExchange || 0;
+    const timeSinceLastExchange = now - lastExchange;
+    
+    if (timeSinceLastExchange < 5) {
+      return ctx.reply('⏳ Подождите 5 секунд между обменами');
+    }
+    
+    // Рассчитываем курс и количество Magnum Coin
+    const starsToMagnumRate = RESERVE_MAGNUM_COINS / RESERVE_STARS;
+    const coinsToReceive = amount * starsToMagnumRate * (1 - EXCHANGE_COMMISSION / 100);
+    
+    if (coinsToReceive <= 0) {
+      return ctx.reply('❌ Ошибка расчета курса обмена. Попробуйте позже.');
+    }
+    
+    // Обновляем резерв с проверкой
+    const reserveUpdated = await updateReserve('stars', 'magnumCoins', amount, coinsToReceive);
+    if (!reserveUpdated) {
+      return ctx.reply('❌ Недостаточно средств в резерве биржи. Попробуйте позже.');
+    }
+    
+    // Обновляем баланс пользователя
+    await users.updateOne(
+      { id: ctx.from.id },
+      { 
+        $inc: { stars: -amount, magnumCoins: coinsToReceive },
+        $set: { lastExchange: now }
+      }
+    );
+    invalidateUserCache(ctx.from.id);
+    invalidateBotStatsCache();
+    
+    const commissionText = EXCHANGE_COMMISSION > 0 ? ` (комиссия: ${EXCHANGE_COMMISSION}%)` : '';
+    await ctx.reply(`✅ **Обмен выполнен успешно!**\n\n` +
+                   `⭐ **Потрачено:** ${amount}⭐\n` +
+                   `💰 **Получено:** ${coinsToReceive.toFixed(2)}🪙\n` +
+                   `📊 **Курс:** ${starsToMagnumRate.toFixed(4)}${commissionText}`);
+    
+    // Обновляем интерфейс обмена
+    setTimeout(async () => {
+      await updateExchangeInterface(ctx, ctx.from.id);
+    }, 1000);
+    
     userStates.delete(ctx.from.id);
     return;
   }
@@ -5182,20 +5452,11 @@ bot.action('admin_reset_reserve', async (ctx) => {
 
   RESERVE_MAGNUM_COINS = 10000;
   RESERVE_STARS = 1000;
+  await saveReserveToDB();
   await ctx.answerCbQuery('✅ Резерв сброшен к начальным значениям', { show_alert: true });
 
   setTimeout(async () => {
-    const reserveText = `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ** 🏦\n\n` +
-                       `📊 **Текущий баланс резерва:**\n` +
-                       `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-                       `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
-                       `📈 **Текущие курсы обмена:**\n` +
-                       `• 100🪙 = ${(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS)).toFixed(2)}⭐\n` +
-                       `• 10⭐ = ${(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS)).toFixed(2)}🪙\n\n` +
-                       `💡 **Как работает резерв:**\n` +
-                       `• Курсы обмена зависят от баланса резерва\n` +
-                       `• При обмене резерв автоматически обновляется\n` +
-                       `• Больше резерва = лучше курсы для пользователей`;
+    const reserveText = getReserveManagementText();
 
     await sendMessageWithPhoto(ctx, reserveText, Markup.inlineKeyboard([
       [Markup.button.callback('➕ Добавить Magnum Coin', 'admin_add_magnum_reserve')],
