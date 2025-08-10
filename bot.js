@@ -4186,9 +4186,26 @@ bot.on('text', async (ctx) => {
 
       // Остальные админские команды...
       if (replyText.includes('Выдача титула')) {
-        const [userId, titleId] = text.split(' ');
-        if (!userId || !titleId || !TITLES[titleId]) {
-          return ctx.reply('❌ Неверный формат или несуществующий титул!');
+        const parts = text.split(' ');
+        if (parts.length < 2) {
+          return ctx.reply('❌ Неверный формат! Введите: ID_пользователя название_титула');
+        }
+        
+        const userId = parts[0];
+        const titleName = parts.slice(1).join(' '); // Объединяем остальные части как название титула
+        
+        // Ищем титул по ID или названию
+        let titleId = null;
+        for (const [id, title] of Object.entries(TITLES)) {
+          if (id === titleName || title.name.toLowerCase() === titleName.toLowerCase()) {
+            titleId = id;
+            break;
+          }
+        }
+        
+        if (!titleId) {
+          const availableTitles = Object.entries(TITLES).map(([id, title]) => `${title.name} (${id})`).join('\n');
+          return ctx.reply(`❌ Титул "${titleName}" не найден!\n\nДоступные титулы:\n${availableTitles}`);
         }
 
         await users.updateOne(
@@ -4200,9 +4217,26 @@ bot.on('text', async (ctx) => {
       }
       
       else if (replyText.includes('Забрать титул')) {
-        const [userId, titleId] = text.split(' ');
-        if (!userId || !titleId || !TITLES[titleId]) {
-          return ctx.reply('❌ Неверный формат или несуществующий титул!');
+        const parts = text.split(' ');
+        if (parts.length < 2) {
+          return ctx.reply('❌ Неверный формат! Введите: ID_пользователя название_титула');
+        }
+        
+        const userId = parts[0];
+        const titleName = parts.slice(1).join(' '); // Объединяем остальные части как название титула
+        
+        // Ищем титул по ID или названию
+        let titleId = null;
+        for (const [id, title] of Object.entries(TITLES)) {
+          if (id === titleName || title.name.toLowerCase() === titleName.toLowerCase()) {
+            titleId = id;
+            break;
+          }
+        }
+        
+        if (!titleId) {
+          const availableTitles = Object.entries(TITLES).map(([id, title]) => `${title.name} (${id})`).join('\n');
+          return ctx.reply(`❌ Титул "${titleName}" не найден!\n\nДоступные титулы:\n${availableTitles}`);
         }
 
         await users.updateOne(
