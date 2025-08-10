@@ -3308,6 +3308,12 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
       console.log('📢 Чат для уведомлений о промокодах не настроен (PROMO_NOTIFICATIONS_CHAT)');
       return;
     }
+    
+    // Проверяем, не отключены ли уведомления
+    if (promoChatId === 'disabled' || promoChatId === 'off') {
+      console.log('📢 Уведомления о промокодах отключены');
+      return;
+    }
 
     // Проверяем, что ID чата начинается с @ (публичный чат)
     if (!promoChatId.startsWith('@')) {
@@ -3354,6 +3360,11 @@ async function notifyPromoActivationToChat(activatorId, activatorName, code, rew
       console.error('💡 Бот не имеет прав для отправки сообщений в чат');
       console.error('   - Сделайте бота администратором чата');
       console.error('   - Или дайте права на отправку сообщений');
+    } else if (error.message.includes('bot was kicked')) {
+      console.error('💡 Бот был удален из чата!');
+      console.error('   - Добавьте бота обратно в чат @magnumtapchat');
+      console.error('   - Дайте боту права на отправку сообщений');
+      console.error('   - Или сделайте бота администратором чата');
     }
   }
 }

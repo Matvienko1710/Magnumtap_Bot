@@ -282,6 +282,7 @@ PRIVATE_CHANNEL_LINK=https://t.me/+4BUF9S_rLZw3NDQ6
 
 # Чат для уведомлений о промокодах (необязательно)
 PROMO_NOTIFICATIONS_CHAT=@magnumtapchat    # Имя публичного чата с @ (например: @magnumtapchat)
+# Для отключения уведомлений: PROMO_NOTIFICATIONS_CHAT=disabled
 
 # Канал для публикации постов (используется REQUIRED_CHANNEL)
 # REQUIRED_CHANNEL=magnumtap              # Имя канала без @ для публикации постов
