@@ -2525,6 +2525,12 @@ ${progressBar}
   // Получаем общую статистику бота
   const botStats = await getBotStatistics();
   
+  // Получаем ссылки на чат и канал
+  const channelLink = REQUIRED_CHANNEL ? `https://t.me/${REQUIRED_CHANNEL.replace('@', '')}` : 'https://t.me/magnumtap';
+  const chatLink = process.env.PROMO_NOTIFICATIONS_CHAT && process.env.PROMO_NOTIFICATIONS_CHAT !== 'disabled' 
+    ? `https://t.me/${process.env.PROMO_NOTIFICATIONS_CHAT.replace('@', '')}` 
+    : 'https://t.me/magnumtapchat';
+  
   return `👑 **Профиль игрока MagnumTap** 👑
 
 👋 **Приветствую, ${userInfo}!**
@@ -2544,17 +2550,28 @@ ${progressText}
 [💎 ${botStats.totalStars}] звёзд заработано  
 [💸 ${botStats.totalWithdrawn}] звёзд выведено  
 [🛒 ${botStats.totalStarsSpent}] звёзд потрачено  
-[💰 ${botStats.totalMagnumCoinsSpent}] Magnum Coin потрачено`;
+[💰 ${botStats.totalMagnumCoinsSpent}] Magnum Coin потрачено
+
+🔗 **Полезные ссылки:**
+[💬 Наш чат](${chatLink}) | [📢 Наш канал](${channelLink})`;
 }
 
 function getWelcomeText(magnumCoins, stars, invited) {
+  // Получаем ссылки на чат и канал
+  const channelLink = REQUIRED_CHANNEL ? `https://t.me/${REQUIRED_CHANNEL.replace('@', '')}` : 'https://t.me/magnumtap';
+  const chatLink = process.env.PROMO_NOTIFICATIONS_CHAT && process.env.PROMO_NOTIFICATIONS_CHAT !== 'disabled' 
+    ? `https://t.me/${process.env.PROMO_NOTIFICATIONS_CHAT.replace('@', '')}` 
+    : 'https://t.me/magnumtapchat';
+  
   return (
     "👋 Добро пожаловать в *MagnumTapBot*! 🌟\n\n" +
     "Ты в игре, где можно зарабатывать Magnum Coin 🪙, выполняя простые задания, приглашая друзей и собирая бонусы! 🚀\n\n" +
     "[🪙 " + magnumCoins + "] Magnum Coin\n" +
     "[💎 " + stars + "] звёзд\n" +
     "[👥 " + invited + "] друзей приглашено\n\n" +
-    "Выбери действие и стань звездой MagnumTapBot! 🌟"
+    "Выбери действие и стань звездой MagnumTapBot! 🌟\n\n" +
+    "🔗 **Полезные ссылки:**\n" +
+    "[💬 Наш чат](" + chatLink + ") | [📢 Наш канал](" + channelLink + ")"
   );
 }
 
