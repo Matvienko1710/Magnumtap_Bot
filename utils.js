@@ -1,5 +1,7 @@
 const config = require('./config');
 
+// ==================== ФОРМАТИРОВАНИЕ ====================
+
 // Форматирование чисел
 function formatNumber(num) {
   if (num === null || num === undefined) return '0';
@@ -13,27 +15,38 @@ function formatNumber(num) {
   }
 }
 
-function formatLargeNumber(num) {
-  if (num === null || num === undefined) return '0';
-  
-  if (num >= 1000000000) {
-    return (num / 1000000000).toFixed(2) + 'B';
-  } else if (num >= 1000000) {
-    return (num / 1000000).toFixed(2) + 'M';
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(2) + 'K';
+// Форматирование времени
+function formatTime(seconds) {
+  if (seconds < 60) {
+    return `${seconds} сек`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes} мин ${remainingSeconds} сек`;
   } else {
-    return num.toFixed(2);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours} ч ${minutes} мин`;
   }
 }
 
-// Расчеты комиссии
-function calculateCommission(amount) {
-  return amount * (config.EXCHANGE_COMMISSION / 100);
+// Форматирование даты
+function formatDate(timestamp) {
+  const date = new Date(timestamp);
+  return date.toLocaleDateString('ru-RU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
-function calculateAmountWithCommission(amount) {
-  return amount * (1 - config.EXCHANGE_COMMISSION / 100);
+// ==================== РАСЧЕТЫ ====================
+
+// Расчет комиссии
+function calculateCommission(amount) {
+  return (amount * config.EXCHANGE_COMMISSION) / 100;
 }
 
 // Расчет курса обмена
@@ -46,50 +59,42 @@ function calculateExchangeRate(fromCurrency, toCurrency, reserve) {
   return 1;
 }
 
-// Расчет наград
+// Расчет награды майнера
 function calculateMinerReward() {
-  return config.MINER_REWARD_PER_HOUR;
+  return config.MINER.REWARD_PER_HOUR;
 }
 
+// Расчет награды фарма
 function calculateFarmReward(user, baseReward = 1) {
   let reward = baseReward;
   
-  // Множители от достижений
-  if (user.achievements) {
-    const farmBoost = user.achievements.find(a => a.type === 'farm_boost');
-    if (farmBoost) {
-      reward *= (1 + farmBoost.level * 0.1); // +10% за каждый уровень
+  // Бонусы за достижения
+  if (user.titles) {
+    if (user.titles.some(t => t.id === 'farmer')) {
+      reward *= 1.1; // +10% за титул Фармер
+    }
+    if (user.titles.some(t => t.id === 'collector')) {
+      reward *= 1.05; // +5% за титул Коллекционер
     }
   }
   
-  // Множители от титулов
-  if (user.titles && user.titles.length > 0) {
-    const farmTitle = user.titles.find(t => t.type === 'farm_boost');
-    if (farmTitle) {
-      reward *= (1 + farmTitle.boost);
-    }
+  // Бонус за серию дней
+  if (user.dailyStreak >= 7) {
+    reward *= 1.2; // +20% за недельную серию
+  } else if (user.dailyStreak >= 3) {
+    reward *= 1.1; // +10% за 3-дневную серию
   }
   
-  return Math.max(reward, 0.1); // Минимум 0.1 звезды
+  return Math.max(reward, 0.01); // Минимум 0.01
 }
 
-// Создание прогресс-бара
-function createProgressBar(current, total, length = 10) {
-  const progress = Math.min(current / total, 1);
-  const filled = Math.round(progress * length);
-  const empty = length - filled;
-  
-  return '█'.repeat(filled) + '░'.repeat(empty);
-}
+// ==================== ПРОВЕРКИ ====================
 
 // Проверка кулдауна
 function checkCooldown(lastAction, cooldownSeconds) {
-  const now = Math.floor(Date.now() / 1000);
+  const now = Date.now();
   const timeSinceLastAction = now - lastAction;
-  return {
-    canAct: timeSinceLastAction >= cooldownSeconds,
-    remaining: Math.max(0, cooldownSeconds - timeSinceLastAction)
-  };
+  return timeSinceLastAction >= cooldownSeconds * 1000;
 }
 
 // Валидация промокода
@@ -99,36 +104,72 @@ function validatePromocode(code) {
   // Проверяем длину (3-20 символов)
   if (code.length < 3 || code.length > 20) return false;
   
-  // Проверяем формат (только буквы, цифры и дефисы)
-  if (!/^[A-Z0-9-]+$/i.test(code)) return false;
+  // Проверяем формат (буквы, цифры, дефисы, подчеркивания)
+  const validFormat = /^[A-Za-z0-9_-]+$/.test(code);
+  if (!validFormat) return false;
   
   return true;
 }
 
-// Валидация суммы
-function validateAmount(amount, min = 0, max = Infinity) {
-  const num = parseFloat(amount);
-  return !isNaN(num) && num >= min && num <= max;
+// Валидация суммы вывода
+function validateWithdrawalAmount(amount) {
+  if (typeof amount !== 'number' || amount <= 0) return false;
+  if (amount < config.WITHDRAWAL.MIN_AMOUNT) return false;
+  if (amount > config.WITHDRAWAL.MAX_AMOUNT) return false;
+  return true;
 }
 
-// Генерация случайного ID
-function generateId() {
-  return Math.random().toString(36).substr(2, 9);
-}
-
-// Форматирование времени
-function formatTime(seconds) {
-  if (seconds < 60) {
-    return `${seconds}с`;
-  } else if (seconds < 3600) {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes}м ${secs}с`;
-  } else {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}ч ${minutes}м`;
+// Валидация кошелька
+function validateWallet(wallet, method) {
+  if (!wallet || typeof wallet !== 'string') return false;
+  
+  switch (method) {
+    case 'USDT':
+      // Проверяем TRC20 адрес
+      return /^T[A-Za-z1-9]{33}$/.test(wallet);
+    case 'BTC':
+      // Проверяем BTC адрес
+      return /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(wallet);
+    case 'ETH':
+      // Проверяем ETH адрес
+      return /^0x[a-fA-F0-9]{40}$/.test(wallet);
+    default:
+      return wallet.length >= 10 && wallet.length <= 100;
   }
+}
+
+// ==================== ОБРАБОТКА ОШИБОК ====================
+
+// Обработка ошибок
+function handleError(error, context = '') {
+  console.error(`❌ Ошибка ${context}:`, error);
+  
+  // Определяем тип ошибки
+  if (error.code === 11000) {
+    return {
+      success: false,
+      error: '❌ Запись уже существует'
+    };
+  }
+  
+  if (error.name === 'ValidationError') {
+    return {
+      success: false,
+      error: '❌ Неверные данные'
+    };
+  }
+  
+  if (error.name === 'MongoError') {
+    return {
+      success: false,
+      error: '❌ Ошибка базы данных'
+    };
+  }
+  
+  return {
+    success: false,
+    error: '❌ Произошла ошибка'
+  };
 }
 
 // Проверка админа
@@ -136,51 +177,229 @@ function isAdmin(userId) {
   return config.ADMIN_IDS.includes(String(userId));
 }
 
+// ==================== ВРЕМЕННЫЕ ФУНКЦИИ ====================
+
 // Получение текущего времени
 function now() {
-  return Math.floor(Date.now() / 1000);
+  return Date.now();
 }
 
-// Обработка ошибок
-function handleError(error, context = '') {
-  console.error(`❌ Ошибка ${context}:`, error);
+// Получение дня (для ежедневных бонусов)
+function getCurrentDay() {
+  return Math.floor(Date.now() / (24 * 60 * 60 * 1000));
+}
+
+// Проверка, новый ли день
+function isNewDay(lastBonusDay) {
+  const currentDay = getCurrentDay();
+  return lastBonusDay !== currentDay;
+}
+
+// ==================== СТАТИСТИКА ====================
+
+// Расчет процента выполнения
+function calculateProgress(current, target) {
+  if (target === 0) return 0;
+  return Math.min((current / target) * 100, 100);
+}
+
+// Форматирование прогресса
+function formatProgress(current, target) {
+  const percentage = calculateProgress(current, target);
+  const filled = Math.floor(percentage / 10);
+  const empty = 10 - filled;
   
-  // Логируем детали ошибки
-  if (error.stack) {
-    console.error('📍 Stack trace:', error.stack);
+  return '█'.repeat(filled) + '░'.repeat(empty) + ` ${percentage.toFixed(1)}%`;
+}
+
+// ==================== ГЕНЕРАЦИЯ ====================
+
+// Генерация случайного ID
+function generateId() {
+  return Math.random().toString(36).substr(2, 9);
+}
+
+// Генерация промокода
+function generatePromocode(length = 8) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  
-  return {
-    success: false,
-    error: error.message || 'Неизвестная ошибка',
-    context
-  };
+  return result;
 }
 
-// Успешный результат
-function success(data = null) {
-  return {
-    success: true,
-    data
-  };
+// ==================== МАССИВЫ И ОБЪЕКТЫ ====================
+
+// Глубокое клонирование объекта
+function deepClone(obj) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return new Date(obj.getTime());
+  if (obj instanceof Array) return obj.map(item => deepClone(item));
+  if (typeof obj === 'object') {
+    const clonedObj = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        clonedObj[key] = deepClone(obj[key]);
+      }
+    }
+    return clonedObj;
+  }
 }
+
+// Фильтрация объекта
+function filterObject(obj, allowedKeys) {
+  const filtered = {};
+  for (const key of allowedKeys) {
+    if (obj.hasOwnProperty(key)) {
+      filtered[key] = obj[key];
+    }
+  }
+  return filtered;
+}
+
+// Сортировка массива объектов
+function sortBy(array, key, order = 'asc') {
+  return array.sort((a, b) => {
+    let aVal = a[key];
+    let bVal = b[key];
+    
+    if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+    if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+    
+    if (order === 'desc') {
+      return bVal > aVal ? 1 : bVal < aVal ? -1 : 0;
+    } else {
+      return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    }
+  });
+}
+
+// ==================== СТРОКИ ====================
+
+// Обрезка строки
+function truncate(str, length = 100) {
+  if (str.length <= length) return str;
+  return str.substring(0, length) + '...';
+}
+
+// Экранирование для Markdown
+function escapeMarkdown(text) {
+  return text
+    .replace(/\_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/\~/g, '\\~')
+    .replace(/\`/g, '\\`')
+    .replace(/\>/g, '\\>')
+    .replace(/\#/g, '\\#')
+    .replace(/\+/g, '\\+')
+    .replace(/\-/g, '\\-')
+    .replace(/\=/g, '\\=')
+    .replace(/\|/g, '\\|')
+    .replace(/\{/g, '\\{')
+    .replace(/\}/g, '\\}')
+    .replace(/\./g, '\\.')
+    .replace(/\!/g, '\\!');
+}
+
+// ==================== МАТЕМАТИКА ====================
+
+// Округление до определенного количества знаков
+function roundTo(num, decimals = 2) {
+  return Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
+}
+
+// Ограничение числа в диапазоне
+function clamp(num, min, max) {
+  return Math.min(Math.max(num, min), max);
+}
+
+// Случайное число в диапазоне
+function random(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// ==================== ВАЛИДАЦИЯ ====================
+
+// Проверка email
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Проверка телефона
+function isValidPhone(phone) {
+  const phoneRegex = /^\+?[\d\s\-\(\)]{10,}$/;
+  return phoneRegex.test(phone);
+}
+
+// Проверка URL
+function isValidUrl(url) {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ==================== ЭКСПОРТ ====================
 
 module.exports = {
+  // Форматирование
   formatNumber,
-  formatLargeNumber,
+  formatTime,
+  formatDate,
+  
+  // Расчеты
   calculateCommission,
-  calculateAmountWithCommission,
   calculateExchangeRate,
   calculateMinerReward,
   calculateFarmReward,
-  createProgressBar,
+  
+  // Проверки
   checkCooldown,
   validatePromocode,
-  validateAmount,
-  generateId,
-  formatTime,
-  isAdmin,
-  now,
+  validateWithdrawalAmount,
+  validateWallet,
+  
+  // Обработка ошибок
   handleError,
-  success
+  isAdmin,
+  
+  // Временные функции
+  now,
+  getCurrentDay,
+  isNewDay,
+  
+  // Статистика
+  calculateProgress,
+  formatProgress,
+  
+  // Генерация
+  generateId,
+  generatePromocode,
+  
+  // Массивы и объекты
+  deepClone,
+  filterObject,
+  sortBy,
+  
+  // Строки
+  truncate,
+  escapeMarkdown,
+  
+  // Математика
+  roundTo,
+  clamp,
+  random,
+  
+  // Валидация
+  isValidEmail,
+  isValidPhone,
+  isValidUrl
 };
