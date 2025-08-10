@@ -3278,25 +3278,18 @@ bot.action('admin_cancel', async (ctx) => {
   await ctx.answerCbQuery('❌ Операция отменена');
 });
 
-// Функция получения статуса и титула пользователя для чата
+// Функция получения статуса пользователя для чата
 function getUserChatInfo(user) {
   const status = getUserStatus(user);
-  const mainTitle = getUserMainTitle(user);
   
   let statusText = '';
-  let titleText = '';
   
   // Статус пользователя
   if (status) {
     statusText = `${status.color} ${status.name}`;
   }
   
-  // Главный титул
-  if (mainTitle) {
-    titleText = mainTitle; // mainTitle уже содержит иконку и название
-  }
-  
-  return { statusText, titleText };
+  return { statusText, titleText: '' }; // titleText оставляем пустым для совместимости
 }
 
 // Функция уведомления в чат о активации промокода
@@ -3997,35 +3990,19 @@ bot.on('text', async (ctx) => {
           
           console.log(`📋 Сформированный префикс: "${userPrefix}"`);
           
-          // Если есть префикс, редактируем сообщение пользователя
-          if (userPrefix) {
-            const userInfo = `${userPrefix} **${ctx.from.first_name || 'Неизвестно'}**: ${ctx.message.text}`;
+          // Если есть статус, отвечаем на сообщение с префиксом
+          if (chatInfo.statusText) {
+            const statusPrefix = `👤 ${chatInfo.statusText}`;
             
             try {
-              // Пытаемся отредактировать сообщение пользователя
-              await ctx.telegram.editMessageText(
-                ctx.chat.id,
-                ctx.message.message_id,
-                null, // inline_message_id
-                userInfo,
-                { parse_mode: 'Markdown' }
-              );
-              console.log(`✅ Сообщение пользователя ${userId} отредактировано с префиксом`);
-            } catch (editError) {
-              console.log('❌ Не удалось отредактировать сообщение:', editError.message);
-              console.log('💡 Возможные причины:');
-              console.log('   - Бот не имеет прав на редактирование сообщений');
-              console.log('   - Сообщение слишком старое для редактирования');
-              console.log('   - Сообщение содержит медиа-контент');
-              
-              // Fallback: удаляем и отправляем новое
-              try {
-                await ctx.deleteMessage();
-                await ctx.reply(userInfo, { parse_mode: 'Markdown' });
-                console.log('✅ Отправлено новое сообщение как fallback');
-              } catch (fallbackError) {
-                console.log('❌ Не удалось отправить fallback сообщение:', fallbackError.message);
-              }
+              // Отвечаем на сообщение пользователя с префиксом статуса
+              await ctx.reply(statusPrefix, { 
+                parse_mode: 'Markdown',
+                reply_to_message_id: ctx.message.message_id
+              });
+              console.log(`✅ Отправлен ответ с префиксом статуса для пользователя ${userId}`);
+            } catch (replyError) {
+              console.log('❌ Не удалось отправить ответ с префиксом:', replyError.message);
             }
             return; // Прерываем дальнейшую обработку
           } else {
