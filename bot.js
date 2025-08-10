@@ -3979,13 +3979,23 @@ bot.on('text', async (ctx) => {
         const user = await users.findOne({ id: userId });
         
         if (user) {
-          const { statusText, titleText } = getUserChatInfo(user);
+          console.log(`📋 Пользователь найден в базе: ${userId}`);
+          console.log(`📋 Данные пользователя:`, { 
+            status: user.status, 
+            titles: user.titles,
+            username: user.username 
+          });
+          
+          const chatInfo = getUserChatInfo(user);
+          console.log(`📋 Полученные данные: statusText="${chatInfo.statusText}", titleText="${chatInfo.titleText}"`);
           
           // Формируем префикс с информацией о пользователе
           let userPrefix = '';
-          if (statusText || titleText) {
-            userPrefix = `${statusText} ${titleText}`.trim();
+          if (chatInfo.statusText || chatInfo.titleText) {
+            userPrefix = `${chatInfo.statusText} ${chatInfo.titleText}`.trim();
           }
+          
+          console.log(`📋 Сформированный префикс: "${userPrefix}"`);
           
           // Если есть префикс, отправляем сообщение с информацией о пользователе
           if (userPrefix) {
@@ -4000,7 +4010,14 @@ bot.on('text', async (ctx) => {
             
             await ctx.reply(userInfo, { parse_mode: 'Markdown' });
             return; // Прерываем дальнейшую обработку
+          } else {
+            console.log(`📋 У пользователя ${userId} нет статуса или титула`);
+            console.log(`📋 Статус в базе: ${user.status || 'не установлен'}`);
+            console.log(`📋 Титулы в базе: ${user.titles ? user.titles.join(', ') : 'нет'}`);
+            console.log(`📋 Отправляем обычное сообщение без префикса`);
           }
+        } else {
+          console.log(`❌ Пользователь ${userId} не найден в базе данных`);
         }
       } catch (error) {
         console.error('❌ Ошибка при обработке сообщения в чате уведомлений:', error);
