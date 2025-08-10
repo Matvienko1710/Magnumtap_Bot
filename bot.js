@@ -568,11 +568,10 @@ async function resetDatabase() {
     // Очищаем все коллекции, но оставляем структуру
     const collections = [
       { collection: users, description: 'Пользователи' },
-      { collection: promoCodes, description: 'Промокоды' },
+      { collection: promocodes, description: 'Промокоды' },
       { collection: withdrawalRequests, description: 'Заявки на вывод' },
       { collection: supportTickets, description: 'Тикеты поддержки' },
       { collection: taskChecks, description: 'Проверки заданий' },
-      { collection: achievements, description: 'Достижения' },
       { collection: reserve, description: 'Резерв биржи' }
     ];
     
