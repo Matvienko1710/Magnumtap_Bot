@@ -3278,19 +3278,7 @@ bot.action('admin_cancel', async (ctx) => {
   await ctx.answerCbQuery('❌ Операция отменена');
 });
 
-// Функция получения статуса пользователя для чата
-function getUserChatInfo(user) {
-  const status = getUserStatus(user);
-  
-  let statusText = '';
-  
-  // Статус пользователя
-  if (status) {
-    statusText = `${status.color} ${status.name}`;
-  }
-  
-  return { statusText, titleText: '' }; // titleText оставляем пустым для совместимости
-}
+
 
 // Функция уведомления в чат о активации промокода
 async function notifyPromoActivationToChat(activatorId, activatorName, code, rewardText) {
@@ -3956,69 +3944,6 @@ bot.on('text', async (ctx) => {
   console.log('📨 Получено текстовое сообщение от:', ctx.from.id, ctx.from.first_name);
   console.log('📝 Текст сообщения:', ctx.message.text);
   console.log('🔗 Есть ли reply_to_message:', !!ctx.message.reply_to_message);
-  
-  // Проверяем, является ли это сообщением в чате уведомлений
-  const promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
-  if (promoChatId) {
-    let targetChatId = promoChatId;
-    if (promoChatId.startsWith('@')) {
-      targetChatId = promoChatId.substring(1);
-    }
-    
-    if (ctx.chat.id.toString() === targetChatId || ctx.chat.username === targetChatId) {
-      // Это сообщение в чате уведомлений
-      try {
-        const userId = ctx.from.id;
-        const user = await users.findOne({ id: userId });
-        
-        if (user) {
-          console.log(`📋 Пользователь найден в базе: ${userId}`);
-          console.log(`📋 Данные пользователя:`, { 
-            status: user.status, 
-            titles: user.titles,
-            username: user.username 
-          });
-          
-          const chatInfo = getUserChatInfo(user);
-          console.log(`📋 Полученные данные: statusText="${chatInfo.statusText}", titleText="${chatInfo.titleText}"`);
-          
-          // Формируем префикс с информацией о пользователе
-          let userPrefix = '';
-          if (chatInfo.statusText || chatInfo.titleText) {
-            userPrefix = `${chatInfo.statusText} ${chatInfo.titleText}`.trim();
-          }
-          
-          console.log(`📋 Сформированный префикс: "${userPrefix}"`);
-          
-          // Если есть статус, отвечаем на сообщение с префиксом
-          if (chatInfo.statusText) {
-            const statusPrefix = `👤 ${chatInfo.statusText}`;
-            
-            try {
-              // Отвечаем на сообщение пользователя с префиксом статуса
-              await ctx.reply(statusPrefix, { 
-                parse_mode: 'Markdown',
-                reply_to_message_id: ctx.message.message_id
-              });
-              console.log(`✅ Отправлен ответ с префиксом статуса для пользователя ${userId}`);
-            } catch (replyError) {
-              console.log('❌ Не удалось отправить ответ с префиксом:', replyError.message);
-            }
-            return; // Прерываем дальнейшую обработку
-          } else {
-            console.log(`📋 У пользователя ${userId} нет статуса или титула`);
-            console.log(`📋 Статус в базе: ${user.status || 'не установлен'}`);
-            console.log(`📋 Титулы в базе: ${user.titles ? user.titles.join(', ') : 'нет'}`);
-            console.log(`📋 Отправляем обычное сообщение без префикса`);
-          }
-        } else {
-          console.log(`❌ Пользователь ${userId} не найден в базе данных`);
-        }
-      } catch (error) {
-        console.error('❌ Ошибка при обработке сообщения в чате уведомлений:', error);
-      }
-    }
-  }
   
   if (ctx.message.reply_to_message) {
     console.log('💬 Reply to text:', ctx.message.reply_to_message.text);
