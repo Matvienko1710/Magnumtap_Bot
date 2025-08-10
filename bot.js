@@ -2669,7 +2669,7 @@ const SPONSOR_TASKS = [
     id: 'music_channel',
     title: '📱 Подписаться на канал @musice46',
     description: 'Подпишитесь на канал @musice46',
-    reward: 8,
+    reward: 0.1,
     instruction: 'Сделайте скриншот подписки на канал',
     link: 'https://t.me/musice46'
   },
@@ -2677,7 +2677,7 @@ const SPONSOR_TASKS = [
     id: 'firestars_bot',
     title: '🔥 Запустить бота FireStars',
     description: 'Запустите бота и получите бонус',
-    reward: 10,
+    reward: 0.1,
     instruction: 'Сделайте скриншот запуска бота',
     link: FIRESTARS_BOT_LINK
   },
@@ -2685,7 +2685,7 @@ const SPONSOR_TASKS = [
     id: 'farmik_bot',
     title: '⭐ Запустить бота FarmikStars',
     description: 'Запустите бота для заработка подарков',
-    reward: 10,
+    reward: 0.1,
     instruction: 'Сделайте скриншот запуска бота',
     link: FARMIK_BOT_LINK
   },
@@ -2693,7 +2693,7 @@ const SPONSOR_TASKS = [
     id: 'basket_game_bot',
     title: '🏀 Играть в BasketGift бота',
     description: 'Запустите бота и сыграйте в игру 3 раза',
-    reward: 12,
+    reward: 0.1,
     instruction: 'Сделайте скриншот результатов 3 игр',
     link: BASKET_BOT_LINK
   },
@@ -2701,7 +2701,7 @@ const SPONSOR_TASKS = [
     id: 'private_channel',
     title: '🔒 Подписаться на приватный канал',
     description: 'Подпишитесь на закрытый канал команды MagnumTap',
-    reward: 15,
+    reward: 0.1,
     instruction: 'Сделайте скриншот что вы в канале (список участников или любое сообщение)',
     link: process.env.PRIVATE_CHANNEL_LINK || 'https://t.me/+4BUF9S_rLZw3NDQ6'
   }
@@ -2719,7 +2719,7 @@ const dailyTasks = [
   { 
     id: 'login', 
     name: '👋 Ежедневный вход', 
-    reward: 5, 
+    reward: 0.1, 
     description: 'Заходите в бота каждый день для получения награды',
     type: 'auto',
     icon: '👋'
@@ -2727,7 +2727,7 @@ const dailyTasks = [
   { 
     id: 'farm_10', 
     name: '⚡ Активный фармер', 
-    reward: 8, 
+    reward: 0.1, 
     description: 'Соберите звёзды 10 раз за день',
     type: 'farm',
     target: 10,
@@ -2736,7 +2736,7 @@ const dailyTasks = [
   { 
     id: 'bonus', 
     name: '🎁 Ежедневный бонус', 
-    reward: 12, 
+    reward: 0.1, 
     description: 'Получите ежедневный бонус звёзд',
     type: 'bonus',
     icon: '🎁'
@@ -2744,7 +2744,7 @@ const dailyTasks = [
   { 
     id: 'shop_visit', 
     name: '🛒 Посетить магазин', 
-    reward: 3, 
+    reward: 0.1, 
     description: 'Откройте магазин и изучите товары',
     type: 'shop',
     icon: '🛒'
@@ -2752,7 +2752,7 @@ const dailyTasks = [
   { 
     id: 'top_check', 
     name: '🏆 Изучить топ', 
-    reward: 3, 
+    reward: 0.1, 
     description: 'Посмотрите на лучших игроков',
     type: 'top',
     icon: '🏆'
@@ -2760,7 +2760,7 @@ const dailyTasks = [
   { 
     id: 'invite_friend', 
     name: '🤝 Пригласить друга', 
-    reward: 25, 
+    reward: 0.1, 
     description: 'Поделитесь рефссылкой с другом',
     type: 'invite',
     icon: '🤝'
@@ -7307,11 +7307,11 @@ bot.action(/^claim_daily_(.+)$/, async (ctx) => {
     { userId: ctx.from.id, type: 'daily' },
     { $set: { [`claimed.${taskId}`]: true } }
   );
-  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward, totalEarnedMagnumCoins: task.reward } });
+  await users.updateOne({ id: ctx.from.id }, { $inc: { stars: task.reward, totalEarnedStars: task.reward } });
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   
-  ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
+  ctx.answerCbQuery(`[🎁 +${task.reward}] ⭐ звезд получено!`);
   ctx.action('daily_tasks')(ctx);
 });
 
@@ -7324,11 +7324,11 @@ bot.action(/^claim_sponsor_(.+)$/, async (ctx) => {
     { userId: ctx.from.id, type: 'sponsor' },
     { $set: { [`claimed.${taskId}`]: true } }
   );
-  await users.updateOne({ id: ctx.from.id }, { $inc: { magnumCoins: task.reward, totalEarnedMagnumCoins: task.reward } });
+  await users.updateOne({ id: ctx.from.id }, { $inc: { stars: task.reward, totalEarnedStars: task.reward } });
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   
-  ctx.answerCbQuery(`[🎁 +${task.reward}] Magnum Coin получено!`);
+  ctx.answerCbQuery(`[🎁 +${task.reward}] ⭐ звезд получено!`);
   ctx.action('sponsor_tasks')(ctx);
 });
 
