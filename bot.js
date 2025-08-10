@@ -557,6 +557,36 @@ function calculateAmountWithCommission(amount) {
   return amount * (1 - EXCHANGE_COMMISSION / 100);
 }
 
+// Функция для расчета дохода майнера на основе курса звёзд
+function calculateMinerReward() {
+  try {
+    // Базовый доход: 1000 MC стоит майнер, окупаемость 45 дней
+    const minerCost = 1000; // Стоимость майнера в Magnum Coin
+    const paybackDays = 45; // Дни окупаемости
+    const paybackHours = paybackDays * 24; // Часы окупаемости
+    
+    // Рассчитываем базовый доход в Magnum Coin за час
+    const baseRewardPerHourMC = minerCost / paybackHours;
+    
+    // Получаем текущий курс обмена
+    const magnumToStarsRate = RESERVE_STARS / RESERVE_MAGNUM_COINS;
+    
+    // Рассчитываем доход в звёздах с учетом курса
+    const rewardPerHourStars = baseRewardPerHourMC * magnumToStarsRate;
+    
+    // Округляем до 4 знаков после запятой для точности
+    const roundedReward = Math.round(rewardPerHourStars * 10000) / 10000;
+    
+    // Минимальный доход: 0.0001 звезды в час
+    const minReward = 0.0001;
+    
+    return Math.max(roundedReward, minReward);
+  } catch (error) {
+    console.error('❌ Ошибка расчета дохода майнера:', error);
+    return 0.0001; // Возвращаем минимальный доход при ошибке
+  }
+}
+
 // Улучшенная функция для обновления резерва после обмена
 async function updateReserve(fromCurrency, toCurrency, fromAmount, toAmount, commissionAmount = 0) {
   try {
@@ -2381,12 +2411,13 @@ ${progressBar}
   
   // Проверяем статус майнера
   let minerText = '';
-  if (user.miner && user.miner.active) {
-    const now = Math.floor(Date.now() / 1000);
-    const hoursWorking = Math.floor((now - user.miner.purchasedAt) / 3600);
-    const hoursUntilReward = Math.ceil((3600 - (now - user.miner.lastReward)) / 3600);
-    minerText = `\n⛏️ **Майнер:** Активен (работает ${hoursWorking}ч, следующая награда через ${hoursUntilReward}ч)`;
-  }
+      if (user.miner && user.miner.active) {
+      const now = Math.floor(Date.now() / 1000);
+      const hoursWorking = Math.floor((now - user.miner.purchasedAt) / 3600);
+      const hoursUntilReward = Math.ceil((3600 - (now - user.miner.lastReward)) / 3600);
+      const currentReward = calculateMinerReward();
+      minerText = `\n⛏️ **Майнер:** Активен (работает ${hoursWorking}ч, доход ${currentReward.toFixed(4)}⭐/час)`;
+    }
   
   // Получаем общую статистику бота
   const botStats = await getBotStatistics();
@@ -2958,23 +2989,34 @@ bot.action('my_miners', async (ctx) => {
     const remaining = Math.max(0, invested - totalEarned);
     const paybackProgress = Math.min(100, Math.round((totalEarned / invested) * 100));
     
+    const currentReward = calculateMinerReward();
+    const dailyReward = currentReward * 24;
+    const currentRate = (RESERVE_STARS / RESERVE_MAGNUM_COINS).toFixed(4);
+    
     minerText += `🟢 **Майнер #1** - Активен\n`;
     minerText += `💰 Инвестиция: 1000 🪙 Magnum Coin\n`;
-    minerText += `📊 Заработано: ${totalEarned} ⭐ звезд\n`;
+    minerText += `📊 Заработано: ${totalEarned.toFixed(4)} ⭐ звезд\n`;
     minerText += `⏰ Работает: ${daysWorking} дней (${hoursWorking}ч)\n`;
     minerText += `📈 Окупаемость: ${paybackProgress}%\n`;
     
     if (remaining > 0) {
-      minerText += `💎 До окупаемости: ${remaining} ⭐\n`;
+      minerText += `💎 До окупаемости: ${remaining.toFixed(4)} ⭐\n`;
     } else {
-      minerText += `✅ Майнер окупился! Чистая прибыль: ${totalEarned - invested} ⭐\n`;
+      minerText += `✅ Майнер окупился! Чистая прибыль: ${(totalEarned - invested).toFixed(4)} ⭐\n`;
     }
     
-    minerText += `\n⚡ Доход: 1 ⭐ в час (24 ⭐ в день)`;
+    minerText += `\n⚡ Доход: ${currentReward.toFixed(4)} ⭐ в час (${dailyReward.toFixed(4)} ⭐ в день)\n`;
+    minerText += `💱 Текущий курс: 1🪙 = ${currentRate}⭐`;
   } else {
+    const currentReward = calculateMinerReward();
+    const dailyReward = currentReward * 24;
+    const currentRate = (RESERVE_STARS / RESERVE_MAGNUM_COINS).toFixed(4);
+    
     minerText += `❌ У вас нет активных майнеров\n\n`;
     minerText += `💡 Купите майнер в магазине за 1000 🪙 Magnum Coin\n`;
-    minerText += `📈 Доход: 1 ⭐ в час, окупаемость 30-60 дней`;
+    minerText += `📈 Доход: ${currentReward.toFixed(4)} ⭐ в час (${dailyReward.toFixed(4)} ⭐ в день)\n`;
+    minerText += `💱 Текущий курс: 1🪙 = ${currentRate}⭐\n`;
+    minerText += `⏰ Окупаемость: ~45 дней`;
   }
 
   await sendMessageWithPhoto(ctx, minerText, Markup.inlineKeyboard([
@@ -6455,6 +6497,10 @@ bot.action('faq_support', async (ctx) => {
 });
 
 bot.action('faq_miner', async (ctx) => {
+  const currentReward = calculateMinerReward();
+  const dailyReward = currentReward * 24;
+  const currentRate = (RESERVE_STARS / RESERVE_MAGNUM_COINS).toFixed(4);
+  
   const minerText = `⛏️ **Система майнера** ⛏️
 
 💡 **Что это такое:**
@@ -6463,8 +6509,9 @@ bot.action('faq_miner', async (ctx) => {
 💰 **Как работает:**
 • ⛏️ Покупается за 1000 Magnum Coin
 • ⏰ Работает автоматически 24/7
-• 💎 Приносит 1 звезду каждый час
-• 🔄 Окупается за 30-60 дней
+• 💎 Приносит ${currentReward.toFixed(4)} звезды каждый час
+• 🔄 Окупается за ~45 дней
+• 💱 Доход зависит от курса обмена
 
 🛒 **Как купить:**
 1️⃣ Откройте "🛒 Магазин" в главном меню
@@ -6474,8 +6521,9 @@ bot.action('faq_miner', async (ctx) => {
 
 📊 **Статистика:**
 • ⏱️ Время работы: отображается в профиле
-• 💰 Доход: 1 звезда/час = 24 звезды/день
-• 📈 Окупаемость: ~42 дня (1000 MC = 1000 звезд)
+• 💰 Доход: ${currentReward.toFixed(4)} звезды/час = ${dailyReward.toFixed(4)} звезды/день
+• 💱 Текущий курс: 1🪙 = ${currentRate}⭐
+• 📈 Окупаемость: ~45 дней
 
 🎯 **Стратегия:**
 • 🎁 Сначала накопите Magnum Coin фармом
@@ -6487,7 +6535,8 @@ bot.action('faq_miner', async (ctx) => {
 • 🕐 Пассивный доход без усилий
 • 📈 Стабильный источник звезд
 • 🎯 Долгосрочная инвестиция
-• 🏆 Помогает в достижении целей`;
+• 🏆 Помогает в достижении целей
+• 💱 Доход адаптируется к курсу обмена`;
 
   await sendMessageWithPhoto(ctx, minerText, Markup.inlineKeyboard([
     [Markup.button.callback('🔙 Назад к FAQ', 'faq')]
@@ -7057,12 +7106,11 @@ async function processMinerRewards() {
       const hoursElapsed = Math.floor(timeSinceLastReward / oneHour);
       
       if (hoursElapsed > 0) {
-        // Доход: 1000 MC стоит майнер, окупаемость 30-60 дней
-        // 30 дней = 720 часов, 60 дней = 1440 часов
-        // Для окупаемости 45 дней (1080 часов): 1000 MC / 1080 часов = ~0.93 звезды/час
-        // Округляем до 1 звезды в час для простоты
-        const rewardPerHour = 1; // 1 звезда за час
+        // Рассчитываем динамический доход на основе текущего курса звёзд
+        const rewardPerHour = calculateMinerReward();
         const totalReward = hoursElapsed * rewardPerHour;
+        
+        console.log(`⛏️ Майнер ${user.id}: ${rewardPerHour}⭐/час, ${hoursElapsed}ч = ${totalReward}⭐`);
         
         // Выдаем награду
         await users.updateOne(
@@ -7081,11 +7129,14 @@ async function processMinerRewards() {
         
         // Отправляем уведомление пользователю (если возможно)
         try {
+          const currentRate = (RESERVE_STARS / RESERVE_MAGNUM_COINS).toFixed(4);
           await bot.telegram.sendMessage(user.id, 
             `⛏️ **Майнер принес доход!**\n\n` +
-            `💎 Получено: ${totalReward} ⭐ звезд\n` +
+            `💎 Получено: ${totalReward.toFixed(4)} ⭐ звезд\n` +
             `⏰ За период: ${hoursElapsed} час(ов)\n` +
-            `📊 Всего заработано: ${(user.miner.totalEarned || 0) + totalReward} ⭐\n\n` +
+            `📈 Доход в час: ${rewardPerHour.toFixed(4)} ⭐\n` +
+            `📊 Всего заработано: ${((user.miner.totalEarned || 0) + totalReward).toFixed(4)} ⭐\n` +
+            `💱 Текущий курс: 1🪙 = ${currentRate}⭐\n\n` +
             `Майнер продолжает работать автоматически!`,
             { parse_mode: 'Markdown' }
           );
