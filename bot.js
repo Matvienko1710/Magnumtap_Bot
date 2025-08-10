@@ -466,21 +466,29 @@ function getExchangeRatesText() {
 
 // Функция для генерации кнопок обмена
 function getExchangeButtons(magnumCoinsBalance, starsBalance) {
+  console.log(`🔘 getExchangeButtons: Генерируем кнопки для баланса ${magnumCoinsBalance}🪙 и ${starsBalance}⭐`);
+  
   const buttons = [];
   
   // Кнопка покупки звёзд за Magnum Coin
   if (magnumCoinsBalance >= 100) {
     const starsToReceive = (10 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2);
-    buttons.push([Markup.button.callback(`⭐ Купить TG Stars (100🪙→${starsToReceive}⭐)`, 'buy_tg_stars')]);
+    const buttonText = `⭐ Купить TG Stars (100🪙→${starsToReceive}⭐)`;
+    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: buy_tg_stars`);
+    buttons.push([Markup.button.callback(buttonText, 'buy_tg_stars')]);
   } else {
+    console.log(`🔘 getExchangeButtons: Недостаточно Magnum Coin, создаем кнопку "insufficient_funds"`);
     buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
   }
   
   // Кнопка продажи звёзд за Magnum Coin
   if (starsBalance >= 10) {
     const coinsToReceive = (100 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2);
-    buttons.push([Markup.button.callback(`🪙 Продать TG Stars (10⭐→${coinsToReceive}🪙)`, 'sell_tg_stars')]);
+    const buttonText = `🪙 Продать TG Stars (10⭐→${coinsToReceive}🪙)`;
+    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: sell_tg_stars`);
+    buttons.push([Markup.button.callback(buttonText, 'sell_tg_stars')]);
   } else {
+    console.log(`🔘 getExchangeButtons: Недостаточно звёзд, создаем кнопку "insufficient_stars"`);
     buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
   }
   
@@ -489,14 +497,19 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
     [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
   );
   
+  console.log(`🔘 getExchangeButtons: Создано ${buttons.length} строк кнопок`);
   return buttons;
 }
 
 // Функция для обновления интерфейса обмена валют
 async function updateExchangeInterface(ctx, userId) {
+  console.log(`🔘 updateExchangeInterface: Обновляем интерфейс для пользователя ${userId}`);
+  
   const user = await getUser(userId, ctx);
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
+  
+  console.log(`🔘 updateExchangeInterface: Баланс ${magnumCoinsBalance}🪙 и ${starsBalance}⭐`);
   
   const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
                       `💰 **Ваши балансы:**\n` +
@@ -507,6 +520,7 @@ async function updateExchangeInterface(ctx, userId) {
   const buttons = getExchangeButtons(magnumCoinsBalance, starsBalance);
   const keyboard = Markup.inlineKeyboard(buttons);
   
+  console.log(`🔘 updateExchangeInterface: Отправляем обновленный интерфейс`);
   await sendMessageWithPhoto(ctx, currencyText, keyboard);
 }
 
@@ -5029,9 +5043,13 @@ bot.action('exchange', async (ctx) => {
 
 // Обмен валют
 bot.action('exchange_currency', async (ctx) => {
+  console.log(`🔘 exchange_currency: Открываем интерфейс обмена для пользователя ${ctx.from.id}`);
+  
   const user = await getUser(ctx.from.id, ctx);
   const starsBalance = Math.round((user.stars || 0) * 100) / 100;
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
+  
+  console.log(`🔘 exchange_currency: Баланс ${magnumCoinsBalance}🪙 и ${starsBalance}⭐`);
   
   const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
                       `💰 **Ваши балансы:**\n` +
@@ -5042,6 +5060,7 @@ bot.action('exchange_currency', async (ctx) => {
   const buttons = getExchangeButtons(magnumCoinsBalance, starsBalance);
   const keyboard = Markup.inlineKeyboard(buttons);
   
+  console.log(`🔘 exchange_currency: Отправляем интерфейс обмена`);
   await sendMessageWithPhoto(ctx, currencyText, keyboard);
 });
 
