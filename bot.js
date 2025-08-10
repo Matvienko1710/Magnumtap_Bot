@@ -3288,12 +3288,12 @@ function getUserChatInfo(user) {
   
   // Статус пользователя
   if (status) {
-    statusText = `[${status.icon} ${status.name}]`;
+    statusText = `${status.color} ${status.name}`;
   }
   
   // Главный титул
   if (mainTitle) {
-    titleText = `[${mainTitle.icon} ${mainTitle.name}]`;
+    titleText = mainTitle; // mainTitle уже содержит иконку и название
   }
   
   return { statusText, titleText };
