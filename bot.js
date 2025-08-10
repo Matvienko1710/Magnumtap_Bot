@@ -3278,26 +3278,7 @@ bot.action('admin_cancel', async (ctx) => {
   await ctx.answerCbQuery('❌ Операция отменена');
 });
 
-// Функция получения статуса и титула пользователя для чата
-function getUserChatInfo(user) {
-  const status = getUserStatus(user);
-  const mainTitle = getUserMainTitle(user);
-  
-  let statusText = '';
-  let titleText = '';
-  
-  // Статус пользователя
-  if (status) {
-    statusText = `${status.color} ${status.name}`;
-  }
-  
-  // Главный титул
-  if (mainTitle) {
-    titleText = mainTitle; // mainTitle уже содержит иконку и название
-  }
-  
-  return { statusText, titleText };
-}
+
 
 // Функция уведомления в чат о активации промокода
 async function notifyPromoActivationToChat(activatorId, activatorName, code, rewardText) {
@@ -3963,85 +3944,6 @@ bot.on('text', async (ctx) => {
   console.log('📨 Получено текстовое сообщение от:', ctx.from.id, ctx.from.first_name);
   console.log('📝 Текст сообщения:', ctx.message.text);
   console.log('🔗 Есть ли reply_to_message:', !!ctx.message.reply_to_message);
-  
-  // Проверяем, является ли это сообщением в чате уведомлений
-  const promoChatId = process.env.PROMO_NOTIFICATIONS_CHAT;
-  if (promoChatId) {
-    let targetChatId = promoChatId;
-    if (promoChatId.startsWith('@')) {
-      targetChatId = promoChatId.substring(1);
-    }
-    
-    if (ctx.chat.id.toString() === targetChatId || ctx.chat.username === targetChatId) {
-      // Это сообщение в чате уведомлений
-      try {
-        const userId = ctx.from.id;
-        const user = await users.findOne({ id: userId });
-        
-        if (user) {
-          console.log(`📋 Пользователь найден в базе: ${userId}`);
-          console.log(`📋 Данные пользователя:`, { 
-            status: user.status, 
-            titles: user.titles,
-            username: user.username 
-          });
-          
-          const chatInfo = getUserChatInfo(user);
-          console.log(`📋 Полученные данные: statusText="${chatInfo.statusText}", titleText="${chatInfo.titleText}"`);
-          
-          // Формируем префикс с информацией о пользователе
-          let userPrefix = '';
-          if (chatInfo.statusText || chatInfo.titleText) {
-            userPrefix = `${chatInfo.statusText} ${chatInfo.titleText}`.trim();
-          }
-          
-          console.log(`📋 Сформированный префикс: "${userPrefix}"`);
-          
-          // Если есть префикс, редактируем сообщение пользователя
-          if (userPrefix) {
-            const userInfo = `${userPrefix} **${ctx.from.first_name || 'Неизвестно'}**: ${ctx.message.text}`;
-            
-            try {
-              // Пытаемся отредактировать сообщение пользователя
-              await ctx.telegram.editMessageText(
-                ctx.chat.id,
-                ctx.message.message_id,
-                null, // inline_message_id
-                userInfo,
-                { parse_mode: 'Markdown' }
-              );
-              console.log(`✅ Сообщение пользователя ${userId} отредактировано с префиксом`);
-            } catch (editError) {
-              console.log('❌ Не удалось отредактировать сообщение:', editError.message);
-              console.log('💡 Возможные причины:');
-              console.log('   - Бот не имеет прав на редактирование сообщений');
-              console.log('   - Сообщение слишком старое для редактирования');
-              console.log('   - Сообщение содержит медиа-контент');
-              
-              // Fallback: удаляем и отправляем новое
-              try {
-                await ctx.deleteMessage();
-                await ctx.reply(userInfo, { parse_mode: 'Markdown' });
-                console.log('✅ Отправлено новое сообщение как fallback');
-              } catch (fallbackError) {
-                console.log('❌ Не удалось отправить fallback сообщение:', fallbackError.message);
-              }
-            }
-            return; // Прерываем дальнейшую обработку
-          } else {
-            console.log(`📋 У пользователя ${userId} нет статуса или титула`);
-            console.log(`📋 Статус в базе: ${user.status || 'не установлен'}`);
-            console.log(`📋 Титулы в базе: ${user.titles ? user.titles.join(', ') : 'нет'}`);
-            console.log(`📋 Отправляем обычное сообщение без префикса`);
-          }
-        } else {
-          console.log(`❌ Пользователь ${userId} не найден в базе данных`);
-        }
-      } catch (error) {
-        console.error('❌ Ошибка при обработке сообщения в чате уведомлений:', error);
-      }
-    }
-  }
   
   if (ctx.message.reply_to_message) {
     console.log('💬 Reply to text:', ctx.message.reply_to_message.text);
