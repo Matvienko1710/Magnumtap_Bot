@@ -831,11 +831,11 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   const magnumToStarsWithCommission = calculateAmountWithCommission(baseMagnumToStars);
   const starsToMagnumWithCommission = calculateAmountWithCommission(baseStarsToMagnum);
 
-  // Кнопки быстрого обмена (с уведомлениями) - 5 фиксированных сумм
-  const quickBuyAmounts = [100, 500, 1000, 5000, 10000];
-  const quickSellAmounts = [10, 50, 100, 500, 1000];
+    // Кнопки быстрого обмена (с уведомлениями) - 3 фиксированные суммы
+  const quickBuyAmounts = [100, 500, 1000]; // Magnum Coin для покупки звёзд
+  const quickSellAmounts = [1, 10, 100]; // Звёзды для продажи
   
-  // Быстрые покупки звёзд
+  // Быстрые покупки звёзд (тратим Magnum Coin, получаем звёзды)
   const buyButtons = [];
   for (const amount of quickBuyAmounts) {
     if (magnumCoinsBalance >= amount) {
@@ -852,7 +852,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
     buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
   }
 
-  // Быстрые продажи звёзд
+  // Быстрые продажи звёзд (тратим звёзды, получаем Magnum Coin)
   const sellButtons = [];
   for (const amount of quickSellAmounts) {
     if (starsBalance >= amount) {
@@ -867,23 +867,6 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
     buttons.push(sellButtons);
   } else {
     buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
-  }
-
-  // Кнопки пользовательского обмена (с вводом количества)
-  if (magnumCoinsBalance >= EXCHANGE_LIMITS.MIN_MAGNUM_COINS) {
-    const baseStarsToReceive = EXCHANGE_LIMITS.MIN_MAGNUM_COINS * magnumToStarsRate;
-    const starsToReceive = calculateAmountWithCommission(baseStarsToReceive);
-    const buttonText = `📝 Купить любое количество (${EXCHANGE_LIMITS.MIN_MAGNUM_COINS}🪙→${starsToReceive.toFixed(2)}⭐)`;
-    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: buy_tg_stars_input`);
-    buttons.push([Markup.button.callback(buttonText, 'buy_tg_stars_input')]);
-  }
-
-  if (starsBalance >= EXCHANGE_LIMITS.MIN_STARS) {
-    const baseCoinsToReceive = EXCHANGE_LIMITS.MIN_STARS * starsToMagnumRate;
-    const coinsToReceive = calculateAmountWithCommission(baseCoinsToReceive);
-    const buttonText = `📝 Продать любое количество (${EXCHANGE_LIMITS.MIN_STARS}⭐→${coinsToReceive.toFixed(2)}🪙)`;
-    console.log(`🔘 getExchangeButtons: Создаем кнопку "${buttonText}" с callback_data: sell_tg_stars_input`);
-    buttons.push([Markup.button.callback(buttonText, 'sell_tg_stars_input')]);
   }
 
   buttons.push(
@@ -2880,19 +2863,15 @@ bot.action('sell_tg_stars_input', async (ctx) => {
   await adminForceReply(ctx, inputText);
 });
 
-// Обработчики для быстрой покупки TG Stars (5 фиксированных сумм)
+// Обработчики для быстрой покупки TG Stars (3 фиксированные суммы)
 bot.action('buy_tg_stars_100', async (ctx) => await handleQuickBuy(ctx, 100));
 bot.action('buy_tg_stars_500', async (ctx) => await handleQuickBuy(ctx, 500));
 bot.action('buy_tg_stars_1000', async (ctx) => await handleQuickBuy(ctx, 1000));
-bot.action('buy_tg_stars_5000', async (ctx) => await handleQuickBuy(ctx, 5000));
-bot.action('buy_tg_stars_10000', async (ctx) => await handleQuickBuy(ctx, 10000));
 
-// Обработчики для быстрой продажи TG Stars (5 фиксированных сумм)
+// Обработчики для быстрой продажи TG Stars (3 фиксированные суммы)
+bot.action('sell_tg_stars_1', async (ctx) => await handleQuickSell(ctx, 1));
 bot.action('sell_tg_stars_10', async (ctx) => await handleQuickSell(ctx, 10));
-bot.action('sell_tg_stars_50', async (ctx) => await handleQuickSell(ctx, 50));
 bot.action('sell_tg_stars_100', async (ctx) => await handleQuickSell(ctx, 100));
-bot.action('sell_tg_stars_500', async (ctx) => await handleQuickSell(ctx, 500));
-bot.action('sell_tg_stars_1000', async (ctx) => await handleQuickSell(ctx, 1000));
 
 // Функция для быстрой покупки звёзд
 async function handleQuickBuy(ctx, amount) {
