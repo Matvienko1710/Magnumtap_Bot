@@ -4776,12 +4776,13 @@ bot.on('text', async (ctx) => {
     invalidateUserCache(ctx.from.id);
     invalidateBotStatsCache();
     
-    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 **Комиссия:** ${commission.toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
-    await ctx.reply(`✅ **Обмен выполнен успешно!**\n\n` +
-                   `💰 **Потрачено:** ${amount}🪙\n` +
-                   `⭐ **Получено:** ${starsToReceive.toFixed(2)}⭐` +
-                   `${commissionText}\n` +
-                   `📊 **Курс:** ${magnumToStarsRate.toFixed(4)}`);
+    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
+    const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                            `💰 Потрачено: ${amount}🪙\n` +
+                            `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
+                            `${commissionText}\n` +
+                            `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
+    await ctx.answerCbQuery(notificationText, { show_alert: true });
     
     // Обновляем интерфейс обмена
     setTimeout(async () => {
@@ -4848,12 +4849,13 @@ bot.on('text', async (ctx) => {
     invalidateUserCache(ctx.from.id);
     invalidateBotStatsCache();
     
-    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 **Комиссия:** ${commission.toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
-    await ctx.reply(`✅ **Обмен выполнен успешно!**\n\n` +
-                   `⭐ **Потрачено:** ${amount}⭐\n` +
-                   `💰 **Получено:** ${coinsToReceive.toFixed(2)}🪙` +
-                   `${commissionText}\n` +
-                   `📊 **Курс:** ${starsToMagnumRate.toFixed(4)}`);
+    const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${commission.toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
+    const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                            `⭐ Потрачено: ${amount}⭐\n` +
+                            `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
+                            `${commissionText}\n` +
+                            `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
+    await ctx.answerCbQuery(notificationText, { show_alert: true });
     
     // Обновляем интерфейс обмена
     setTimeout(async () => {
