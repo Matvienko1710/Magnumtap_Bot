@@ -497,8 +497,8 @@ const EXCHANGE_LIMITS = {
 };
 
 // Баланс резерва проекта (временные переменные для кеширования)
-let RESERVE_MAGNUM_COINS = 10000; // Начальный резерв Magnum Coin
-let RESERVE_STARS = 1; // Начальный резерв звёзд (курс: 100🪙 = 0.01⭐)
+let RESERVE_MAGNUM_COINS = 1000000000; // Начальный резерв Magnum Coin (1,000,000,000)
+let RESERVE_STARS = 10000; // Начальный резерв звёзд (10,000) (курс: 100🪙 = 0.001⭐)
 
 // Функция для инициализации резерва в БД
 async function initializeReserve() {
@@ -506,12 +506,12 @@ async function initializeReserve() {
     const existingReserve = await reserve.findOne({});
     if (!existingReserve) {
       await reserve.insertOne({
-        magnumCoins: 10000,
-        stars: 1,
+        magnumCoins: 1000000000, // 1,000,000,000 Magnum Coin
+        stars: 10000, // 10,000 звёзд
         createdAt: new Date(),
         updatedAt: new Date()
       });
-      console.log('✅ Резерв инициализирован в БД (курс: 100🪙 = 0.01⭐)');
+      console.log('✅ Резерв инициализирован в БД (курс: 100🪙 = 0.001⭐)');
     } else {
       // Загружаем существующий резерв в память
       RESERVE_MAGNUM_COINS = existingReserve.magnumCoins;
@@ -5855,10 +5855,10 @@ bot.action('admin_remove_stars_reserve', async (ctx) => {
 bot.action('admin_reset_reserve', async (ctx) => {
   if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
 
-  RESERVE_MAGNUM_COINS = 10000;
-  RESERVE_STARS = 1;
+  RESERVE_MAGNUM_COINS = 1000000000;
+  RESERVE_STARS = 10000;
   await saveReserveToDB();
-  await ctx.answerCbQuery('✅ Резерв сброшен к начальным значениям (курс: 100🪙 = 0.01⭐)', { show_alert: true });
+  await ctx.answerCbQuery('✅ Резерв сброшен к начальным значениям (курс: 100🪙 = 0.001⭐)', { show_alert: true });
 
   setTimeout(async () => {
     const reserveText = getReserveManagementText();
