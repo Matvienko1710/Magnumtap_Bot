@@ -361,23 +361,23 @@ const TITLES = {
   'vip_elite': { name: 'VIP Элита', description: 'Эксклюзивный титул от администрации', condition: 'secret', requirement: 'admin_only', icon: '💫' }
 };
 
-// Система уровней (по Magnum Coin)
+// Система уровней (по звездам)
 const RANKS = [
   { name: 'Новичок', requirement: 0, color: '🆕' },           // Уровень 1
-  { name: 'Ученик', requirement: 25, color: '📚' },           // Уровень 2 
-  { name: 'Стажёр', requirement: 75, color: '🎓' },           // Уровень 3
-  { name: 'Работник', requirement: 150, color: '⚙️' },        // Уровень 4
-  { name: 'Специалист', requirement: 300, color: '🔧' },      // Уровень 5
-  { name: 'Эксперт', requirement: 500, color: '💼' },         // Уровень 6
-  { name: 'Мастер', requirement: 800, color: '🏅' },          // Уровень 7
-  { name: 'Профессионал', requirement: 1200, color: '🥉' },   // Уровень 8
-  { name: 'Виртуоз', requirement: 1800, color: '🥈' },        // Уровень 9
-  { name: 'Элита', requirement: 2500, color: '🥇' },          // Уровень 10
-  { name: 'Чемпион', requirement: 3500, color: '🏆' },        // Уровень 11
-  { name: 'Титан', requirement: 5000, color: '💎' },          // Уровень 12
-  { name: 'Божество', requirement: 7500, color: '👑' },       // Уровень 13
-  { name: 'Легенда', requirement: 12000, color: '⭐' },       // Уровень 14
-  { name: 'Император', requirement: 20000, color: '🌟' }      // Уровень 15 (максимальный)
+  { name: 'Ученик', requirement: 10, color: '📚' },           // Уровень 2 
+  { name: 'Стажёр', requirement: 25, color: '🎓' },           // Уровень 3
+  { name: 'Работник', requirement: 50, color: '⚙️' },         // Уровень 4
+  { name: 'Специалист', requirement: 100, color: '🔧' },      // Уровень 5
+  { name: 'Эксперт', requirement: 200, color: '💼' },         // Уровень 6
+  { name: 'Мастер', requirement: 350, color: '🏅' },          // Уровень 7
+  { name: 'Профессионал', requirement: 500, color: '🥉' },    // Уровень 8
+  { name: 'Виртуоз', requirement: 750, color: '🥈' },         // Уровень 9
+  { name: 'Элита', requirement: 1000, color: '🥇' },          // Уровень 10
+  { name: 'Чемпион', requirement: 1500, color: '🏆' },        // Уровень 11
+  { name: 'Титан', requirement: 2500, color: '💎' },          // Уровень 12
+  { name: 'Божество', requirement: 4000, color: '👑' },       // Уровень 13
+  { name: 'Легенда', requirement: 6000, color: '⭐' },        // Уровень 14
+  { name: 'Император', requirement: 10000, color: '🌟' }      // Уровень 15 (максимальный)
 ];
 
 // Система магазина
@@ -1535,12 +1535,12 @@ function getUserMainTitle(user) {
 }
 
 function getUserRank(user) {
-  // ИЗМЕНЕНО: Уровни теперь считаются по Magnum Coin, а не по звёздам
-  const magnumCoins = user.magnumCoins || 0;
-  let currentRank = RANKS[0]; // По умолчанию Bronze Star
+  // ИСПРАВЛЕНО: Уровни теперь считаются по звездам
+  const stars = user.stars || 0;
+  let currentRank = RANKS[0]; // По умолчанию Новичок
   
   for (const rank of RANKS) {
-    if (magnumCoins >= rank.requirement) {
+    if (stars >= rank.requirement) {
       currentRank = rank;
     } else {
       break;
@@ -1551,26 +1551,26 @@ function getUserRank(user) {
 }
 
 function getNextRankInfo(user) {
-  // ИЗМЕНЕНО: Уровни теперь считаются по Magnum Coin, а не по звёздам
-  const magnumCoins = user.magnumCoins || 0;
+  // ИСПРАВЛЕНО: Уровни теперь считаются по звездам
+  const stars = user.stars || 0;
   const currentRank = getUserRank(user);
   
   // Найти следующий уровень
   const currentIndex = RANKS.findIndex(rank => rank.name === currentRank.name);
   if (currentIndex < RANKS.length - 1) {
     const nextRank = RANKS[currentIndex + 1];
-    const coinsToNext = nextRank.requirement - magnumCoins;
-    const progress = Math.max(0, Math.min(100, (magnumCoins - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
+    const starsToNext = nextRank.requirement - stars;
+    const progress = Math.max(0, Math.min(100, (stars - currentRank.requirement) / (nextRank.requirement - currentRank.requirement) * 100));
     
     // КРИТИЧЕСКАЯ отладочная информация
     console.log(`🔥🔥🔥 РАСЧЕТ ПРОГРЕССА УРОВНЯ:`);
     console.log(`🔥 Пользователь: ${user.id}`);
-    console.log(`🔥 Magnum Coin: ${magnumCoins}`);
-    console.log(`🔥 Текущий ранг: ${currentRank.name} (от ${currentRank.requirement} MC)`);
-    console.log(`🔥 Следующий ранг: ${nextRank.name} (нужно ${nextRank.requirement} MC)`);
-    console.log(`🔥 До следующего: ${coinsToNext} MC`);
-    console.log(`🔥 Формула прогресса: (${magnumCoins} - ${currentRank.requirement}) / (${nextRank.requirement} - ${currentRank.requirement}) * 100`);
-    console.log(`🔥 Числитель: ${magnumCoins - currentRank.requirement}`);
+    console.log(`🔥 Звезды: ${stars}`);
+    console.log(`🔥 Текущий ранг: ${currentRank.name} (от ${currentRank.requirement}⭐)`);
+    console.log(`🔥 Следующий ранг: ${nextRank.name} (нужно ${nextRank.requirement}⭐)`);
+    console.log(`🔥 До следующего: ${starsToNext}⭐`);
+    console.log(`🔥 Формула прогресса: (${stars} - ${currentRank.requirement}) / (${nextRank.requirement} - ${currentRank.requirement}) * 100`);
+    console.log(`🔥 Числитель: ${stars - currentRank.requirement}`);
     console.log(`🔥 Знаменатель: ${nextRank.requirement - currentRank.requirement}`);
     console.log(`🔥 Прогресс: ${progress}% (округлено: ${Math.round(progress)}%)`);
     console.log(`🔥🔥🔥 КОНЕЦ РАСЧЕТА`);
@@ -1578,7 +1578,7 @@ function getNextRankInfo(user) {
     return {
       current: currentRank,
       next: nextRank,
-      starsToNext: coinsToNext, // Оставляем имя для совместимости, но теперь это MC
+      starsToNext: starsToNext, // Теперь это действительно звезды
       progress: Math.round(progress)
     };
   }
