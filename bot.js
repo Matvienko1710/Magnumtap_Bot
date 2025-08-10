@@ -660,6 +660,17 @@ function formatNumber(num) {
   }
 }
 
+// Функция для форматирования больших чисел с разделительными точками
+function formatLargeNumber(num) {
+  if (num === 0) return '0';
+  
+  // Форматируем число с разделительными точками
+  return num.toLocaleString('de-DE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+}
+
 // Функция для расчета дохода майнера на основе курса звёзд
 function calculateMinerReward() {
   try {
@@ -794,8 +805,8 @@ function getReserveManagementText() {
   
   return `🏦 **УПРАВЛЕНИЕ РЕЗЕРВОМ БИРЖИ** 🏦\n\n` +
          `📊 **Текущий резерв биржи:**\n` +
-         `🪙 ${formatNumber(RESERVE_MAGNUM_COINS)} Magnum Coin\n` +
-         `⭐ ${formatNumber(RESERVE_STARS)} звёзд\n\n` +
+         `🪙 ${formatLargeNumber(RESERVE_MAGNUM_COINS)} Magnum Coin\n` +
+         `⭐ ${formatLargeNumber(RESERVE_STARS)} звёзд\n\n` +
          `📈 **Текущие курсы обмена:**\n` +
          `• 100🪙 = ${formatNumber(100 * (RESERVE_STARS / RESERVE_MAGNUM_COINS))}⭐\n` +
          `• 10⭐ = ${formatNumber(10 * (RESERVE_MAGNUM_COINS / RESERVE_STARS))}🪙\n\n` +
@@ -895,7 +906,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   const starsToMagnumWithCommission = calculateAmountWithCommission(baseStarsToMagnum);
 
     // Кнопки быстрого обмена (с уведомлениями) - 3 фиксированные суммы
-  const quickBuyAmounts = [100, 500, 1000]; // Magnum Coin для покупки звёзд
+  const quickBuyAmounts = [100, 1000, 10000]; // Magnum Coin для покупки звёзд
   const quickSellAmounts = [1, 10, 100]; // Звёзды для продажи
   
   // Быстрые покупки звёзд (тратим Magnum Coin, получаем звёзды)
@@ -953,11 +964,11 @@ async function updateExchangeInterface(ctx, userId) {
 
   const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
                       `💰 **Ваши балансы:**\n` +
-                      `🪙 ${magnumCoinsBalance} Magnum Coin\n` +
-                      `⭐ ${starsBalance} звёзд\n\n` +
+                      `🪙 ${formatLargeNumber(magnumCoinsBalance)} Magnum Coin\n` +
+                      `⭐ ${formatLargeNumber(starsBalance)} звёзд\n\n` +
                       `🏦 **Резерв биржи:**\n` +
-                      `🪙 ${RESERVE_MAGNUM_COINS.toFixed(2)} Magnum Coin\n` +
-                      `⭐ ${RESERVE_STARS.toFixed(2)} звёзд\n\n` +
+                      `🪙 ${formatLargeNumber(RESERVE_MAGNUM_COINS)} Magnum Coin\n` +
+                      `⭐ ${formatLargeNumber(RESERVE_STARS)} звёзд\n\n` +
                       getExchangeRatesText();
 
   const buttons = getExchangeButtons(magnumCoinsBalance, starsBalance);
