@@ -471,7 +471,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   // Кнопка обмена Magnum Coin на звёзды
   if (magnumCoinsBalance >= 100) {
     const starsToReceive = (10 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2);
-    buttons.push([Markup.button.callback(`⭐ Обменять коины (100🪙→${starsToReceive}⭐)`, 'buy_tg_stars')]);
+    buttons.push([Markup.button.callback(`⭐ Обменять звезды (100🪙→${starsToReceive}⭐)`, 'buy_tg_stars')]);
   } else {
     buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
   }
@@ -479,7 +479,7 @@ function getExchangeButtons(magnumCoinsBalance, starsBalance) {
   // Кнопка обмена звёзд на Magnum Coin
   if (starsBalance >= 10) {
     const coinsToReceive = (100 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2);
-    buttons.push([Markup.button.callback(`🪙 Обменять звезды (10⭐→${coinsToReceive}🪙)`, 'sell_tg_stars')]);
+    buttons.push([Markup.button.callback(`🪙 Обменять MC (10⭐→${coinsToReceive}🪙)`, 'sell_tg_stars')]);
   } else {
     buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
   }
