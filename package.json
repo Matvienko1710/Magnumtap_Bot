@@ -2,11 +2,10 @@
   "name": "magnumtap_bot",
   "version": "2.0.0",
   "description": "Оптимизированный Telegram бот для заработка и обмена валют с улучшенной производительностью",
-  "main": "bot-optimized.js",
+  "main": "bot.js",
   "scripts": {
-    "start": "node bot-optimized.js",
-    "dev": "node bot-optimized.js",
-    "old": "node bot.js",
+    "start": "node bot.js",
+    "dev": "node bot.js",
     "test": "node test.js"
   },
   "keywords": [
