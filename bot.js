@@ -445,6 +445,53 @@ const SHOP_ITEMS = {
   }
 };
 
+// Система комиссий обмена
+let EXCHANGE_COMMISSION = 0; // Комиссия в процентах (0 = без комиссии)
+
+// Функция для генерации текста курсов обмена
+function getExchangeRatesText() {
+  return `🔄 **Доступные курсы:**\n\n` +
+         `⭐ **Telegram Stars:**\n` +
+         `• Курс: 100🪙 = ${(10 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2)}⭐ TG Stars\n` +
+         `• Обратный курс: 10⭐ = ${(100 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2)}🪙\n` +
+         `• Минимум: 100🪙 или 10⭐\n` +
+         `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
+         `💵 **USDT TRC-20:**\n` +
+         `• Курс: скоро\n` +
+         `• Статус: в разработке\n\n` +
+         `💎 **TON Coin:**\n` +
+         `• Курс: скоро\n` +
+         `• Статус: в разработке`;
+}
+
+// Функция для генерации кнопок обмена
+function getExchangeButtons(magnumCoinsBalance, starsBalance) {
+  const buttons = [];
+  
+  // Кнопка обмена Magnum Coin на звёзды
+  if (magnumCoinsBalance >= 100) {
+    const starsToReceive = (10 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2);
+    buttons.push([Markup.button.callback(`⭐ Обменять звезды (100🪙→${starsToReceive}⭐)`, 'buy_tg_stars')]);
+  } else {
+    buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
+  }
+  
+  // Кнопка обмена звёзд на Magnum Coin
+  if (starsBalance >= 10) {
+    const coinsToReceive = (100 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2);
+    buttons.push([Markup.button.callback(`🪙 Обменять MC (10⭐→${coinsToReceive}🪙)`, 'sell_tg_stars')]);
+  } else {
+    buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
+  }
+  
+  buttons.push(
+    [Markup.button.callback('💵 Купить USDT (скоро)', 'buy_usdt'), Markup.button.callback('💎 Купить TON (скоро)', 'buy_ton')],
+    [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
+  );
+  
+  return buttons;
+}
+
 // Система статусов пользователей
 const USER_STATUSES = {
   'owner': { 
@@ -3902,6 +3949,39 @@ bot.on('text', async (ctx) => {
     return;
   }
   
+  if (userState && userState.type === 'admin_change_commission') {
+    console.log('💰 Обрабатываем изменение комиссии');
+    const newCommission = parseFloat(text);
+    if (isNaN(newCommission) || newCommission < 0 || newCommission > 50) {
+      return ctx.reply('❌ Неверная комиссия! Введите число от 0 до 50');
+    }
+    
+    EXCHANGE_COMMISSION = newCommission;
+    await ctx.reply(`✅ Комиссия изменена на ${newCommission}%`);
+    
+    // Возвращаемся к панели комиссии
+    setTimeout(async () => {
+      const commissionText = `💰 **УПРАВЛЕНИЕ КОМИССИЕЙ** 💰\n\n` +
+                            `📊 **Текущая комиссия:** ${EXCHANGE_COMMISSION}%\n\n` +
+                            `🔄 **Как работает комиссия:**\n` +
+                            `• При обмене 100🪙 → 10⭐ (без комиссии)\n` +
+                            `• При обмене 10⭐ → 100🪙 (без комиссии)\n` +
+                            `• Комиссия взимается с получаемой валюты\n\n` +
+                            `💡 **Пример с комиссией 5%:**\n` +
+                            `• 100🪙 → 9.5⭐ (вместо 10⭐)\n` +
+                            `• 10⭐ → 95🪙 (вместо 100🪙)\n\n` +
+                            `⚠️ **Внимание:** Комиссия влияет на все обмены!`;
+
+      await sendMessageWithPhoto(ctx, commissionText, Markup.inlineKeyboard([
+        [Markup.button.callback('📝 Изменить комиссию', 'admin_change_commission')],
+        [Markup.button.callback('🔄 Сбросить комиссию (0%)', 'admin_reset_commission')],
+        [Markup.button.callback('📊 Тестовый обмен', 'admin_test_exchange')],
+        [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+      ]));
+    }, 1000);
+    return;
+  }
+  
   // Если нет состояния, проверяем reply_to_message (старый способ)
   const replyMsg = ctx.message.reply_to_message;
   if (!replyMsg) {
@@ -4186,9 +4266,26 @@ bot.on('text', async (ctx) => {
 
       // Остальные админские команды...
       if (replyText.includes('Выдача титула')) {
-        const [userId, titleId] = text.split(' ');
-        if (!userId || !titleId || !TITLES[titleId]) {
-          return ctx.reply('❌ Неверный формат или несуществующий титул!');
+        const parts = text.split(' ');
+        if (parts.length < 2) {
+          return ctx.reply('❌ Неверный формат! Введите: ID_пользователя название_титула');
+        }
+        
+        const userId = parts[0];
+        const titleName = parts.slice(1).join(' '); // Объединяем остальные части как название титула
+        
+        // Ищем титул по ID или названию
+        let titleId = null;
+        for (const [id, title] of Object.entries(TITLES)) {
+          if (id === titleName || title.name.toLowerCase() === titleName.toLowerCase()) {
+            titleId = id;
+            break;
+          }
+        }
+        
+        if (!titleId) {
+          const availableTitles = Object.entries(TITLES).map(([id, title]) => `${title.name} (${id})`).join('\n');
+          return ctx.reply(`❌ Титул "${titleName}" не найден!\n\nДоступные титулы:\n${availableTitles}`);
         }
 
         await users.updateOne(
@@ -4200,9 +4297,26 @@ bot.on('text', async (ctx) => {
       }
       
       else if (replyText.includes('Забрать титул')) {
-        const [userId, titleId] = text.split(' ');
-        if (!userId || !titleId || !TITLES[titleId]) {
-          return ctx.reply('❌ Неверный формат или несуществующий титул!');
+        const parts = text.split(' ');
+        if (parts.length < 2) {
+          return ctx.reply('❌ Неверный формат! Введите: ID_пользователя название_титула');
+        }
+        
+        const userId = parts[0];
+        const titleName = parts.slice(1).join(' '); // Объединяем остальные части как название титула
+        
+        // Ищем титул по ID или названию
+        let titleId = null;
+        for (const [id, title] of Object.entries(TITLES)) {
+          if (id === titleName || title.name.toLowerCase() === titleName.toLowerCase()) {
+            titleId = id;
+            break;
+          }
+        }
+        
+        if (!titleId) {
+          const availableTitles = Object.entries(TITLES).map(([id, title]) => `${title.name} (${id})`).join('\n');
+          return ctx.reply(`❌ Титул "${titleName}" не найден!\n\nДоступные титулы:\n${availableTitles}`);
         }
 
         await users.updateOne(
@@ -4385,8 +4499,8 @@ bot.action('admin_panel', async (ctx) => {
     [Markup.button.callback('📝 Создать пост', 'admin_create_post'), Markup.button.callback('📊 Статистика', 'admin_stats')],
     [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
     [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
-    [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-    [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+    [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('💰 Комиссия', 'admin_commission')],
+    [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
   ]));
 });
 
@@ -4400,8 +4514,8 @@ bot.action('admin_cancel', async (ctx) => {
       [Markup.button.callback('📝 Создать пост', 'admin_create_post'), Markup.button.callback('📊 Статистика', 'admin_stats')],
       [Markup.button.callback('⭐ Звёзды', 'admin_stars'), Markup.button.callback('👥 Рефералы', 'admin_refs')],
       [Markup.button.callback('🏆 Титулы', 'admin_titles'), Markup.button.callback('💫 Статусы', 'admin_statuses')],
-      [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('❓ FAQ Админа', 'admin_faq')],
-      [Markup.button.callback('🏠 Главное меню', 'main_menu')]
+      [Markup.button.callback('🌾 Настройки фарма', 'admin_farm'), Markup.button.callback('💰 Комиссия', 'admin_commission')],
+      [Markup.button.callback('❓ FAQ Админа', 'admin_faq'), Markup.button.callback('🏠 Главное меню', 'main_menu')]
     ]),
     false
   );
@@ -4559,6 +4673,82 @@ bot.action('admin_user_status', async (ctx) => {
 });
 
 // FAQ для админов
+bot.action('admin_commission', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const commissionText = `💰 **УПРАВЛЕНИЕ КОМИССИЕЙ** 💰\n\n` +
+                        `📊 **Текущая комиссия:** ${EXCHANGE_COMMISSION}%\n\n` +
+                        `🔄 **Как работает комиссия:**\n` +
+                        `• При обмене 100🪙 → 10⭐ (без комиссии)\n` +
+                        `• При обмене 10⭐ → 100🪙 (без комиссии)\n` +
+                        `• Комиссия взимается с получаемой валюты\n\n` +
+                        `💡 **Пример с комиссией 5%:**\n` +
+                        `• 100🪙 → 9.5⭐ (вместо 10⭐)\n` +
+                        `• 10⭐ → 95🪙 (вместо 100🪙)\n\n` +
+                        `⚠️ **Внимание:** Комиссия влияет на все обмены!`;
+
+  await sendMessageWithPhoto(ctx, commissionText, Markup.inlineKeyboard([
+    [Markup.button.callback('📝 Изменить комиссию', 'admin_change_commission')],
+    [Markup.button.callback('🔄 Сбросить комиссию (0%)', 'admin_reset_commission')],
+    [Markup.button.callback('📊 Тестовый обмен', 'admin_test_exchange')],
+    [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+  ]));
+});
+
+bot.action('admin_change_commission', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  userStates.set(ctx.from.id, { type: 'admin_change_commission' });
+  await adminForceReply(ctx, '📝 **Изменение комиссии**\n\nВведите новую комиссию в процентах (0-50):\n\nПримеры:\n• 0 - без комиссии\n• 5 - комиссия 5%\n• 10 - комиссия 10%\n\n⚠️ Рекомендуется не более 20%');
+});
+
+bot.action('admin_reset_commission', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  EXCHANGE_COMMISSION = 0;
+  await ctx.answerCbQuery('✅ Комиссия сброшена до 0%', { show_alert: true });
+  
+  // Возвращаемся к панели комиссии
+  setTimeout(async () => {
+    const commissionText = `💰 **УПРАВЛЕНИЕ КОМИССИЕЙ** 💰\n\n` +
+                          `📊 **Текущая комиссия:** ${EXCHANGE_COMMISSION}%\n\n` +
+                          `🔄 **Как работает комиссия:**\n` +
+                          `• При обмене 100🪙 → 10⭐ (без комиссии)\n` +
+                          `• При обмене 10⭐ → 100🪙 (без комиссии)\n` +
+                          `• Комиссия взимается с получаемой валюты\n\n` +
+                          `💡 **Пример с комиссией 5%:**\n` +
+                          `• 100🪙 → 9.5⭐ (вместо 10⭐)\n` +
+                          `• 10⭐ → 95🪙 (вместо 100🪙)\n\n` +
+                          `⚠️ **Внимание:** Комиссия влияет на все обмены!`;
+
+    await sendMessageWithPhoto(ctx, commissionText, Markup.inlineKeyboard([
+      [Markup.button.callback('📝 Изменить комиссию', 'admin_change_commission')],
+      [Markup.button.callback('🔄 Сбросить комиссию (0%)', 'admin_reset_commission')],
+      [Markup.button.callback('📊 Тестовый обмен', 'admin_test_exchange')],
+      [Markup.button.callback('🔙 Назад к админке', 'admin_panel')]
+    ]));
+  }, 1000);
+});
+
+bot.action('admin_test_exchange', async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('Нет доступа');
+  
+  const testText = `📊 **ТЕСТОВЫЙ ОБМЕН** 📊\n\n` +
+                  `📈 **Текущая комиссия:** ${EXCHANGE_COMMISSION}%\n\n` +
+                  `🔄 **Курсы обмена:**\n\n` +
+                  `**Покупка звёзд:**\n` +
+                  `• 100🪙 → ${(10 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2)}⭐\n` +
+                  `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
+                  `**Продажа звёзд:**\n` +
+                  `• 10⭐ → ${(100 * (1 - EXCHANGE_COMMISSION / 100)).toFixed(2)}🪙\n` +
+                  `• Комиссия: ${EXCHANGE_COMMISSION}%\n\n` +
+                  `💡 **Формула:** Сумма × (1 - комиссия/100)`;
+
+  await sendMessageWithPhoto(ctx, testText, Markup.inlineKeyboard([
+    [Markup.button.callback('🔙 Назад к комиссии', 'admin_commission')]
+  ]));
+});
+
 bot.action('admin_faq', async (ctx) => {
   const adminFaqText = `❓ *FAQ Админ-панели* ❓
 
@@ -4821,34 +5011,11 @@ bot.action('exchange_currency', async (ctx) => {
   
   const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
                       `💰 **Ваши балансы:**\n` +
-                      `[🪙 ${magnumCoinsBalance}] Magnum Coin\n` +
-                      `[⭐ ${starsBalance}] звёзд\n\n` +
-                      `🔄 **Доступные курсы:**\n\n` +
-                      `⭐ **Telegram Stars:**\n` +
-                      `• Курс: [🪙 100] = [⭐ 10] TG Stars\n` +
-                      `• Минимум: [🪙 100]\n` +
-                      `• Комиссия: 0%\n\n` +
-                      `💵 **USDT TRC-20:**\n` +
-                      `• Курс: скоро\n` +
-                      `• Статус: в разработке\n\n` +
-                      `💎 **TON Coin:**\n` +
-                      `• Курс: скоро\n` +
-                      `• Статус: в разработке`;
+                      `🪙 ${magnumCoinsBalance} Magnum Coin\n` +
+                      `⭐ ${starsBalance} звёзд\n\n` +
+                      getExchangeRatesText();
   
-  const buttons = [];
-  
-  // Добавляем кнопку обмена TG Stars только если достаточно монет
-  if (magnumCoinsBalance >= 100) {
-    buttons.push([Markup.button.callback('⭐ Купить TG Stars (100🪙→10⭐)', 'buy_tg_stars')]);
-  } else {
-    buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
-  }
-  
-  buttons.push(
-    [Markup.button.callback('💵 Купить USDT (скоро)', 'buy_usdt'), Markup.button.callback('💎 Купить TON (скоро)', 'buy_ton')],
-    [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
-  );
-  
+  const buttons = getExchangeButtons(magnumCoinsBalance, starsBalance);
   const keyboard = Markup.inlineKeyboard(buttons);
   
   await sendMessageWithPhoto(ctx, currencyText, keyboard);
@@ -4930,33 +5097,36 @@ bot.action('buy_tg_stars', async (ctx) => {
     return ctx.answerCbQuery(`❌ Недостаточно Magnum Coin! У вас: ${magnumCoinsBalance}🪙, нужно: 100🪙`, { show_alert: true });
   }
   
-  // Обмениваем 100 Magnum Coin на 10 звёзд
+  // Обмениваем 100 Magnum Coin на звёзды с учетом комиссии
+  const starsToReceive = 10 * (1 - EXCHANGE_COMMISSION / 100);
   await users.updateOne(
     { id: ctx.from.id },
     { 
-      $inc: { magnumCoins: -100, stars: 10 },
+      $inc: { magnumCoins: -100, stars: starsToReceive },
       $set: { lastExchange: Math.floor(Date.now() / 1000) }
     }
   );
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   
-  await ctx.answerCbQuery('✅ Успешно! 100🪙 → 10⭐ TG Stars', { show_alert: true });
+  const commissionText = EXCHANGE_COMMISSION > 0 ? ` (комиссия: ${EXCHANGE_COMMISSION}%)` : '';
+  await ctx.answerCbQuery(`✅ Успешно! 100🪙 → ${starsToReceive.toFixed(2)}⭐ TG Stars${commissionText}`, { show_alert: true });
   
   // Обновляем интерфейс обмена валют
   setTimeout(async () => {
     const updatedUser = await getUser(ctx.from.id, ctx);
-    const starsBalance = Math.round((updatedUser.stars || 0) * 100) / 100;
+    const updatedStarsBalance = Math.round((updatedUser.stars || 0) * 100) / 100;
     const updatedMagnumCoinsBalance = Math.round((updatedUser.magnumCoins || 0) * 100) / 100;
     
     const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
                         `💰 **Ваши балансы:**\n` +
-                        `🪙 Magnum Coin: ${updatedMagnumCoinsBalance}\n` +
-                        `⭐ Звёзды: ${starsBalance}\n\n` +
+                        `🪙 ${updatedMagnumCoinsBalance} Magnum Coin\n` +
+                        `⭐ ${updatedStarsBalance} звёзд\n\n` +
                         `🔄 **Доступные курсы:**\n\n` +
                         `⭐ **Telegram Stars:**\n` +
-                        `• Курс: 100 🪙 = 10 ⭐ TG Stars\n` +
-                        `• Минимум: 100 🪙\n` +
+                        `• Курс: 100🪙 = 10⭐ TG Stars\n` +
+                        `• Обратный курс: 10⭐ = 100🪙\n` +
+                        `• Минимум: 100🪙 или 10⭐\n` +
                         `• Комиссия: 0%\n\n` +
                         `💵 **USDT TRC-20:**\n` +
                         `• Курс: скоро\n` +
@@ -4967,11 +5137,18 @@ bot.action('buy_tg_stars', async (ctx) => {
     
     const buttons = [];
     
-    // Добавляем кнопку обмена TG Stars только если достаточно монет
+    // Кнопка обмена Magnum Coin на звёзды
     if (updatedMagnumCoinsBalance >= 100) {
       buttons.push([Markup.button.callback('⭐ Купить TG Stars (100🪙→10⭐)', 'buy_tg_stars')]);
     } else {
       buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
+    }
+    
+    // Кнопка обмена звёзд на Magnum Coin
+    if (updatedStarsBalance >= 10) {
+      buttons.push([Markup.button.callback('🪙 Продать TG Stars (10⭐→100🪙)', 'sell_tg_stars')]);
+    } else {
+      buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
     }
     
     buttons.push(
@@ -4990,6 +5167,86 @@ bot.action('insufficient_funds', async (ctx) => {
   const magnumCoinsBalance = Math.round((user.magnumCoins || 0) * 100) / 100;
   
   ctx.answerCbQuery(`❌ Недостаточно средств! У вас: ${magnumCoinsBalance}🪙, нужно: 100🪙\n\nЗарабатывайте Magnum Coin через фарм и бонусы!`, { show_alert: true });
+});
+
+bot.action('sell_tg_stars', async (ctx) => {
+  const user = await getUser(ctx.from.id, ctx);
+  const starsBalance = Math.round((user.stars || 0) * 100) / 100;
+  
+  if (starsBalance < 10) {
+    return ctx.answerCbQuery(`❌ Недостаточно звёзд! У вас: ${starsBalance}⭐, нужно: 10⭐`, { show_alert: true });
+  }
+  
+  // Обмениваем 10 звёзд на Magnum Coin с учетом комиссии
+  const coinsToReceive = 100 * (1 - EXCHANGE_COMMISSION / 100);
+  await users.updateOne(
+    { id: ctx.from.id },
+    { 
+      $inc: { stars: -10, magnumCoins: coinsToReceive },
+      $set: { lastExchange: Math.floor(Date.now() / 1000) }
+    }
+  );
+  invalidateUserCache(ctx.from.id);
+  invalidateBotStatsCache();
+  
+  const commissionText = EXCHANGE_COMMISSION > 0 ? ` (комиссия: ${EXCHANGE_COMMISSION}%)` : '';
+  await ctx.answerCbQuery(`✅ Успешно! 10⭐ → ${coinsToReceive.toFixed(2)}🪙 Magnum Coin${commissionText}`, { show_alert: true });
+  
+  // Обновляем интерфейс обмена валют
+  setTimeout(async () => {
+    const updatedUser = await getUser(ctx.from.id, ctx);
+    const updatedStarsBalance = Math.round((updatedUser.stars || 0) * 100) / 100;
+    const updatedMagnumCoinsBalance = Math.round((updatedUser.magnumCoins || 0) * 100) / 100;
+    
+    const currencyText = `💎 **ОБМЕН ВАЛЮТ** 💎\n\n` +
+                        `💰 **Ваши балансы:**\n` +
+                        `🪙 ${updatedMagnumCoinsBalance} Magnum Coin\n` +
+                        `⭐ ${updatedStarsBalance} звёзд\n\n` +
+                        `🔄 **Доступные курсы:**\n\n` +
+                        `⭐ **Telegram Stars:**\n` +
+                        `• Курс: 100🪙 = 10⭐ TG Stars\n` +
+                        `• Обратный курс: 10⭐ = 100🪙\n` +
+                        `• Минимум: 100🪙 или 10⭐\n` +
+                        `• Комиссия: 0%\n\n` +
+                        `💵 **USDT TRC-20:**\n` +
+                        `• Курс: скоро\n` +
+                        `• Статус: в разработке\n\n` +
+                        `💎 **TON Coin:**\n` +
+                        `• Курс: скоро\n` +
+                        `• Статус: в разработке`;
+    
+    const buttons = [];
+    
+    // Кнопка обмена Magnum Coin на звёзды
+    if (updatedMagnumCoinsBalance >= 100) {
+      buttons.push([Markup.button.callback('⭐ Купить TG Stars (100🪙→10⭐)', 'buy_tg_stars')]);
+    } else {
+      buttons.push([Markup.button.callback('❌ Недостаточно Magnum Coin', 'insufficient_funds')]);
+    }
+    
+    // Кнопка обмена звёзд на Magnum Coin
+    if (updatedStarsBalance >= 10) {
+      buttons.push([Markup.button.callback('🪙 Продать TG Stars (10⭐→100🪙)', 'sell_tg_stars')]);
+    } else {
+      buttons.push([Markup.button.callback('❌ Недостаточно звёзд', 'insufficient_stars')]);
+    }
+    
+    buttons.push(
+      [Markup.button.callback('💵 Купить USDT (скоро)', 'buy_usdt'), Markup.button.callback('💎 Купить TON (скоро)', 'buy_ton')],
+      [Markup.button.callback('🔙 Назад на биржу', 'exchange')]
+    );
+    
+    const keyboard = Markup.inlineKeyboard(buttons);
+    
+    await sendMessageWithPhoto(ctx, currencyText, keyboard);
+  }, 1000);
+});
+
+bot.action('insufficient_stars', async (ctx) => {
+  const user = await getUser(ctx.from.id, ctx);
+  const starsBalance = Math.round((user.stars || 0) * 100) / 100;
+  
+  ctx.answerCbQuery(`❌ Недостаточно звёзд! У вас: ${starsBalance}⭐, нужно: 10⭐\n\nЗарабатывайте звёзды через задания и майнер!`, { show_alert: true });
 });
 
 bot.action('create_p2p_offer', async (ctx) => {
