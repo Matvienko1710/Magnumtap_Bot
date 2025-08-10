@@ -2898,8 +2898,13 @@ bot.action('buy_tg_stars', async (ctx) => {
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   
-  const commissionText = EXCHANGE_COMMISSION > 0 ? ` (комиссия: ${EXCHANGE_COMMISSION}%)` : '';
-  await ctx.answerCbQuery(`✅ Успешно! 100🪙 → ${starsToReceive.toFixed(2)}⭐ TG Stars${commissionText}`, { show_alert: true });
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${(100 * magnumToStarsRate * (EXCHANGE_COMMISSION / 100)).toFixed(2)}⭐ (${EXCHANGE_COMMISSION}%)` : '';
+  const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                          `💰 Потрачено: 100🪙\n` +
+                          `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
+                          `${commissionText}\n` +
+                          `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
+  await ctx.answerCbQuery(notificationText, { show_alert: true });
   
   console.log(`🔘 buy_tg_stars: Обмен завершен, обновляем интерфейс`);
   
@@ -6093,8 +6098,13 @@ bot.action('sell_tg_stars', async (ctx) => {
   invalidateUserCache(ctx.from.id);
   invalidateBotStatsCache();
   
-  const commissionText = EXCHANGE_COMMISSION > 0 ? ` (комиссия: ${EXCHANGE_COMMISSION}%)` : '';
-  await ctx.answerCbQuery(`✅ Успешно! 10⭐ → ${coinsToReceive.toFixed(2)}🪙 Magnum Coin${commissionText}`, { show_alert: true });
+  const commissionText = EXCHANGE_COMMISSION > 0 ? `\n💰 Комиссия: ${(10 * starsToMagnumRate * (EXCHANGE_COMMISSION / 100)).toFixed(2)}🪙 (${EXCHANGE_COMMISSION}%)` : '';
+  const notificationText = `✅ Обмен выполнен успешно!\n\n` +
+                          `⭐ Потрачено: 10⭐\n` +
+                          `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
+                          `${commissionText}\n` +
+                          `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
+  await ctx.answerCbQuery(notificationText, { show_alert: true });
   
   console.log(`🔘 sell_tg_stars: Обмен завершен, обновляем интерфейс`);
   
