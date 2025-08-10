@@ -4781,7 +4781,7 @@ bot.on('text', async (ctx) => {
                             `💰 Потрачено: ${amount}🪙\n` +
                             `⭐ Получено: ${starsToReceive.toFixed(2)}⭐` +
                             `${commissionText}\n` +
-                            `📊 Курс: ${magnumToStarsRate.toFixed(4)}`;
+                            `📊 Курс: 1🪙 = ${magnumToStarsRate.toFixed(4)}⭐`;
     await ctx.answerCbQuery(notificationText, { show_alert: true });
     
     // Обновляем интерфейс обмена
@@ -4854,7 +4854,7 @@ bot.on('text', async (ctx) => {
                             `⭐ Потрачено: ${amount}⭐\n` +
                             `💰 Получено: ${coinsToReceive.toFixed(2)}🪙` +
                             `${commissionText}\n` +
-                            `📊 Курс: ${starsToMagnumRate.toFixed(4)}`;
+                            `📊 Курс: 1⭐ = ${starsToMagnumRate.toFixed(4)}🪙`;
     await ctx.answerCbQuery(notificationText, { show_alert: true });
     
     // Обновляем интерфейс обмена
