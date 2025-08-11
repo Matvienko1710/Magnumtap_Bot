@@ -720,6 +720,9 @@ async function startMiner(ctx, user) {
     userCache.delete(user.id);
     
     await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Stars каждый час.');
+    
+    // Обновляем меню майнера
+    await updateMinerMenu(ctx, { ...user, miner: { ...user.miner, active: true } });
   } catch (error) {
     console.error('Ошибка запуска майнера:', error);
     await ctx.answerCbQuery('❌ Ошибка запуска майнера');
@@ -746,6 +749,9 @@ async function stopMiner(ctx, user) {
     userCache.delete(user.id);
     
     await ctx.answerCbQuery('⏹️ Майнер остановлен!');
+    
+    // Обновляем меню майнера
+    await updateMinerMenu(ctx, { ...user, miner: { ...user.miner, active: false } });
   } catch (error) {
     console.error('Ошибка остановки майнера:', error);
     await ctx.answerCbQuery('❌ Ошибка остановки майнера');
@@ -839,6 +845,9 @@ async function doFarm(ctx, user) {
     await ctx.answerCbQuery(
       `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Stars`
     );
+    
+    // Обновляем меню фарма
+    await updateFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
   } catch (error) {
     console.error('Ошибка фарма:', error);
     await ctx.answerCbQuery('❌ Ошибка фарма');
@@ -846,6 +855,57 @@ async function doFarm(ctx, user) {
 }
 
 // ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
+async function updateMinerMenu(ctx, user) {
+  const miner = user.miner;
+  const isActive = miner.active;
+  const efficiency = miner.efficiency;
+  const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+  
+  let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
+  let lastRewardText = '';
+  
+  if (miner.lastReward) {
+    const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
+    if (timeSince < 3600) {
+      const remaining = 3600 - timeSince;
+      lastRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
+    }
+  }
+  
+  const keyboard = Markup.inlineKeyboard([
+    [
+      Markup.button.callback(
+        isActive ? '⏹️ Остановить майнер' : '▶️ Запустить майнер',
+        isActive ? 'stop_miner' : 'start_miner'
+      )
+    ],
+    [
+      Markup.button.callback('⬆️ Улучшить майнер', 'upgrade_miner'),
+      Markup.button.callback('📊 Статистика', 'miner_stats')
+    ],
+    [Markup.button.callback('🔙 Назад', 'main_menu')]
+  ]);
+  
+  const message = 
+    `⛏️ *Майнер*\n\n` +
+    `📊 *Статус:* ${statusText}\n` +
+    `📈 *Уровень:* ${miner.level}\n` +
+    `⚡ *Эффективность:* ${efficiency}x\n` +
+    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
+    `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Stars${lastRewardText}\n\n` +
+    `🎯 Выберите действие:`;
+  
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    // Если не удалось обновить, показываем новое меню
+    await showMinerMenu(ctx, user);
+  }
+}
+
 async function updateFarmMenu(ctx, user) {
   const farm = user.farm;
   const now = Date.now();
@@ -1065,6 +1125,9 @@ async function claimBonus(ctx, user) {
     await ctx.answerCbQuery(
       `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Stars, серия: ${newStreak} дней`
     );
+    
+    // Обновляем меню бонуса
+    await updateBonusMenu(ctx, { ...user, dailyBonus: { ...bonus, lastBonus: now, streak: newStreak } });
   } catch (error) {
     console.error('Ошибка получения бонуса:', error);
     await ctx.answerCbQuery('❌ Ошибка получения бонуса');
@@ -1230,6 +1293,29 @@ bot.action('claim_bonus', async (ctx) => {
     await claimBonus(ctx, user);
   } catch (error) {
     console.error('Ошибка получения бонуса:', error);
+  }
+});
+
+// Обработка кулдаунов
+bot.action('farm_cooldown', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('⏳ Подождите окончания кулдауна!');
+  } catch (error) {
+    console.error('Ошибка кулдауна фарма:', error);
+  }
+});
+
+bot.action('bonus_cooldown', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('⏳ Подождите до следующего бонуса!');
+  } catch (error) {
+    console.error('Ошибка кулдауна бонуса:', error);
   }
 });
 
