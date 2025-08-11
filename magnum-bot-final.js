@@ -230,6 +230,157 @@ function isAdmin(userId) {
 }
 
 // ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
+// Функция для проверки и инициализации недостающих полей пользователя
+function ensureUserFields(user) {
+  // Проверяем и инициализируем статистику
+  if (!user.statistics) {
+    user.statistics = {
+      joinDate: user.createdAt || new Date(),
+      lastSeen: new Date(),
+      totalSessions: 1,
+      totalActions: 0,
+      favoriteAction: null
+    };
+  }
+  
+  // Проверяем и инициализируем ферму
+  if (!user.farm) {
+    user.farm = {
+      lastFarm: null,
+      farmCount: 0,
+      totalFarmEarnings: 0
+    };
+  }
+  
+  // Проверяем и инициализируем майнер
+  if (!user.miner) {
+    user.miner = {
+      active: false,
+      level: 1,
+      efficiency: 1,
+      lastReward: null,
+      totalMined: 0
+    };
+  }
+  
+  // Проверяем и инициализируем ежедневный бонус
+  if (!user.dailyBonus) {
+    user.dailyBonus = {
+      lastBonus: null,
+      streak: 0,
+      maxStreak: 0
+    };
+  }
+  
+  // Проверяем и инициализируем обмен
+  if (!user.exchange) {
+    user.exchange = {
+      totalExchanged: 0,
+      exchangeCount: 0
+    };
+  }
+  
+  // Проверяем и инициализируем вывод
+  if (!user.withdrawal) {
+    user.withdrawal = {
+      totalWithdrawn: 0,
+      withdrawalCount: 0,
+      pendingAmount: 0
+    };
+  }
+  
+  // Проверяем и инициализируем задания
+  if (!user.tasks) {
+    user.tasks = {
+      dailyTasks: [],
+      sponsorTasks: [],
+      lastDailyTasksReset: null,
+      completedTasksCount: 0,
+      totalTaskRewards: 0
+    };
+  }
+  
+  // Проверяем и инициализируем поддержку
+  if (!user.support) {
+    user.support = {
+      ticketsCount: 0,
+      lastTicket: null
+    };
+  }
+  
+  // Проверяем и инициализируем настройки
+  if (!user.settings) {
+    user.settings = {
+      notifications: true,
+      language: 'ru',
+      theme: 'default'
+    };
+  }
+  
+  // Проверяем и инициализируем достижения
+  if (!user.achievements) {
+    user.achievements = [];
+  }
+  
+  if (!user.achievementsCount) {
+    user.achievementsCount = 0;
+  }
+  
+  if (!user.achievementsProgress) {
+    user.achievementsProgress = {};
+  }
+  
+  if (!user.titles) {
+    user.titles = ['🌱 Новичок'];
+  }
+  
+  if (!user.mainTitle) {
+    user.mainTitle = '🌱 Новичок';
+  }
+  
+  if (!user.referrals) {
+    user.referrals = [];
+  }
+  
+  if (!user.referralsCount) {
+    user.referralsCount = 0;
+  }
+  
+  if (!user.totalReferralEarnings) {
+    user.totalReferralEarnings = 0;
+  }
+  
+  if (!user.totalEarnedStars) {
+    user.totalEarnedStars = user.stars || 0;
+  }
+  
+  if (!user.totalEarnedMagnumCoins) {
+    user.totalEarnedMagnumCoins = user.magnumCoins || 0;
+  }
+  
+  if (!user.level) {
+    user.level = 1;
+  }
+  
+  if (!user.experience) {
+    user.experience = 0;
+  }
+  
+  if (!user.experienceToNextLevel) {
+    user.experienceToNextLevel = 100;
+  }
+  
+  if (!user.rank) {
+    user.rank = getUserRank(user);
+  }
+  
+  if (!user.referralCode) {
+    user.referralCode = generateReferralCode();
+  }
+  
+  return user;
+}
+
 async function getUser(id, ctx = null) {
   try {
     // Проверяем кеш
@@ -319,15 +470,19 @@ async function getUser(id, ctx = null) {
       await db.collection('users').insertOne(user);
       console.log(`👤 Создан новый пользователь: ${user.username || user.id}`);
     } else {
+      // Проверяем и инициализируем все недостающие поля
+      user = ensureUserFields(user);
+      
       // Обновляем статистику
       user.statistics.lastSeen = new Date();
-      user.statistics.totalSessions += 1;
+      user.statistics.totalSessions = (user.statistics.totalSessions || 0) + 1;
+      
+      // Обновляем пользователя в базе данных
       await db.collection('users').updateOne(
         { id: id },
         { 
           $set: { 
-            'statistics.lastSeen': new Date(),
-            'statistics.totalSessions': user.statistics.totalSessions,
+            ...user,
             updatedAt: new Date()
           }
         }
