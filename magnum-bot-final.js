@@ -1539,6 +1539,188 @@ async function showBonusStreak(ctx, user) {
   }
 }
 
+// ==================== АДМИН ПАНЕЛЬ ====================
+async function showAdminPanel(ctx, user) {
+  try {
+    log(`👨‍💼 Показ админ панели для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📊 Статистика бота', 'admin_stats'),
+        Markup.button.callback('👥 Управление пользователями', 'admin_users')
+      ],
+      [
+        Markup.button.callback('💰 Управление балансами', 'admin_balance'),
+        Markup.button.callback('⚙️ Настройки бота', 'admin_settings')
+      ],
+      [
+        Markup.button.callback('📢 Рассылка', 'admin_broadcast'),
+        Markup.button.callback('🔄 Обновление кеша', 'admin_cache')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `👨‍💼 *Админ панель*\n\n` +
+      `Добро пожаловать в панель администратора!\n\n` +
+      `🔧 *Доступные функции:*\n` +
+      `├ 📊 Статистика бота - общая статистика\n` +
+      `├ 👥 Управление пользователями - поиск и управление\n` +
+      `├ 💰 Управление балансами - изменение балансов\n` +
+      `├ ⚙️ Настройки бота - конфигурация\n` +
+      `├ 📢 Рассылка - отправка сообщений\n` +
+      `└ 🔄 Обновление кеша - очистка кеша\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Админ панель показана для пользователя ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ админ панели для пользователя ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа админ панели');
+  }
+}
+
+async function showAdminStats(ctx, user) {
+  try {
+    log(`📊 Показ статистики бота для админа ${user.id}`);
+    
+    // Получаем статистику из базы данных
+    const totalUsers = await db.collection('users').countDocuments();
+    const activeUsers = await db.collection('users').countDocuments({
+      'lastSeen': { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+    });
+    const newUsersToday = await db.collection('users').countDocuments({
+      'createdAt': { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+    
+    // Статистика по валютам
+    const totalMagnumCoins = await db.collection('users').aggregate([
+      { $group: { _id: null, total: { $sum: '$magnumCoins' } } }
+    ]).toArray();
+    
+    const totalStars = await db.collection('users').aggregate([
+      { $group: { _id: null, total: { $sum: '$stars' } } }
+    ]).toArray();
+    
+    const totalMagnum = totalMagnumCoins.length > 0 ? totalMagnumCoins[0].total : 0;
+    const totalStarsAmount = totalStars.length > 0 ? totalStars[0].total : 0;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `📊 *Статистика бота*\n\n` +
+      `👥 *Пользователи:*\n` +
+      `├ Всего пользователей: \`${totalUsers}\`\n` +
+      `├ Активных за неделю: \`${activeUsers}\`\n` +
+      `└ Новых за день: \`${newUsersToday}\`\n\n` +
+      `💰 *Экономика:*\n` +
+      `├ Всего Magnum Coins: \`${formatNumber(totalMagnum)}\`\n` +
+      `└ Всего Stars: \`${formatNumber(totalStarsAmount)}\`\n\n` +
+      `📈 *Активность:*\n` +
+      `├ Средняя активность: \`${Math.round((activeUsers / totalUsers) * 100)}%\`\n` +
+      `└ Прирост за день: \`${newUsersToday}\` пользователей\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Статистика бота показана для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ статистики бота для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа статистики');
+  }
+}
+
+async function showAdminUsers(ctx, user) {
+  try {
+    log(`👥 Показ управления пользователями для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🔍 Поиск пользователя', 'admin_search_user'),
+        Markup.button.callback('📊 Топ пользователей', 'admin_top_users')
+      ],
+      [
+        Markup.button.callback('🚫 Заблокировать', 'admin_ban_user'),
+        Markup.button.callback('✅ Разблокировать', 'admin_unban_user')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `👥 *Управление пользователями*\n\n` +
+      `🔧 *Доступные действия:*\n` +
+      `├ 🔍 Поиск пользователя - найти по ID\n` +
+      `├ 📊 Топ пользователей - лучшие игроки\n` +
+      `├ 🚫 Заблокировать - ограничить доступ\n` +
+      `└ ✅ Разблокировать - восстановить доступ\n\n` +
+      `💡 *Совет:* Используйте поиск для быстрого нахождения пользователей\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Управление пользователями показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления пользователями для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления пользователями');
+  }
+}
+
+async function showAdminBalance(ctx, user) {
+  try {
+    log(`💰 Показ управления балансами для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Добавить Magnum Coins', 'admin_add_magnum'),
+        Markup.button.callback('➖ Убрать Magnum Coins', 'admin_remove_magnum')
+      ],
+      [
+        Markup.button.callback('➕ Добавить Stars', 'admin_add_stars'),
+        Markup.button.callback('➖ Убрать Stars', 'admin_remove_stars')
+      ],
+      [
+        Markup.button.callback('💰 Массовая выдача', 'admin_mass_give'),
+        Markup.button.callback('📊 Статистика балансов', 'admin_balance_stats')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `💰 *Управление балансами*\n\n` +
+      `🔧 *Доступные действия:*\n` +
+      `├ ➕ Добавить Magnum Coins - пополнить баланс\n` +
+      `├ ➖ Убрать Magnum Coins - списать средства\n` +
+      `├ ➕ Добавить Stars - выдать звезды\n` +
+      `├ ➖ Убрать Stars - списать звезды\n` +
+      `├ 💰 Массовая выдача - всем пользователям\n` +
+      `└ 📊 Статистика балансов - общая статистика\n\n` +
+      `⚠️ *Внимание:* Все изменения необратимы!\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Управление балансами показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления балансами для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления балансами');
+  }
+}
+
 // ==================== ОБРАБОТКА МАЙНЕРА ====================
 async function processMinerRewards() {
   try {
@@ -3629,6 +3811,51 @@ bot.action('check_subscription', async (ctx) => {
     if (user) {
       await showMainMenu(ctx, user);
     }
+  }
+});
+
+// Админ панель
+bot.action('admin', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminPanel(ctx, user);
+  } catch (error) {
+    logError(error, 'Админ панель (обработчик)');
+  }
+});
+
+bot.action('admin_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика бота (обработчик)');
+  }
+});
+
+bot.action('admin_users', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminUsers(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление пользователями (обработчик)');
+  }
+});
+
+bot.action('admin_balance', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminBalance(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление балансами (обработчик)');
   }
 });
 
