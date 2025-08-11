@@ -938,6 +938,118 @@ async function doFarm(ctx, user) {
   }
 }
 
+// ==================== СТАТИСТИКА ФАРМА ====================
+async function showFarmStats(ctx, user) {
+  try {
+    log(`📊 Показ статистики фарма для пользователя ${user.id}`);
+    
+    const farm = user.farm;
+    const now = Date.now();
+    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
+    const timeSince = Math.floor((now - lastFarm) / 1000);
+    const cooldown = config.FARM_COOLDOWN;
+    
+    const canFarm = timeSince >= cooldown;
+    const remainingTime = canFarm ? 0 : cooldown - timeSince;
+    
+    const baseReward = config.FARM_BASE_REWARD;
+    const bonus = Math.min(user.level * 0.1, 2);
+    const totalReward = baseReward + bonus;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          canFarm ? '🌾 Фармить' : `⏳ ${formatTime(remainingTime)}`,
+          canFarm ? 'do_farm' : 'farm_cooldown'
+        )
+      ],
+      [
+        Markup.button.callback('📊 Статистика', 'farm_stats'),
+        Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
+      ],
+      [Markup.button.callback('🔙 Назад', 'farm')]
+    ]);
+    
+    const message = 
+      `🌾 *Статистика фарма*\n\n` +
+      `📊 *Общая статистика:*\n` +
+      `├ Всего фармов: \`${farm.farmCount || 0}\`\n` +
+      `├ Всего заработано: \`${formatNumber(farm.totalFarmEarnings || 0)}\` Stars\n` +
+      `└ Средняя награда: \`${farm.farmCount > 0 ? formatNumber((farm.totalFarmEarnings || 0) / farm.farmCount) : '0.00'}\` Stars\n\n` +
+      `⏰ *Текущий статус:*\n` +
+      `├ Статус: ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
+      `├ Базовая награда: \`${formatNumber(baseReward)}\` Stars\n` +
+      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Stars\n` +
+      `└ Итого награда: \`${formatNumber(totalReward)}\` Stars\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ статистики фарма');
+    await ctx.answerCbQuery('❌ Ошибка загрузки статистики');
+  }
+}
+
+// ==================== БОНУСЫ ФАРМА ====================
+async function showFarmBonuses(ctx, user) {
+  try {
+    log(`🎯 Показ бонусов фарма для пользователя ${user.id}`);
+    
+    const farm = user.farm;
+    const now = Date.now();
+    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
+    const timeSince = Math.floor((now - lastFarm) / 1000);
+    const cooldown = config.FARM_COOLDOWN;
+    
+    const canFarm = timeSince >= cooldown;
+    const remainingTime = canFarm ? 0 : cooldown - timeSince;
+    
+    const baseReward = config.FARM_BASE_REWARD;
+    const bonus = Math.min(user.level * 0.1, 2);
+    const totalReward = baseReward + bonus;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          canFarm ? '🌾 Фармить' : `⏳ ${formatTime(remainingTime)}`,
+          canFarm ? 'do_farm' : 'farm_cooldown'
+        )
+      ],
+      [
+        Markup.button.callback('📊 Статистика', 'farm_stats'),
+        Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
+      ],
+      [Markup.button.callback('🔙 Назад', 'farm')]
+    ]);
+    
+    const message = 
+      `🎯 *Бонусы фарма*\n\n` +
+      `💰 *Система бонусов:*\n` +
+      `├ Базовая награда: \`${formatNumber(baseReward)}\` Stars\n` +
+      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Stars\n` +
+      `└ Итого награда: \`${formatNumber(totalReward)}\` Stars\n\n` +
+      `📈 *Как увеличить бонусы:*\n` +
+      `├ Повышайте уровень для увеличения бонуса\n` +
+      `├ Максимальный бонус: \`+2.00\` Stars\n` +
+      `└ Текущий уровень: \`${user.level || 1}\`\n\n` +
+      `⏰ *Текущий статус:*\n` +
+      `├ Статус: ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
+      `└ ${canFarm ? 'Можете фармить!' : `Осталось: ${formatTime(remainingTime)}`}\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ бонусов фарма');
+    await ctx.answerCbQuery('❌ Ошибка загрузки бонусов');
+  }
+}
+
 // ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
 async function updateMinerMenu(ctx, user) {
   try {
@@ -1415,6 +1527,30 @@ bot.action('do_farm', async (ctx) => {
     await doFarm(ctx, user);
   } catch (error) {
     logError(error, 'Фарм (обработчик)');
+  }
+});
+
+// Статистика фарма
+bot.action('farm_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showFarmStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика фарма (обработчик)');
+  }
+});
+
+// Бонусы фарма
+bot.action('farm_bonuses', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showFarmBonuses(ctx, user);
+  } catch (error) {
+    logError(error, 'Бонусы фарма (обработчик)');
   }
 });
 
