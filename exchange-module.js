@@ -35,6 +35,9 @@ class ExchangeModule {
   // Получение резерва валют
   async getReserve() {
     try {
+      // Сначала очищаем некорректные записи
+      await this.db.collection('reserve').deleteMany({ currency: null });
+      
       let reserve = await this.db.collection('reserve').findOne({ currency: 'main' });
       
       if (!reserve) {
