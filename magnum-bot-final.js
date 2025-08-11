@@ -448,11 +448,11 @@ async function getUser(id, ctx = null) {
     logFunction('getUser', id, { ctx: ctx ? 'present' : 'null' });
     
     // Проверяем кеш
-    logDebug(`Проверка кеша для пользователя ${id}`);
+    console.log(`Проверка кеша для пользователя ${id}`);
     const cached = getCachedUser(id);
     if (cached) {
-      log(`✅ Пользователь ${id} найден в кеше`);
-      logDebug(`Кешированный пользователь ${id}`, {
+      console.log(`✅ Пользователь ${id} найден в кеше`);
+      console.log(`Кешированный пользователь ${id}:`, {
         level: cached.level,
         magnumCoins: cached.magnumCoins,
         stars: cached.stars,
@@ -461,9 +461,9 @@ async function getUser(id, ctx = null) {
       
       // Проверяем, не заблокирован ли пользователь
       if (cached.banned) {
-        log(`🚫 Пользователь ${id} заблокирован (из кеша)`);
+        console.log(`🚫 Пользователь ${id} заблокирован (из кеша)`);
         if (ctx) {
-          log(`Отправка сообщения о блокировке пользователю ${id}`);
+          console.log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
@@ -471,12 +471,12 @@ async function getUser(id, ctx = null) {
       return cached;
     }
 
-    log(`📊 Поиск пользователя ${id} в базе данных`);
+    console.log(`📊 Поиск пользователя ${id} в базе данных`);
     let user = await db.collection('users').findOne({ id: id });
     
     if (!user) {
-      log(`🆕 Создание нового пользователя ${id}`);
-      logDebug(`Данные для нового пользователя ${id}`, {
+      console.log(`🆕 Создание нового пользователя ${id}`);
+      console.log(`Данные для нового пользователя ${id}:`, {
         username: ctx?.from?.username || null,
         firstName: ctx?.from?.first_name || null,
         lastName: ctx?.from?.last_name || null,
@@ -560,13 +560,13 @@ async function getUser(id, ctx = null) {
         updatedAt: new Date()
       };
       
-      log(`💾 Сохранение нового пользователя ${id} в базу данных`);
+      console.log(`💾 Сохранение нового пользователя ${id} в базу данных`);
       const insertResult = await db.collection('users').insertOne(user);
-      logDebug(`Результат вставки пользователя ${id}`, { insertedId: insertResult.insertedId });
-      log(`✅ Новый пользователь ${id} успешно создан: ${user.username || user.id}`);
+      console.log(`Результат вставки пользователя ${id}:`, { insertedId: insertResult.insertedId });
+      console.log(`✅ Новый пользователь ${id} успешно создан: ${user.username || user.id}`);
     } else {
-      log(`✅ Пользователь ${id} найден в базе данных`);
-      logDebug(`Существующий пользователь ${id}`, {
+      console.log(`✅ Пользователь ${id} найден в базе данных`);
+      console.log(`Существующий пользователь ${id}:`, {
         level: user.level,
         magnumCoins: user.magnumCoins,
         stars: user.stars,
@@ -576,16 +576,16 @@ async function getUser(id, ctx = null) {
       
       // Проверяем, не заблокирован ли пользователь
       if (user.banned) {
-        log(`🚫 Пользователь ${id} заблокирован (из БД)`);
+        console.log(`🚫 Пользователь ${id} заблокирован (из БД)`);
         if (ctx) {
-          log(`Отправка сообщения о блокировке пользователю ${id}`);
+          console.log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
       }
       
       // Проверяем и инициализируем все недостающие поля
-      logDebug(`Инициализация полей для существующего пользователя ${id}`);
+      console.log(`Инициализация полей для существующего пользователя ${id}`);
       user = ensureUserFields(user);
       
       // Обновляем статистику
@@ -594,7 +594,7 @@ async function getUser(id, ctx = null) {
       user.statistics.lastSeen = new Date();
       user.statistics.totalSessions = oldSessions + 1;
       
-      logDebug(`Обновление статистики пользователя ${id}`, {
+      console.log(`Обновление статистики пользователя ${id}:`, {
         oldLastSeen,
         newLastSeen: user.statistics.lastSeen,
         oldSessions,
@@ -602,7 +602,7 @@ async function getUser(id, ctx = null) {
       });
       
       // Обновляем пользователя в базе данных
-      log(`💾 Обновление пользователя ${id} в базе данных`);
+      console.log(`💾 Обновление пользователя ${id} в базе данных`);
       const updateResult = await db.collection('users').updateOne(
         { id: id },
         { 
@@ -612,21 +612,21 @@ async function getUser(id, ctx = null) {
           }
         }
       );
-      logDebug(`Результат обновления пользователя ${id}`, { 
+      console.log(`Результат обновления пользователя ${id}:`, { 
         matchedCount: updateResult.matchedCount,
         modifiedCount: updateResult.modifiedCount 
       });
     }
     
     // Сохраняем в кеш
-    logDebug(`Сохранение пользователя ${id} в кеш`);
+    console.log(`Сохранение пользователя ${id} в кеш`);
     setCachedUser(id, user);
     
-    log(`✅ Пользователь ${id} успешно загружен`);
+    console.log(`✅ Пользователь ${id} успешно загружен`);
     return user;
   } catch (error) {
-    logError(error, `Получение пользователя ${id}`);
-    logDebug(`Ошибка при получении пользователя ${id}`, {
+    console.error(`❌ Ошибка получения пользователя ${id}:`, error);
+    console.log(`Ошибка при получении пользователя ${id}:`, {
       error: error.message,
       stack: error.stack
     });
@@ -651,7 +651,7 @@ async function checkSubscription(ctx) {
     const member = await ctx.telegram.getChatMember(config.REQUIRED_CHANNEL, ctx.from.id);
     return ['creator', 'administrator', 'member'].includes(member.status);
   } catch (error) {
-    logError(error, 'Проверка подписки');
+    console.error('❌ Ошибка проверки подписки:', error);
     // Если канал не найден, пропускаем проверку подписки
     return true;
   }
@@ -4136,14 +4136,8 @@ const bot = new Telegraf(config.BOT_TOKEN);
 // Обработка команды /start
 bot.start(async (ctx) => {
   try {
-    logFunction('bot.start', ctx.from.id, { 
-      startPayload: ctx.startPayload,
-      username: ctx.from.username,
-      firstName: ctx.from.first_name
-    });
-    
-    log(`🚀 Команда /start от пользователя ${ctx.from.id}`);
-    logDebug(`Данные пользователя /start`, {
+    console.log('🚀 Команда /start от пользователя', ctx.from.id);
+    console.log('Данные пользователя /start:', {
       id: ctx.from.id,
       username: ctx.from.username,
       firstName: ctx.from.first_name,
@@ -4151,15 +4145,15 @@ bot.start(async (ctx) => {
       startPayload: ctx.startPayload
     });
     
-    log(`👤 Получение пользователя ${ctx.from.id}`);
+    console.log(`👤 Получение пользователя ${ctx.from.id}`);
     const user = await getUser(ctx.from.id, ctx);
     if (!user) {
-      log(`❌ Не удалось получить пользователя ${ctx.from.id}`);
+      console.log(`❌ Не удалось получить пользователя ${ctx.from.id}`);
       await ctx.reply('❌ Ошибка создания пользователя');
       return;
     }
     
-    logDebug(`Пользователь ${ctx.from.id} получен`, {
+    console.log(`Пользователь ${ctx.from.id} получен:`, {
       level: user.level,
       magnumCoins: user.magnumCoins,
       stars: user.stars,
@@ -4167,12 +4161,12 @@ bot.start(async (ctx) => {
     });
     
     // Проверяем подписку
-    log(`🔍 Проверка подписки для пользователя ${ctx.from.id}`);
+    console.log(`🔍 Проверка подписки для пользователя ${ctx.from.id}`);
     const isSubscribed = await checkSubscription(ctx);
-    logDebug(`Результат проверки подписки для ${ctx.from.id}`, { isSubscribed });
+    console.log(`Результат проверки подписки для ${ctx.from.id}:`, { isSubscribed });
     
     if (!isSubscribed) {
-      log(`❌ Пользователь ${ctx.from.id} не подписан на канал`);
+      console.log(`❌ Пользователь ${ctx.from.id} не подписан на канал`);
       await showSubscriptionMessage(ctx);
       return;
     }
@@ -4180,26 +4174,26 @@ bot.start(async (ctx) => {
     // Обрабатываем реферальную ссылку
     const startPayload = ctx.startPayload;
     if (startPayload && startPayload !== user.id.toString()) {
-      log(`👥 Обработка реферала: ${ctx.from.id} от ${startPayload}`);
-      logDebug(`Реферальные данные`, {
+      console.log(`👥 Обработка реферала: ${ctx.from.id} от ${startPayload}`);
+      console.log(`Реферальные данные:`, {
         userId: ctx.from.id,
         referrerId: startPayload,
         currentReferrer: user.referrerId
       });
       await handleReferral(user.id, parseInt(startPayload));
     } else {
-      log(`ℹ️ Реферальная ссылка не используется для пользователя ${ctx.from.id}`);
+      console.log(`ℹ️ Реферальная ссылка не используется для пользователя ${ctx.from.id}`);
     }
     
     // Для команды /start используем ctx.reply вместо editMessageText
-    log(`📱 Показ главного меню для пользователя ${ctx.from.id}`);
+    console.log(`📱 Показ главного меню для пользователя ${ctx.from.id}`);
     await showMainMenuStart(ctx, user);
     
-    log(`✅ Команда /start успешно обработана для пользователя ${ctx.from.id}`);
+    console.log(`✅ Команда /start успешно обработана для пользователя ${ctx.from.id}`);
     
   } catch (error) {
-    logError(error, `Команда /start для пользователя ${ctx.from.id}`);
-    logDebug(`Ошибка в /start`, {
+    console.error(`❌ Ошибка команды /start для пользователя ${ctx.from.id}:`, error);
+    console.log(`Ошибка в /start:`, {
       userId: ctx.from.id,
       error: error.message,
       stack: error.stack
@@ -4211,16 +4205,11 @@ bot.start(async (ctx) => {
 // Обработка текстовых сообщений для админ функций
 bot.on('text', async (ctx) => {
   try {
-    logFunction('bot.on.text', ctx.from.id, { 
-      text: ctx.message.text,
-      messageId: ctx.message.message_id
-    });
-    
-    log(`📝 Текстовое сообщение от пользователя ${ctx.from.id}: "${ctx.message.text}"`);
+    console.log(`📝 Текстовое сообщение от пользователя ${ctx.from.id}: "${ctx.message.text}"`);
     
     const user = await getUser(ctx.from.id);
     if (!user) {
-      log(`❌ Не удалось получить пользователя ${ctx.from.id} для обработки текста`);
+      console.log(`❌ Не удалось получить пользователя ${ctx.from.id} для обработки текста`);
       return;
     }
     
@@ -4228,7 +4217,7 @@ bot.on('text', async (ctx) => {
     
     // Проверяем, есть ли у пользователя adminState (для создания тикетов поддержки)
     if (user.adminState) {
-      logDebug(`Обработка текста пользователя ${ctx.from.id} с adminState`, {
+      console.log(`Обработка текста пользователя ${ctx.from.id} с adminState:`, {
         adminState: user.adminState,
         text: text,
         textLength: text.length,
@@ -4237,11 +4226,11 @@ bot.on('text', async (ctx) => {
       
       // Проверяем состояние пользователя
       if (user.adminState === 'creating_support_ticket') {
-        log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
+        console.log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
         await handleCreateSupportTicket(ctx, user, text);
         return;
       } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
-        log(`📝 Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
+        console.log(`📝 Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
         await handleAdminAnswerTicket(ctx, user, text);
         return;
       }
@@ -4249,66 +4238,66 @@ bot.on('text', async (ctx) => {
       // Проверяем админские состояния (только для админов)
       if (isAdmin(user.id)) {
     if (user.adminState === 'searching_user') {
-      log(`🔍 Админ ${ctx.from.id} ищет пользователя: "${text}"`);
+      console.log(`🔍 Админ ${ctx.from.id} ищет пользователя: "${text}"`);
       await handleAdminSearchUser(ctx, user, text);
     } else if (user.adminState === 'banning_user') {
-      log(`🚫 Админ ${ctx.from.id} блокирует пользователя: "${text}"`);
+      console.log(`🚫 Админ ${ctx.from.id} блокирует пользователя: "${text}"`);
       await handleAdminBanUser(ctx, user, text);
     } else if (user.adminState === 'unbanning_user') {
-      log(`✅ Админ ${ctx.from.id} разблокирует пользователя: "${text}"`);
+      console.log(`✅ Админ ${ctx.from.id} разблокирует пользователя: "${text}"`);
       await handleAdminUnbanUser(ctx, user, text);
     } else if (user.adminState === 'setting_farm_reward') {
-      log(`🌾 Админ ${ctx.from.id} устанавливает награду фарма: "${text}"`);
+      console.log(`🌾 Админ ${ctx.from.id} устанавливает награду фарма: "${text}"`);
       await handleAdminSetFarmReward(ctx, user, text);
     } else if (user.adminState === 'setting_farm_cooldown') {
-      log(`⏰ Админ ${ctx.from.id} устанавливает кулдаун фарма: "${text}"`);
+      console.log(`⏰ Админ ${ctx.from.id} устанавливает кулдаун фарма: "${text}"`);
       await handleAdminSetFarmCooldown(ctx, user, text);
     } else if (user.adminState === 'setting_bonus_base') {
-      log(`🎁 Админ ${ctx.from.id} устанавливает базовый бонус: "${text}"`);
+      console.log(`🎁 Админ ${ctx.from.id} устанавливает базовый бонус: "${text}"`);
       await handleAdminSetBonusBase(ctx, user, text);
     } else if (user.adminState === 'setting_miner_reward') {
-      log(`⛏️ Админ ${ctx.from.id} устанавливает награду майнера: "${text}"`);
+      console.log(`⛏️ Админ ${ctx.from.id} устанавливает награду майнера: "${text}"`);
       await handleAdminSetMinerReward(ctx, user, text);
     } else if (user.adminState === 'setting_referral_reward') {
-      log(`👥 Админ ${ctx.from.id} устанавливает реферальную награду: "${text}"`);
+      console.log(`👥 Админ ${ctx.from.id} устанавливает реферальную награду: "${text}"`);
       await handleAdminSetReferralReward(ctx, user, text);
     } else if (user.adminState === 'setting_subscription_channel') {
-      log(`📢 Админ ${ctx.from.id} устанавливает канал подписки: "${text}"`);
+      console.log(`📢 Админ ${ctx.from.id} устанавливает канал подписки: "${text}"`);
       await handleAdminSetSubscriptionChannel(ctx, user, text);
     } else if (user.adminState === 'creating_post_with_button') {
-      log(`📝 Админ ${ctx.from.id} создает пост с кнопкой: "${text}"`);
+      console.log(`📝 Админ ${ctx.from.id} создает пост с кнопкой: "${text}"`);
       await handleAdminCreatePostWithButton(ctx, user, text);
     } else if (user.adminState === 'creating_post_no_button') {
-      log(`📝 Админ ${ctx.from.id} создает пост без кнопки: "${text}"`);
+      console.log(`📝 Админ ${ctx.from.id} создает пост без кнопки: "${text}"`);
       await handleAdminCreatePostNoButton(ctx, user, text);
     } else if (user.adminState === 'creating_promocode') {
-      log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
+      console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
       await handleAdminCreatePromocode(ctx, user, text);
     } else if (user.adminState === 'entering_promocode') {
-      log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
+      console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
       await handleUserEnterPromocode(ctx, user, text);
     } else if (user.adminState === 'creating_support_ticket') {
-      log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
+      console.log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
       await handleCreateSupportTicket(ctx, user, text);
     } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
-      log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
+      console.log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
       await handleAdminAnswerTicket(ctx, user, text);
     } else {
       // Если у пользователя нет adminState, но он админ - показываем сообщение
       if (isAdmin(user.id)) {
-        log(`ℹ️ Админ ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+        console.log(`ℹ️ Админ ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
         await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
       } else {
-        log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+        console.log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
         await ctx.reply('❌ Неизвестная команда. Используйте меню для навигации.');
       }
     }
     
-    log(`✅ Текстовое сообщение от ${ctx.from.id} обработано`);
+    console.log(`✅ Текстовое сообщение от ${ctx.from.id} обработано`);
     
   } catch (error) {
-    logError(error, `Обработка текстового сообщения от ${ctx.from.id}`);
-    logDebug(`Ошибка в обработке текста`, {
+    console.error(`❌ Ошибка обработки текстового сообщения от ${ctx.from.id}:`, error);
+    console.log(`Ошибка в обработке текста:`, {
       userId: ctx.from.id,
       text: ctx.message.text,
       error: error.message,
@@ -4379,7 +4368,7 @@ async function handleAdminSearchUser(ctx, user, text) {
     );
     
   } catch (error) {
-    logError(error, 'Поиск пользователя админом');
+    console.error('❌ Ошибка поиска пользователя админом:', error);
     await ctx.reply('❌ Ошибка поиска пользователя');
   }
 }
