@@ -970,18 +970,8 @@ async function doFarm(ctx, user) {
       log(`⏳ Кулдаун фарма для пользователя ${user.id}, осталось: ${remaining}с`);
       await ctx.answerCbQuery(`⏳ Подождите ${formatTime(remaining)} перед следующим фармом!`);
       
-      // Запускаем таймер для автоматического обновления меню после истечения кулдауна
-      setTimeout(async () => {
-        try {
-          const updatedUser = await getUser(ctx.from.id);
-          if (updatedUser) {
-            await updateFarmMenu(ctx, updatedUser);
-            log(`🔄 Автоматическое обновление меню фарма для пользователя ${user.id} после истечения кулдауна`);
-          }
-        } catch (error) {
-          logError(error, 'Автоматическое обновление меню фарма');
-        }
-      }, remaining * 1000);
+      // Запускаем периодическое обновление меню с обратным отсчетом
+      startFarmCountdown(ctx, user, remaining);
       
       return;
     }
@@ -1269,6 +1259,197 @@ async function updateFarmMenu(ctx, user) {
   }
 }
 
+// Функция для запуска обратного отсчета фарма
+function startFarmCountdown(ctx, user, remainingSeconds) {
+  const countdownKey = `farm_countdown_${user.id}`;
+  
+  // Очищаем предыдущий таймер, если он существует
+  if (global[countdownKey]) {
+    clearInterval(global[countdownKey]);
+  }
+  
+  let secondsLeft = remainingSeconds;
+  
+  const updateCountdown = async () => {
+    try {
+      if (secondsLeft <= 0) {
+        // Кулдаун истек, обновляем меню и останавливаем таймер
+        clearInterval(global[countdownKey]);
+        delete global[countdownKey];
+        
+        const updatedUser = await getUser(ctx.from.id);
+        if (updatedUser) {
+          await updateFarmMenu(ctx, updatedUser);
+          log(`🔄 Обратный отсчет фарма завершен для пользователя ${user.id}`);
+        }
+        return;
+      }
+      
+      // Обновляем меню с текущим временем
+      const updatedUser = await getUser(ctx.from.id);
+      if (updatedUser) {
+        const farm = updatedUser.farm;
+        const now = Date.now();
+        const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
+        const timeSince = Math.floor((now - lastFarm) / 1000);
+        const cooldown = config.FARM_COOLDOWN;
+        const canFarm = timeSince >= cooldown;
+        
+        const baseReward = config.FARM_BASE_REWARD;
+        const bonus = Math.min(updatedUser.level * 0.1, 2);
+        const totalReward = baseReward + bonus;
+        
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              canFarm ? '🌾 Фармить' : `⏳ ${formatTime(secondsLeft)}`,
+              canFarm ? 'do_farm' : 'farm_cooldown'
+            )
+          ],
+          [
+            Markup.button.callback('📊 Статистика', 'farm_stats'),
+            Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
+          ],
+          [
+            Markup.button.callback('⛏️ Майнер', 'miner')
+          ],
+          [Markup.button.callback('🔙 Назад', 'main_menu')]
+        ]);
+        
+        const message = 
+          `🌾 *Фарм*\n\n` +
+          `⏰ *Статус:* ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
+          `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
+          `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Magnum Coins\n` +
+          `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
+          `📊 *Всего фармов:* ${farm.farmCount}\n` +
+          `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Magnum Coins\n\n` +
+          `🎯 Выберите действие:`;
+        
+        await ctx.editMessageText(message, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        });
+      }
+      
+      secondsLeft--;
+    } catch (error) {
+      logError(error, 'Обратный отсчет фарма');
+      clearInterval(global[countdownKey]);
+      delete global[countdownKey];
+    }
+  };
+  
+  // Запускаем обновление каждую секунду
+  global[countdownKey] = setInterval(updateCountdown, 1000);
+  
+  // Сразу запускаем первое обновление
+  updateCountdown();
+  
+  log(`⏰ Запущен обратный отсчет фарма для пользователя ${user.id}, осталось: ${remainingSeconds}с`);
+}
+
+// Функция для запуска обратного отсчета бонуса
+function startBonusCountdown(ctx, user, remainingSeconds) {
+  const countdownKey = `bonus_countdown_${user.id}`;
+  
+  // Очищаем предыдущий таймер, если он существует
+  if (global[countdownKey]) {
+    clearInterval(global[countdownKey]);
+  }
+  
+  let secondsLeft = remainingSeconds;
+  
+  const updateCountdown = async () => {
+    try {
+      if (secondsLeft <= 0) {
+        // Кулдаун истек, обновляем меню и останавливаем таймер
+        clearInterval(global[countdownKey]);
+        delete global[countdownKey];
+        
+        const updatedUser = await getUser(ctx.from.id);
+        if (updatedUser) {
+          await updateBonusMenu(ctx, updatedUser);
+          log(`🔄 Обратный отсчет бонуса завершен для пользователя ${user.id}`);
+        }
+        return;
+      }
+      
+      // Обновляем меню с текущим временем
+      const updatedUser = await getUser(ctx.from.id);
+      if (updatedUser) {
+        const bonus = updatedUser.dailyBonus;
+        const now = new Date();
+        const lastBonus = bonus.lastBonus;
+        
+        let canClaim = false;
+        let timeUntilNext = 0;
+        
+        if (!lastBonus) {
+          canClaim = true;
+        } else {
+          const timeSince = now.getTime() - lastBonus.getTime();
+          const dayInMs = 24 * 60 * 60 * 1000;
+          
+          if (timeSince >= dayInMs) {
+            canClaim = true;
+          } else {
+            timeUntilNext = dayInMs - timeSince;
+          }
+        }
+        
+        const baseReward = config.DAILY_BONUS_BASE;
+        const streakBonus = Math.min(bonus.streak * 0.5, 5);
+        const totalReward = baseReward + streakBonus;
+        
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              canClaim ? '🎁 Получить бонус' : `⏳ ${formatTime(Math.floor(secondsLeft / 1000))}`,
+              canClaim ? 'claim_bonus' : 'bonus_cooldown'
+            )
+          ],
+          [
+            Markup.button.callback('📊 Статистика', 'bonus_stats'),
+            Markup.button.callback('🔥 Серия', 'bonus_streak')
+          ],
+          [Markup.button.callback('🔙 Назад', 'main_menu')]
+        ]);
+        
+        const message = 
+          `🎁 *Ежедневный бонус*\n\n` +
+          `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
+          `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
+          `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Magnum Coins\n` +
+          `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
+          `🔥 *Текущая серия:* ${bonus.streak} дней\n` +
+          `📊 *Всего получено:* ${bonus.totalClaimed || 0} бонусов\n` +
+          `💎 *Всего заработано:* ${formatNumber(bonus.totalEarned || 0)} Magnum Coins\n\n` +
+          `🎯 Выберите действие:`;
+        
+        await ctx.editMessageText(message, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        });
+      }
+      
+      secondsLeft--;
+    } catch (error) {
+      logError(error, 'Обратный отсчет бонуса');
+      clearInterval(global[countdownKey]);
+      delete global[countdownKey];
+    }
+  };
+  
+  // Запускаем обновление каждую секунду
+  global[countdownKey] = setInterval(updateCountdown, 1000);
+  
+  // Сразу запускаем первое обновление
+  updateCountdown();
+  
+  log(`⏰ Запущен обратный отсчет бонуса для пользователя ${user.id}, осталось: ${remainingSeconds}с`);
+}
+
 async function showBonusMenu(ctx, user) {
   const bonus = user.dailyBonus;
   const now = new Date();
@@ -1409,18 +1590,8 @@ async function claimBonus(ctx, user) {
       log(`⏳ Кулдаун бонуса для пользователя ${user.id}, осталось: ${Math.floor(remaining / 1000)}с`);
       await ctx.answerCbQuery(`⏳ Подождите ${formatTime(Math.floor(remaining / 1000))} до следующего бонуса!`);
       
-      // Запускаем таймер для автоматического обновления меню после истечения кулдауна
-      setTimeout(async () => {
-        try {
-          const updatedUser = await getUser(ctx.from.id);
-          if (updatedUser) {
-            await updateBonusMenu(ctx, updatedUser);
-            log(`🔄 Автоматическое обновление меню бонуса для пользователя ${user.id} после истечения кулдауна`);
-          }
-        } catch (error) {
-          logError(error, 'Автоматическое обновление меню бонуса');
-        }
-      }, remaining);
+      // Запускаем периодическое обновление меню с обратным отсчетом
+      startBonusCountdown(ctx, user, Math.floor(remaining / 1000));
       
       return;
     }
@@ -4650,18 +4821,8 @@ bot.action('farm_cooldown', async (ctx) => {
       const remaining = cooldown - timeSince;
       await ctx.answerCbQuery(`⏳ Подождите ${formatTime(remaining)} перед следующим фармом!`);
       
-      // Запускаем таймер для автоматического обновления меню после истечения кулдауна
-      setTimeout(async () => {
-        try {
-          const updatedUser = await getUser(ctx.from.id);
-          if (updatedUser) {
-            await updateFarmMenu(ctx, updatedUser);
-            log(`🔄 Автоматическое обновление меню фарма для пользователя ${user.id} после истечения кулдауна`);
-          }
-        } catch (error) {
-          logError(error, 'Автоматическое обновление меню фарма');
-        }
-      }, remaining * 1000);
+      // Запускаем периодическое обновление меню с обратным отсчетом
+      startFarmCountdown(ctx, user, remaining);
     } else {
       // Если кулдаун уже истек, обновляем меню
       await updateFarmMenu(ctx, user);
@@ -4686,18 +4847,8 @@ bot.action('bonus_cooldown', async (ctx) => {
       const remaining = dayInMs - timeSince;
       await ctx.answerCbQuery(`⏳ Подождите ${formatTime(Math.floor(remaining / 1000))} до следующего бонуса!`);
       
-      // Запускаем таймер для автоматического обновления меню после истечения кулдауна
-      setTimeout(async () => {
-        try {
-          const updatedUser = await getUser(ctx.from.id);
-          if (updatedUser) {
-            await updateBonusMenu(ctx, updatedUser);
-            log(`🔄 Автоматическое обновление меню бонуса для пользователя ${user.id} после истечения кулдауна`);
-          }
-        } catch (error) {
-          logError(error, 'Автоматическое обновление меню бонуса');
-        }
-      }, remaining);
+      // Запускаем периодическое обновление меню с обратным отсчетом
+      startBonusCountdown(ctx, user, Math.floor(remaining / 1000));
     } else {
       // Если кулдаун уже истек, обновляем меню
       await updateBonusMenu(ctx, user);
