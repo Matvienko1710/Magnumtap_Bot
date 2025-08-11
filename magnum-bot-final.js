@@ -596,7 +596,9 @@ async function handleReferral(userId, referrerId) {
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 async function showMainMenu(ctx, user) {
   const rank = getUserRank(user);
-  const keyboard = Markup.inlineKeyboard([
+  
+  // Создаем базовые кнопки
+  const buttons = [
     [
       Markup.button.callback('⛏️ Майнинг', 'miner'),
       Markup.button.callback('🌾 Фарм', 'farm')
@@ -617,13 +619,16 @@ async function showMainMenu(ctx, user) {
       Markup.button.callback('🆘 Поддержка', 'support'),
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
-  ]);
+  ];
   
+  // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
-    keyboard.inline_keyboard.push([
+    buttons.push([
       Markup.button.callback('👨‍💼 Админ панель', 'admin')
     ]);
   }
+  
+  const keyboard = Markup.inlineKeyboard(buttons);
   
   const message = 
     `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
