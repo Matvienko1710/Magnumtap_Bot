@@ -2465,6 +2465,478 @@ async function resetUserSettings(ctx, user) {
   }
 }
 
+// ==================== ЗАДАНИЯ ====================
+async function showTasksMenu(ctx, user) {
+  try {
+    log(`📋 Показ меню заданий для пользователя ${user.id}`);
+    
+    const tasks = user.tasks || {};
+    const completedTasks = tasks.completedTasks || 0;
+    const totalEarnings = tasks.totalTaskEarnings || 0;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🎯 Спонсорские задания', 'tasks_sponsor'),
+        Markup.button.callback('📅 Ежедневные задания', 'tasks_daily')
+      ],
+      [
+        Markup.button.callback('📊 Прогресс', 'tasks_progress'),
+        Markup.button.callback('🏆 Достижения', 'tasks_achievements')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `📋 *Система заданий*\n\n` +
+      `📊 *Ваша статистика:*\n` +
+      `├ Выполнено заданий: \`${completedTasks}\`\n` +
+      `├ Заработано: \`${formatNumber(totalEarnings)}\` Stars\n` +
+      `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Stars\n\n` +
+      `🎯 *Типы заданий:*\n` +
+      `├ 🎯 Спонсорские задания (подписки, запуски ботов)\n` +
+      `├ 📅 Ежедневные задания (фарм, майнинг, бонусы)\n` +
+      `└ 🏆 Достижения (долгосрочные цели)\n\n` +
+      `💡 *Выберите тип заданий:*\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню заданий');
+    await ctx.answerCbQuery('❌ Ошибка загрузки меню заданий');
+  }
+}
+
+async function showSponsorTasks(ctx, user) {
+  try {
+    log(`🎯 Показ спонсорских заданий для пользователя ${user.id}`);
+    
+    const sponsorTasks = getSponsorTasks();
+    const userTasks = user.tasks?.sponsorTasks || {};
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'tasks')]
+    ]);
+    
+    let message = `🎯 *Спонсорские задания*\n\n`;
+    message += `💰 *Выполняйте задания от спонсоров и получайте награды!*\n\n`;
+    
+    sponsorTasks.forEach((task, index) => {
+      const isCompleted = userTasks[task.id]?.completed || false;
+      const isClaimed = userTasks[task.id]?.claimed || false;
+      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
+      
+      message += `${status} *${task.title}*\n`;
+      message += `├ ${task.description}\n`;
+      message += `├ Награда: \`${task.reward}\` Stars\n`;
+      message += `└ Сложность: ${task.difficulty}\n\n`;
+    });
+    
+    message += `💡 *Как выполнить:*\n`;
+    message += `├ Нажмите на задание для подробностей\n`;
+    message += `├ Выполните требуемое действие\n`;
+    message += `├ Нажмите "Проверить выполнение"\n`;
+    message += `└ Получите награду!\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ спонсорских заданий');
+    await ctx.answerCbQuery('❌ Ошибка загрузки спонсорских заданий');
+  }
+}
+
+async function showSponsorTaskDetails(ctx, user, taskId) {
+  try {
+    log(`🎯 Показ деталей спонсорского задания ${taskId} для пользователя ${user.id}`);
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено');
+      return;
+    }
+    
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
+    const isCompleted = userTask.completed || false;
+    const isClaimed = userTask.claimed || false;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.url('🔗 Выполнить задание', task.url),
+        Markup.button.callback('✅ Проверить выполнение', `verify_sponsor_${taskId}`)
+      ]
+    ]);
+    
+    if (isCompleted && !isClaimed) {
+      keyboard.reply_markup.inline_keyboard.push([
+        Markup.button.callback('🎁 Получить награду', `claim_sponsor_${taskId}`)
+      ]);
+    }
+    
+    keyboard.reply_markup.inline_keyboard.push([
+      Markup.button.callback('🔙 Назад', 'tasks_sponsor')
+    ]);
+    
+    let message = `🎯 *${task.title}*\n\n`;
+    message += `📝 *Описание:*\n${task.description}\n\n`;
+    message += `💰 *Награда:* \`${task.reward}\` Stars\n`;
+    message += `⭐ *Сложность:* ${task.difficulty}\n`;
+    message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
+    
+    if (task.requirements) {
+      message += `📋 *Требования:*\n`;
+      task.requirements.forEach(req => {
+        message += `├ ${req}\n`;
+      });
+      message += `\n`;
+    }
+    
+    if (isCompleted) {
+      message += `✅ *Статус:* Задание выполнено\n`;
+      if (isClaimed) {
+        message += `🎁 *Награда:* Получена\n`;
+      } else {
+        message += `🎁 *Награда:* Готова к получению\n`;
+      }
+    } else {
+      message += `🔄 *Статус:* Задание не выполнено\n`;
+    }
+    
+    message += `\n🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ деталей спонсорского задания');
+    await ctx.answerCbQuery('❌ Ошибка загрузки деталей задания');
+  }
+}
+
+async function verifySponsorTask(ctx, user, taskId) {
+  try {
+    log(`✅ Проверка выполнения спонсорского задания ${taskId} для пользователя ${user.id}`);
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено');
+      return;
+    }
+    
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
+    
+    if (userTask.completed) {
+      await ctx.answerCbQuery('✅ Задание уже выполнено!');
+      return;
+    }
+    
+    // Здесь должна быть логика проверки выполнения задания
+    // Для демонстрации считаем, что задание выполнено
+    const isCompleted = await checkTaskCompletion(ctx, user, task);
+    
+    if (isCompleted) {
+      // Обновляем статус задания в базе данных
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { 
+          $set: { 
+            [`tasks.sponsorTasks.${taskId}.completed`]: true,
+            [`tasks.sponsorTasks.${taskId}.completedAt`]: new Date(),
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      // Очищаем кеш
+      userCache.delete(user.id);
+      
+      log(`✅ Спонсорское задание ${taskId} выполнено пользователем ${user.id}`);
+      await ctx.answerCbQuery(`✅ Задание выполнено! Награда: ${task.reward} Stars`);
+      
+      // Обновляем детали задания
+      const updatedUser = await getUser(ctx.from.id);
+      if (updatedUser) {
+        await showSponsorTaskDetails(ctx, updatedUser, taskId);
+      }
+    } else {
+      await ctx.answerCbQuery('❌ Задание не выполнено. Проверьте требования.');
+    }
+  } catch (error) {
+    logError(error, 'Проверка спонсорского задания');
+    await ctx.answerCbQuery('❌ Ошибка проверки задания');
+  }
+}
+
+async function claimSponsorTask(ctx, user, taskId) {
+  try {
+    log(`🎁 Получение награды спонсорского задания ${taskId} для пользователя ${user.id}`);
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено');
+      return;
+    }
+    
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
+    
+    if (!userTask.completed) {
+      await ctx.answerCbQuery('❌ Задание не выполнено');
+      return;
+    }
+    
+    if (userTask.claimed) {
+      await ctx.answerCbQuery('❌ Награда уже получена');
+      return;
+    }
+    
+    // Начисляем награду
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          stars: task.reward,
+          'tasks.completedTasks': 1,
+          'tasks.totalTaskEarnings': task.reward
+        },
+        $set: { 
+          [`tasks.sponsorTasks.${taskId}.claimed`]: true,
+          [`tasks.sponsorTasks.${taskId}.claimedAt`]: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    log(`🎁 Награда спонсорского задания ${taskId} получена пользователем ${user.id}: ${task.reward} Stars`);
+    await ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} Stars`);
+    
+    // Обновляем детали задания
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showSponsorTaskDetails(ctx, updatedUser, taskId);
+    }
+  } catch (error) {
+    logError(error, 'Получение награды спонсорского задания');
+    await ctx.answerCbQuery('❌ Ошибка получения награды');
+  }
+}
+
+async function showDailyTasks(ctx, user) {
+  try {
+    log(`📅 Показ ежедневных заданий для пользователя ${user.id}`);
+    
+    const dailyTasks = getDailyTasks();
+    const userTasks = user.tasks?.dailyTasks || {};
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'tasks')]
+    ]);
+    
+    let message = `📅 *Ежедневные задания*\n\n`;
+    message += `🔄 *Эти задания обновляются каждый день!*\n\n`;
+    
+    dailyTasks.forEach((task, index) => {
+      const userTask = userTasks[task.id] || {};
+      const progress = userTask.progress || 0;
+      const isCompleted = progress >= task.target;
+      const isClaimed = userTask.claimed || false;
+      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
+      
+      message += `${status} *${task.title}*\n`;
+      message += `├ ${task.description}\n`;
+      message += `├ Прогресс: \`${progress}/${task.target}\`\n`;
+      message += `├ Награда: \`${task.reward}\` Stars\n`;
+      message += `└ ${isCompleted ? '✅ Выполнено' : '🔄 В процессе'}\n\n`;
+    });
+    
+    message += `💡 *Как выполнить:*\n`;
+    message += `├ Выполняйте обычные действия в боте\n`;
+    message += `├ Прогресс обновляется автоматически\n`;
+    message += `├ При достижении цели получите награду\n`;
+    message += `└ Задания обновляются каждый день\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ ежедневных заданий');
+    await ctx.answerCbQuery('❌ Ошибка загрузки ежедневных заданий');
+  }
+}
+
+async function showTasksProgress(ctx, user) {
+  try {
+    log(`📊 Показ прогресса заданий для пользователя ${user.id}`);
+    
+    const tasks = user.tasks || {};
+    const completedTasks = tasks.completedTasks || 0;
+    const totalEarnings = tasks.totalTaskEarnings || 0;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'tasks')]
+    ]);
+    
+    let message = `📊 *Прогресс заданий*\n\n`;
+    
+    // Общая статистика
+    message += `📈 *Общая статистика:*\n`;
+    message += `├ Выполнено заданий: \`${completedTasks}\`\n`;
+    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
+    message += `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Stars\n\n`;
+    
+    // Статистика по типам
+    const sponsorTasks = tasks.sponsorTasks || {};
+    const dailyTasks = tasks.dailyTasks || {};
+    
+    const completedSponsor = Object.values(sponsorTasks).filter(t => t.completed).length;
+    const completedDaily = Object.values(dailyTasks).filter(t => t.claimed).length;
+    
+    message += `🎯 *По типам заданий:*\n`;
+    message += `├ Спонсорские: \`${completedSponsor}\` выполнено\n`;
+    message += `├ Ежедневные: \`${completedDaily}\` выполнено\n`;
+    message += `└ Всего: \`${completedSponsor + completedDaily}\` заданий\n\n`;
+    
+    // Недавние достижения
+    message += `🏆 *Недавние достижения:*\n`;
+    
+    const allTasks = [];
+    Object.entries(sponsorTasks).forEach(([id, task]) => {
+      if (task.claimedAt) {
+        allTasks.push({ ...task, type: 'sponsor', id });
+      }
+    });
+    Object.entries(dailyTasks).forEach(([id, task]) => {
+      if (task.claimedAt) {
+        allTasks.push({ ...task, type: 'daily', id });
+      }
+    });
+    
+    const recentTasks = allTasks
+      .sort((a, b) => new Date(b.claimedAt) - new Date(a.claimedAt))
+      .slice(0, 5);
+    
+    if (recentTasks.length > 0) {
+      recentTasks.forEach((task, index) => {
+        const daysAgo = Math.floor((Date.now() - task.claimedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const timeText = daysAgo === 0 ? 'сегодня' : daysAgo === 1 ? 'вчера' : `${daysAgo} дн. назад`;
+        
+        message += `${index + 1}. ${task.type === 'sponsor' ? '🎯' : '📅'} Задание выполнено\n`;
+        message += `└ ${timeText}\n\n`;
+      });
+    } else {
+      message += `Пока нет выполненных заданий\n\n`;
+    }
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ прогресса заданий');
+    await ctx.answerCbQuery('❌ Ошибка загрузки прогресса');
+  }
+}
+
+// Вспомогательные функции
+function getSponsorTasks() {
+  return [
+    {
+      id: 1,
+      title: 'Подписка на канал',
+      description: 'Подпишитесь на наш официальный канал',
+      reward: 50,
+      difficulty: '⭐ Легкое',
+      estimatedTime: '1 минута',
+      url: 'https://t.me/magnumstars',
+      requirements: [
+        'Подпишитесь на канал @magnumstars',
+        'Останьтесь подписанным минимум 24 часа'
+      ]
+    },
+    {
+      id: 2,
+      title: 'Запуск бота',
+      description: 'Запустите нашего партнерского бота',
+      reward: 100,
+      difficulty: '⭐⭐ Среднее',
+      estimatedTime: '2 минуты',
+      url: 'https://t.me/partner_bot',
+      requirements: [
+        'Запустите бота @partner_bot',
+        'Нажмите кнопку /start',
+        'Выполните одно действие в боте'
+      ]
+    },
+    {
+      id: 3,
+      title: 'Приглашение друзей',
+      description: 'Пригласите 3 друзей в наш бот',
+      reward: 200,
+      difficulty: '⭐⭐⭐ Сложное',
+      estimatedTime: '10 минут',
+      url: 'https://t.me/magnumstars',
+      requirements: [
+        'Отправьте реферальную ссылку 3 друзьям',
+        'Друзья должны присоединиться к боту',
+        'Каждый друг должен выполнить одно действие'
+      ]
+    }
+  ];
+}
+
+function getDailyTasks() {
+  return [
+    {
+      id: 'daily_farm',
+      title: 'Фармер дня',
+      description: 'Выполните 5 фармов за день',
+      target: 5,
+      reward: 25
+    },
+    {
+      id: 'daily_bonus',
+      title: 'Бонус дня',
+      description: 'Получите ежедневный бонус',
+      target: 1,
+      reward: 15
+    },
+    {
+      id: 'daily_exchange',
+      title: 'Трейдер дня',
+      description: 'Выполните 3 обмена Magnum Coins',
+      target: 3,
+      reward: 30
+    }
+  ];
+}
+
+async function checkTaskCompletion(ctx, user, task) {
+  // Здесь должна быть реальная логика проверки выполнения задания
+  // Для демонстрации возвращаем true (задание выполнено)
+  return true;
+}
+
 // ==================== СОЗДАНИЕ БОТА ====================
 const bot = new Telegraf(config.BOT_TOKEN);
 
@@ -2844,6 +3316,88 @@ bot.action('confirm_reset', async (ctx) => {
     await resetUserSettings(ctx, user);
   } catch (error) {
     logError(error, 'Сброс настроек пользователя');
+  }
+});
+
+// Задания
+bot.action('tasks', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showTasksMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню заданий');
+  }
+});
+
+bot.action('tasks_sponsor', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showSponsorTasks(ctx, user);
+  } catch (error) {
+    logError(error, 'Спонсорские задания');
+  }
+});
+
+bot.action('tasks_daily', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showDailyTasks(ctx, user);
+  } catch (error) {
+    logError(error, 'Ежедневные задания');
+  }
+});
+
+bot.action('tasks_progress', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showTasksProgress(ctx, user);
+  } catch (error) {
+    logError(error, 'Прогресс заданий');
+  }
+});
+
+// Обработка спонсорских заданий
+bot.action(/^sponsor_task_(\d+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const taskId = parseInt(ctx.match[1]);
+    await showSponsorTaskDetails(ctx, user, taskId);
+  } catch (error) {
+    logError(error, 'Детали спонсорского задания');
+  }
+});
+
+bot.action(/^claim_sponsor_(\d+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const taskId = parseInt(ctx.match[1]);
+    await claimSponsorTask(ctx, user, taskId);
+  } catch (error) {
+    logError(error, 'Получение награды спонсорского задания');
+  }
+});
+
+bot.action(/^verify_sponsor_(\d+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const taskId = parseInt(ctx.match[1]);
+    await verifySponsorTask(ctx, user, taskId);
+  } catch (error) {
+    logError(error, 'Проверка спонсорского задания');
   }
 });
 
