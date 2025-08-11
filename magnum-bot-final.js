@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const { MongoClient, ObjectId } = require('mongodb');
-const http = require('http');
 
 // Импорт модулей удален - все функции перенесены в основной файл
 
@@ -62,39 +61,7 @@ const config = {
   INITIAL_RESERVE_MAGNUM_COINS: 1000000
 };
 
-// ==================== HTTP СЕРВЕР ДЛЯ HEALTH CHECK ====================
-let server;
-const PORT = process.env.PORT || 3000;
-
-function startHttpServer() {
-  console.log(`🔧 Создание HTTP сервера на порту ${PORT}...`);
-  
-  server = http.createServer((req, res) => {
-    console.log(`📡 HTTP запрос: ${req.method} ${req.url}`);
-    
-    if (req.url === '/' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        status: 'ok', 
-        message: 'Magnum Stars Bot is running',
-        timestamp: new Date().toISOString()
-      }));
-      console.log('✅ Health check ответ отправлен');
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found' }));
-      console.log('❌ 404 ответ отправлен');
-    }
-  });
-
-  server.listen(PORT, () => {
-    console.log(`🌐 HTTP сервер запущен на порту ${PORT}`);
-  });
-  
-  server.on('error', (error) => {
-    console.error('❌ Ошибка HTTP сервера:', error);
-  });
-}
+// ==================== КОНФИГУРАЦИЯ ====================
 
 // ==================== БАЗА ДАННЫХ ====================
 let db;
@@ -7090,11 +7057,6 @@ async function startBot() {
     await connectDB();
     console.log('✅ База данных подключена успешно');
     
-    console.log('🌐 Запуск HTTP сервера...');
-    // Запускаем HTTP сервер для health check
-    startHttpServer();
-    console.log('✅ HTTP сервер запущен');
-    
     console.log('⏰ Настройка интервалов...');
     console.log('Настройка интервалов:', {
       minerRewardsInterval: '30 минут',
@@ -7153,26 +7115,12 @@ async function startBot() {
     // Graceful stop
     process.once('SIGINT', () => {
       console.log('🛑 Получен сигнал SIGINT, останавливаем бота...');
-      if (server) {
-        server.close(() => {
-          console.log('🌐 HTTP сервер остановлен');
-          bot.stop('SIGINT');
-        });
-      } else {
-        bot.stop('SIGINT');
-      }
+      bot.stop('SIGINT');
     });
     
     process.once('SIGTERM', () => {
       console.log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
-      if (server) {
-        server.close(() => {
-          console.log('🌐 HTTP сервер остановлен');
-          bot.stop('SIGTERM');
-        });
-      } else {
-        bot.stop('SIGTERM');
-      }
+      bot.stop('SIGTERM');
     });
     
     console.log('✅ Все обработчики сигналов настроены');

@@ -21,12 +21,5 @@ RUN adduser -S bot -u 1001
 RUN chown -R bot:nodejs /app
 USER bot
 
-# Открываем порт (если нужно)
-EXPOSE 3000
-
-# Проверка здоровья
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
-
 # Запускаем бота
 CMD ["npm", "start"]
