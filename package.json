@@ -2,10 +2,10 @@
   "name": "magnum-stars-bot",
   "version": "1.0.0",
   "description": "Полнофункциональный Telegram бот для заработка с системой фарма, майнинга, обмена валют и вывода средств",
-  "main": "bot.js",
+  "main": "magnum-bot-final.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "nodemon bot.js",
+    "start": "node magnum-bot-final.js",
+    "dev": "nodemon magnum-bot-final.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
