@@ -149,6 +149,9 @@ async function connectDB() {
     await db.collection('supportTickets').createIndex({ userId: 1 });
     await db.collection('supportTickets').createIndex({ status: 1 });
     await db.collection('supportTickets').createIndex({ createdAt: -1 });
+    await db.collection('supportTickets').createIndex({ id: 1 }, { unique: true });
+    await db.collection('supportTickets').createIndex({ adminId: 1 });
+    await db.collection('supportTickets').createIndex({ updatedAt: -1 });
     log('✅ Индексы для supportTickets созданы');
     
     log('📋 Создание индексов для коллекции taskChecks...');
@@ -4307,6 +4310,12 @@ bot.on('text', async (ctx) => {
     } else if (user.adminState === 'entering_promocode') {
       log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
       await handleUserEnterPromocode(ctx, user, text);
+    } else if (user.adminState === 'creating_support_ticket') {
+      log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
+      await handleCreateSupportTicket(ctx, user, text);
+    } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
+      log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
+      await handleAdminAnswerTicket(ctx, user, text);
     } else {
       log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
     }
@@ -4832,6 +4841,278 @@ async function handleUserEnterPromocode(ctx, user, text) {
   }
 }
 
+// ==================== СИСТЕМА ПОДДЕРЖКИ ====================
+async function handleCreateSupportTicket(ctx, user, text) {
+  try {
+    logFunction('handleCreateSupportTicket', user.id, { textLength: text.length });
+    log(`🆘 Создание тикета поддержки для пользователя ${user.id}`);
+    
+    if (text.length < 10) {
+      await ctx.reply('❌ Описание проблемы слишком короткое. Пожалуйста, опишите проблему подробнее (минимум 10 символов).');
+      return;
+    }
+    
+    if (text.length > 1000) {
+      await ctx.reply('❌ Описание проблемы слишком длинное. Пожалуйста, сократите описание до 1000 символов.');
+      return;
+    }
+    
+    // Создаем тикет в базе данных
+    const ticket = {
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      userId: user.id,
+      username: user.username,
+      firstName: user.firstName,
+      status: 'new', // new, in_progress, answered, closed
+      priority: 'normal', // low, normal, high, urgent
+      subject: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+      description: text,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      adminResponse: null,
+      adminId: null,
+      responseTime: null
+    };
+    
+    logDebug(`Создание тикета в БД`, {
+      ticketId: ticket.id,
+      userId: user.id,
+      status: ticket.status,
+      subject: ticket.subject
+    });
+    
+    await db.collection('supportTickets').insertOne(ticket);
+    
+    // Обновляем статистику пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          'support.ticketsCount': 1
+        },
+        $set: { 
+          'support.lastTicket': new Date(),
+          adminState: null,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Отправляем тикет в канал поддержки
+    const supportChannel = '@magnumsupported';
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Ответить', `support_answer_${ticket.id}`),
+        Markup.button.callback('⏳ В обработке', `support_progress_${ticket.id}`)
+      ],
+      [
+        Markup.button.callback('❌ Отклонить', `support_reject_${ticket.id}`),
+        Markup.button.callback('🔒 Закрыть', `support_close_${ticket.id}`)
+      ]
+    ]);
+    
+    const supportMessage = 
+      `🆘 *Новый тикет поддержки*\n\n` +
+      `🆔 *ID тикета:* \`${ticket.id}\`\n` +
+      `👤 *Пользователь:* ${user.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${user.username ? '@' + user.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${user.id}\`\n` +
+      `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+      `📊 *Уровень:* ${user.level || 1}\n` +
+      `💰 *Magnum Coins:* ${formatNumber(user.magnumCoins || 0)}\n` +
+      `⭐ *Stars:* ${formatNumber(user.stars || 0)}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `🎯 Выберите действие:`;
+    
+    try {
+      await ctx.telegram.sendMessage(supportChannel, supportMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+      
+      log(`✅ Тикет ${ticket.id} отправлен в канал поддержки ${supportChannel}`);
+    } catch (error) {
+      logError(error, `Отправка тикета ${ticket.id} в канал поддержки`);
+      logDebug(`Ошибка отправки в канал`, {
+        channel: supportChannel,
+        ticketId: ticket.id,
+        error: error.message
+      });
+    }
+    
+    // Отправляем подтверждение пользователю
+    const userKeyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в поддержку', 'support')]
+    ]);
+    
+    const userMessage = 
+      `✅ *Тикет создан успешно!*\n\n` +
+      `🆔 *ID тикета:* \`${ticket.id}\`\n` +
+      `📝 *Ваша проблема:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `⏰ *Время ответа:* 5-30 минут\n\n` +
+      `📋 *Что дальше:*\n` +
+      `• Мы рассмотрим ваш тикет\n` +
+      `• Ответим в ближайшее время\n` +
+      `• Вы получите уведомление\n\n` +
+      `💡 *Совет:* Пока ждете ответа, можете изучить FAQ - возможно, там уже есть ответ на ваш вопрос!`;
+    
+    await ctx.reply(userMessage, {
+      parse_mode: 'Markdown',
+      reply_markup: userKeyboard.reply_markup
+    });
+    
+    log(`✅ Тикет ${ticket.id} успешно создан для пользователя ${user.id}`);
+    
+  } catch (error) {
+    logError(error, `Создание тикета поддержки для пользователя ${user.id}`);
+    logDebug(`Ошибка создания тикета`, {
+      userId: user.id,
+      text: text,
+      error: error.message,
+      stack: error.stack
+    });
+    await ctx.reply('❌ Ошибка создания тикета. Попробуйте позже.');
+  }
+}
+
+// Обработка ответа админа на тикет
+async function handleAdminAnswerTicket(ctx, user, text) {
+  try {
+    logFunction('handleAdminAnswerTicket', user.id, { textLength: text.length });
+    
+    // Извлекаем ID тикета из adminState
+    const ticketId = user.adminState.replace('answering_ticket_', '');
+    log(`✅ Админ ${user.id} отвечает на тикет ${ticketId}`);
+    
+    if (text.length < 5) {
+      await ctx.reply('❌ Ответ слишком короткий. Пожалуйста, напишите более подробный ответ.');
+      return;
+    }
+    
+    if (text.length > 2000) {
+      await ctx.reply('❌ Ответ слишком длинный. Пожалуйста, сократите ответ до 2000 символов.');
+      return;
+    }
+    
+    // Получаем тикет из базы данных
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (!ticket) {
+      await ctx.reply('❌ Тикет не найден');
+      return;
+    }
+    
+    // Обновляем тикет с ответом админа
+    const responseTime = Date.now() - ticket.createdAt.getTime();
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'answered',
+          adminResponse: text,
+          adminId: user.id,
+          responseTime: responseTime,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    logDebug(`Ответ админа сохранен в БД`, {
+      ticketId: ticketId,
+      adminId: user.id,
+      responseLength: text.length,
+      responseTime: responseTime
+    });
+    
+    // Отправляем ответ пользователю
+    try {
+      const userMessage = 
+        `✅ *Ответ на ваш тикет*\n\n` +
+        `🆔 *ID тикета:* \`${ticketId}\`\n` +
+        `📝 *Ваша проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
+        `👨‍💼 *Ответ поддержки:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+        `⏰ *Время ответа:* ${Math.floor(responseTime / 1000 / 60)} минут\n\n` +
+        `💡 Если у вас есть дополнительные вопросы, создайте новый тикет.`;
+      
+      await ctx.telegram.sendMessage(ticket.userId, userMessage, {
+        parse_mode: 'Markdown'
+      });
+      
+      log(`✅ Ответ отправлен пользователю ${ticket.userId}`);
+    } catch (error) {
+      logError(error, `Отправка ответа пользователю ${ticket.userId}`);
+      logDebug(`Ошибка отправки ответа`, {
+        userId: ticket.userId,
+        ticketId: ticketId,
+        error: error.message
+      });
+    }
+    
+    // Обновляем сообщение в канале поддержки
+    const supportChannel = '@magnumsupported';
+    const message = 
+      `✅ *Тикет отвечен*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket.userId}\`\n` +
+      `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${user.firstName || user.username || user.id}\n` +
+      `⏰ *Время ответа:* ${Math.floor(responseTime / 1000 / 60)} минут\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
+      `✅ *Ответ:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `✅ *Статус:* Отвечен`;
+    
+    try {
+      await ctx.telegram.sendMessage(supportChannel, message, {
+        parse_mode: 'Markdown'
+      });
+      log(`✅ Обновленное сообщение отправлено в канал поддержки`);
+    } catch (error) {
+      logError(error, `Отправка обновленного сообщения в канал поддержки`);
+    }
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    // Отправляем подтверждение админу
+    const adminKeyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в админ панель', 'admin')]
+    ]);
+    
+    const adminMessage = 
+      `✅ *Ответ отправлен успешно!*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
+      `📝 *Ответ:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `⏰ *Время ответа:* ${Math.floor(responseTime / 1000 / 60)} минут\n\n` +
+      `✅ Пользователь получил ваш ответ.`;
+    
+    await ctx.reply(adminMessage, {
+      parse_mode: 'Markdown',
+      reply_markup: adminKeyboard.reply_markup
+    });
+    
+    log(`✅ Ответ на тикет ${ticketId} успешно обработан админом ${user.id}`);
+    
+  } catch (error) {
+    logError(error, `Ответ админа ${user.id} на тикет`);
+    logDebug(`Ошибка ответа админа`, {
+      adminId: user.id,
+      adminState: user.adminState,
+      text: text,
+      error: error.message,
+      stack: error.stack
+    });
+    await ctx.reply('❌ Ошибка отправки ответа. Попробуйте позже.');
+  }
+}
+
 // ==================== FAQ ОБРАБОТЧИКИ ====================
 bot.action('faq_farm', async (ctx) => {
   try {
@@ -5137,44 +5418,381 @@ bot.action('faq_tasks', async (ctx) => {
   }
 });
 
-// Обработчик для связи с поддержкой
+// Обработчик для создания тикета поддержки
 bot.action('contact_support', async (ctx) => {
   try {
+    logFunction('bot.action.contact_support', ctx.from.id);
+    log(`🆘 Запрос создания тикета поддержки от пользователя ${ctx.from.id}`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для создания тикета`);
+      return;
+    }
+    
+    // Устанавливаем состояние для создания тикета
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_support_ticket', updatedAt: new Date() } }
+    );
+    
+    logDebug(`Установлен adminState для пользователя ${ctx.from.id}`, { adminState: 'creating_support_ticket' });
     
     const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('📧 Telegram', 'support_telegram'),
-        Markup.button.callback('📱 WhatsApp', 'support_whatsapp')
-      ],
-      [
-        Markup.button.callback('📧 Email', 'support_email')
-      ],
-      [
-        Markup.button.callback('🔙 Назад', 'support')
-      ]
+      [Markup.button.callback('🔙 Отмена', 'support')]
     ]);
     
     const message = 
-      `📧 *Связаться с поддержкой*\n\n` +
-      `Выберите удобный способ связи:\n\n` +
-      `📧 *Telegram* - Быстрая связь через Telegram\n` +
-      `📱 *WhatsApp* - Связь через WhatsApp\n` +
-      `📧 *Email* - Отправка письма на email\n\n` +
-      `⏰ *Время ответа:*\n` +
-      `├ Telegram: 5-15 минут\n` +
-      `├ WhatsApp: 10-30 минут\n` +
-      `└ Email: 1-24 часа\n\n` +
-      `💡 *Рекомендуем:*\n` +
-      `Сначала проверьте FAQ - возможно, там уже есть ответ на ваш вопрос!`;
+      `🆘 *Создание тикета поддержки*\n\n` +
+      `Ваш ID: \`${user.id}\`\n\n` +
+      `📝 Опишите вашу проблему в одном сообщении.\n\n` +
+      `*Пример:*\n` +
+      `"Не могу получить ежедневный бонус, пишет ошибка"\n\n` +
+      `⚠️ *Важно:* Опишите проблему максимально подробно, чтобы мы могли помочь быстрее.`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
+    
+    log(`✅ Пользователю ${ctx.from.id} показана форма создания тикета`);
+    
   } catch (error) {
-    logError(error, 'Связь с поддержкой');
+    logError(error, `Создание тикета поддержки для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в contact_support`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// ==================== ОБРАБОТЧИКИ КАНАЛА ПОДДЕРЖКИ ====================
+// Обработчик для ответа на тикет
+bot.action(/^support_answer_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_answer', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`✅ Админ ${ctx.from.id} отвечает на тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ответа на тикет
+    await db.collection('users').updateOne(
+      { id: admin.id },
+      { $set: { adminState: `answering_ticket_${ticketId}`, updatedAt: new Date() } }
+    );
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', `support_cancel_${ticketId}`)]
+    ]);
+    
+    const message = 
+      `✅ *Ответ на тикет*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n\n` +
+      `📝 Напишите ответ пользователю:\n\n` +
+      `💡 *Советы:*\n` +
+      `• Будьте вежливы и профессиональны\n` +
+      `• Дайте четкий и понятный ответ\n` +
+      `• Если нужно, задайте уточняющие вопросы`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Админу ${ctx.from.id} показана форма ответа на тикет ${ticketId}`);
+    
+  } catch (error) {
+    logError(error, `Ответ на тикет ${ctx.match[1]} админом ${ctx.from.id}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для установки статуса "В обработке"
+bot.action(/^support_progress_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_progress', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`⏳ Админ ${ctx.from.id} устанавливает статус "В обработке" для тикета ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Обновляем статус тикета
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'in_progress',
+          adminId: admin.id,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      try {
+        await ctx.telegram.sendMessage(ticket.userId, 
+          `⏳ *Ваш тикет взят в обработку*\n\n` +
+          `🆔 *ID тикета:* \`${ticketId}\`\n` +
+          `📝 *Проблема:* ${ticket.subject}\n\n` +
+          `⏰ Мы работаем над решением вашей проблемы.\n` +
+          `📧 Ответим в ближайшее время!`
+        );
+        log(`✅ Уведомление отправлено пользователю ${ticket.userId}`);
+      } catch (error) {
+        logError(error, `Отправка уведомления пользователю ${ticket.userId}`);
+      }
+    }
+    
+    // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Ответить', `support_answer_${ticketId}`),
+        Markup.button.callback('❌ Отклонить', `support_reject_${ticketId}`)
+      ],
+      [
+        Markup.button.callback('🔒 Закрыть', `support_close_${ticketId}`)
+      ]
+    ]);
+    
+    const message = 
+      `⏳ *Тикет в обработке*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket?.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket?.userId}\`\n` +
+      `📅 *Дата:* ${ticket?.createdAt?.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${admin.firstName || admin.username || admin.id}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket?.description}\n\`\`\`\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    await ctx.answerCbQuery('✅ Статус обновлен');
+    log(`✅ Статус тикета ${ticketId} обновлен на "В обработке"`);
+    
+  } catch (error) {
+    logError(error, `Установка статуса "В обработке" для тикета ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для отклонения тикета
+bot.action(/^support_reject_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_reject', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`❌ Админ ${ctx.from.id} отклоняет тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Обновляем статус тикета
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'rejected',
+          adminId: admin.id,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      try {
+        await ctx.telegram.sendMessage(ticket.userId, 
+          `❌ *Ваш тикет отклонен*\n\n` +
+          `🆔 *ID тикета:* \`${ticketId}\`\n` +
+          `📝 *Проблема:* ${ticket.subject}\n\n` +
+          `⚠️ Ваш тикет был отклонен.\n` +
+          `💡 Попробуйте создать новый тикет с более подробным описанием проблемы.`
+        );
+        log(`✅ Уведомление об отклонении отправлено пользователю ${ticket.userId}`);
+      } catch (error) {
+        logError(error, `Отправка уведомления об отклонении пользователю ${ticket.userId}`);
+      }
+    }
+    
+    // Обновляем сообщение в канале
+    const message = 
+      `❌ *Тикет отклонен*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket?.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket?.userId}\`\n` +
+      `📅 *Дата:* ${ticket?.createdAt?.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${admin.firstName || admin.username || admin.id}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket?.description}\n\`\`\`\n\n` +
+      `❌ *Статус:* Отклонен`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown'
+    });
+    
+    await ctx.answerCbQuery('✅ Тикет отклонен');
+    log(`✅ Тикет ${ticketId} отклонен админом ${ctx.from.id}`);
+    
+  } catch (error) {
+    logError(error, `Отклонение тикета ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для закрытия тикета
+bot.action(/^support_close_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_close', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`🔒 Админ ${ctx.from.id} закрывает тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Обновляем статус тикета
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'closed',
+          adminId: admin.id,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      try {
+        await ctx.telegram.sendMessage(ticket.userId, 
+          `🔒 *Ваш тикет закрыт*\n\n` +
+          `🆔 *ID тикета:* \`${ticketId}\`\n` +
+          `📝 *Проблема:* ${ticket.subject}\n\n` +
+          `✅ Ваш тикет был закрыт.\n` +
+          `💡 Если у вас есть новые вопросы, создайте новый тикет.`
+        );
+        log(`✅ Уведомление о закрытии отправлено пользователю ${ticket.userId}`);
+      } catch (error) {
+        logError(error, `Отправка уведомления о закрытии пользователю ${ticket.userId}`);
+      }
+    }
+    
+    // Обновляем сообщение в канале
+    const message = 
+      `🔒 *Тикет закрыт*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket?.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket?.userId}\`\n` +
+      `📅 *Дата:* ${ticket?.createdAt?.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${admin.firstName || admin.username || admin.id}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket?.description}\n\`\`\`\n\n` +
+      `🔒 *Статус:* Закрыт`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown'
+    });
+    
+    await ctx.answerCbQuery('✅ Тикет закрыт');
+    log(`✅ Тикет ${ticketId} закрыт админом ${ctx.from.id}`);
+    
+  } catch (error) {
+    logError(error, `Закрытие тикета ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для отмены ответа на тикет
+bot.action(/^support_cancel_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_cancel', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`🔙 Админ ${ctx.from.id} отменяет ответ на тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: admin.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    // Возвращаемся к исходному сообщению тикета
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Ответить', `support_answer_${ticketId}`),
+          Markup.button.callback('⏳ В обработке', `support_progress_${ticketId}`)
+        ],
+        [
+          Markup.button.callback('❌ Отклонить', `support_reject_${ticketId}`),
+          Markup.button.callback('🔒 Закрыть', `support_close_${ticketId}`)
+        ]
+      ]);
+      
+      const message = 
+        `🆘 *Тикет поддержки*\n\n` +
+        `🆔 *ID тикета:* \`${ticketId}\`\n` +
+        `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
+        `📱 *Username:* ${ticket.username ? '@' + ticket.username : 'Не указан'}\n` +
+        `🆔 *User ID:* \`${ticket.userId}\`\n` +
+        `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+        `📊 *Уровень:* ${ticket.level || 1}\n` +
+        `💰 *Magnum Coins:* ${formatNumber(ticket.magnumCoins || 0)}\n` +
+        `⭐ *Stars:* ${formatNumber(ticket.stars || 0)}\n\n` +
+        `📝 *Проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
+        `🎯 Выберите действие:`;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    }
+    
+    await ctx.answerCbQuery('✅ Отменено');
+    log(`✅ Ответ на тикет ${ticketId} отменен админом ${ctx.from.id}`);
+    
+  } catch (error) {
+    logError(error, `Отмена ответа на тикет ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
   }
 });
 
