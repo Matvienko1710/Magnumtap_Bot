@@ -3,14 +3,24 @@ const { Telegraf, Markup } = require('telegraf');
 const { MongoClient, ObjectId } = require('mongodb');
 const http = require('http');
 
-// Импорт модулей
-const TasksModule = require('./tasks-module');
-const ExchangeModule = require('./exchange-module');
-const WithdrawalModule = require('./withdrawal-module');
+// Импорт модулей удален - все функции перенесены в основной файл
 
 // ==================== КОНФИГУРАЦИЯ ====================
 log('🚀 Запуск Magnum Stars Bot...');
 log('📋 Проверка переменных окружения...');
+
+// Проверяем обязательные переменные окружения
+if (!process.env.BOT_TOKEN) {
+  logError(new Error('BOT_TOKEN не найден'), 'Переменные окружения');
+  process.exit(1);
+}
+
+if (!process.env.MONGODB_URI) {
+  logError(new Error('MONGODB_URI не найден'), 'Переменные окружения');
+  process.exit(1);
+}
+
+log('✅ Все обязательные переменные окружения найдены');
 
 const config = {
   BOT_TOKEN: process.env.BOT_TOKEN,
@@ -1486,6 +1496,17 @@ async function startBot() {
     process.exit(1);
   }
 }
+
+// Обработчики необработанных ошибок
+process.on('uncaughtException', (error) => {
+  logError(error, 'Необработанная ошибка (uncaughtException)');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logError(new Error(`Необработанное отклонение промиса: ${reason}`), 'unhandledRejection');
+  process.exit(1);
+});
 
 // Запускаем бота
 startBot();
