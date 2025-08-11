@@ -1594,64 +1594,7 @@ async function showAchievementsMenu(ctx, user) {
     log(`🏆 Показ меню достижений для пользователя ${user.id}`);
     
     // Определяем достижения
-    const achievements = [
-      {
-        id: 'first_farm',
-        title: '🌾 Первый фарм',
-        description: 'Выполните первый фарм',
-        condition: user.farm?.farmCount >= 1,
-        reward: '10 Stars'
-      },
-      {
-        id: 'farm_master',
-        title: '👑 Мастер фарма',
-        description: 'Выполните 100 фармов',
-        condition: user.farm?.farmCount >= 100,
-        reward: '500 Stars'
-      },
-      {
-        id: 'magnum_collector',
-        title: '🪙 Коллекционер Magnum',
-        description: 'Накопите 1000 Magnum Coins',
-        condition: user.magnumCoins >= 1000,
-        reward: '200 Stars'
-      },
-      {
-        id: 'exchange_trader',
-        title: '💱 Трейдер',
-        description: 'Выполните 50 обменов',
-        condition: user.exchange?.totalExchanges >= 50,
-        reward: '300 Stars'
-      },
-      {
-        id: 'level_10',
-        title: '⭐ Уровень 10',
-        description: 'Достигните 10 уровня',
-        condition: user.level >= 10,
-        reward: '100 Stars'
-      },
-      {
-        id: 'level_50',
-        title: '⭐⭐ Уровень 50',
-        description: 'Достигните 50 уровня',
-        condition: user.level >= 50,
-        reward: '1000 Stars'
-      },
-      {
-        id: 'referral_king',
-        title: '👥 Король рефералов',
-        description: 'Пригласите 10 рефералов',
-        condition: user.referralsCount >= 10,
-        reward: '400 Stars'
-      },
-      {
-        id: 'daily_streak',
-        title: '🔥 Серия дней',
-        description: 'Получите бонус 7 дней подряд',
-        condition: user.dailyBonus?.streak >= 7,
-        reward: '150 Stars'
-      }
-    ];
+    const achievements = getAchievementsList(user);
     
     const completedAchievements = achievements.filter(a => a.condition);
     const totalAchievements = achievements.length;
@@ -1692,6 +1635,209 @@ async function showAchievementsMenu(ctx, user) {
     logError(error, 'Показ меню достижений');
     await ctx.answerCbQuery('❌ Ошибка загрузки достижений');
   }
+}
+
+function getAchievementsList(user) {
+  return [
+    {
+      id: 'first_farm',
+      title: '🌾 Первый фарм',
+      description: 'Выполните первый фарм',
+      condition: user.farm?.farmCount >= 1,
+      progress: user.farm?.farmCount || 0,
+      target: 1,
+      reward: '10 Stars'
+    },
+    {
+      id: 'farm_master',
+      title: '👑 Мастер фарма',
+      description: 'Выполните 100 фармов',
+      condition: user.farm?.farmCount >= 100,
+      progress: user.farm?.farmCount || 0,
+      target: 100,
+      reward: '500 Stars'
+    },
+    {
+      id: 'magnum_collector',
+      title: '🪙 Коллекционер Magnum',
+      description: 'Накопите 1000 Magnum Coins',
+      condition: user.magnumCoins >= 1000,
+      progress: user.magnumCoins || 0,
+      target: 1000,
+      reward: '200 Stars'
+    },
+    {
+      id: 'exchange_trader',
+      title: '💱 Трейдер',
+      description: 'Выполните 50 обменов',
+      condition: user.exchange?.totalExchanges >= 50,
+      progress: user.exchange?.totalExchanges || 0,
+      target: 50,
+      reward: '300 Stars'
+    },
+    {
+      id: 'level_10',
+      title: '⭐ Уровень 10',
+      description: 'Достигните 10 уровня',
+      condition: user.level >= 10,
+      progress: user.level || 1,
+      target: 10,
+      reward: '100 Stars'
+    },
+    {
+      id: 'level_50',
+      title: '⭐⭐ Уровень 50',
+      description: 'Достигните 50 уровня',
+      condition: user.level >= 50,
+      progress: user.level || 1,
+      target: 50,
+      reward: '1000 Stars'
+    },
+    {
+      id: 'referral_king',
+      title: '👥 Король рефералов',
+      description: 'Пригласите 10 рефералов',
+      condition: user.referralsCount >= 10,
+      progress: user.referralsCount || 0,
+      target: 10,
+      reward: '400 Stars'
+    },
+    {
+      id: 'daily_streak',
+      title: '🔥 Серия дней',
+      description: 'Получите бонус 7 дней подряд',
+      condition: user.dailyBonus?.streak >= 7,
+      progress: user.dailyBonus?.streak || 0,
+      target: 7,
+      reward: '150 Stars'
+    }
+  ];
+}
+
+async function showAchievementsProgress(ctx, user) {
+  try {
+    log(`📊 Показ прогресса достижений для пользователя ${user.id}`);
+    
+    const achievements = getAchievementsList(user);
+    const completedAchievements = achievements.filter(a => a.condition);
+    const totalAchievements = achievements.length;
+    const completionRate = Math.round((completedAchievements.length / totalAchievements) * 100);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад к достижениям', 'achievements')]
+    ]);
+    
+    let message = `📊 *Прогресс достижений*\n\n`;
+    message += `📈 *Общий прогресс:* ${completedAchievements.length}/${totalAchievements} (${completionRate}%)\n\n`;
+    
+    // Показываем прогресс каждого достижения
+    message += `🎯 *Детальный прогресс:*\n\n`;
+    
+    achievements.forEach((achievement, index) => {
+      const status = achievement.condition ? '✅' : '🔄';
+      const progressPercent = Math.min(Math.round((achievement.progress / achievement.target) * 100), 100);
+      const progressBar = createProgressBar(progressPercent);
+      
+      message += `${status} *${achievement.title}*\n`;
+      message += `└ ${achievement.description}\n`;
+      message += `└ Прогресс: \`${achievement.progress}/${achievement.target}\` (${progressPercent}%)\n`;
+      message += `└ ${progressBar}\n\n`;
+    });
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ прогресса достижений');
+    await ctx.answerCbQuery('❌ Ошибка загрузки прогресса');
+  }
+}
+
+async function showAchievementsRewards(ctx, user) {
+  try {
+    log(`🎁 Показ наград достижений для пользователя ${user.id}`);
+    
+    const achievements = getAchievementsList(user);
+    const completedAchievements = achievements.filter(a => a.condition);
+    const totalRewards = completedAchievements.reduce((sum, a) => {
+      const rewardAmount = parseInt(a.reward.split(' ')[0]);
+      return sum + rewardAmount;
+    }, 0);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад к достижениям', 'achievements')]
+    ]);
+    
+    let message = `🎁 *Награды достижений*\n\n`;
+    message += `💰 *Общая статистика:*\n`;
+    message += `├ Выполнено достижений: \`${completedAchievements.length}\`\n`;
+    message += `├ Всего наград: \`${totalRewards} Stars\`\n`;
+    message += `└ Средняя награда: \`${completedAchievements.length > 0 ? Math.round(totalRewards / completedAchievements.length) : 0} Stars\`\n\n`;
+    
+    // Показываем награды по категориям
+    message += `🏆 *Награды по категориям:*\n\n`;
+    
+    const categories = {
+      '🌾 Фарм': achievements.filter(a => a.id.includes('farm')),
+      '🪙 Magnum Coins': achievements.filter(a => a.id.includes('magnum')),
+      '💱 Обмен': achievements.filter(a => a.id.includes('exchange')),
+      '⭐ Уровни': achievements.filter(a => a.id.includes('level')),
+      '👥 Рефералы': achievements.filter(a => a.id.includes('referral')),
+      '🔥 Серии': achievements.filter(a => a.id.includes('daily'))
+    };
+    
+    Object.entries(categories).forEach(([category, categoryAchievements]) => {
+      if (categoryAchievements.length > 0) {
+        const completed = categoryAchievements.filter(a => a.condition);
+        const totalReward = completed.reduce((sum, a) => {
+          const rewardAmount = parseInt(a.reward.split(' ')[0]);
+          return sum + rewardAmount;
+        }, 0);
+        
+        message += `*${category}:*\n`;
+        message += `├ Выполнено: \`${completed.length}/${categoryAchievements.length}\`\n`;
+        message += `└ Награды: \`${totalReward} Stars\`\n\n`;
+      }
+    });
+    
+    // Показываем топ-3 самых ценных достижения
+    const valuableAchievements = achievements
+      .filter(a => !a.condition)
+      .sort((a, b) => {
+        const rewardA = parseInt(a.reward.split(' ')[0]);
+        const rewardB = parseInt(b.reward.split(' ')[0]);
+        return rewardB - rewardA;
+      })
+      .slice(0, 3);
+    
+    if (valuableAchievements.length > 0) {
+      message += `💎 *Самые ценные недостигнутые:*\n`;
+      valuableAchievements.forEach((achievement, index) => {
+        const rewardAmount = parseInt(achievement.reward.split(' ')[0]);
+        message += `${index + 1}. ${achievement.title} - \`${achievement.reward}\`\n`;
+      });
+      message += `\n`;
+    }
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ наград достижений');
+    await ctx.answerCbQuery('❌ Ошибка загрузки наград');
+  }
+}
+
+function createProgressBar(percent) {
+  const filled = Math.round(percent / 10);
+  const empty = 10 - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
 }
 
 // ==================== СОЗДАНИЕ БОТА ====================
@@ -1867,6 +2013,28 @@ bot.action('achievements', async (ctx) => {
     await showAchievementsMenu(ctx, user);
   } catch (error) {
     logError(error, 'Меню достижений');
+  }
+});
+
+bot.action('achievements_progress', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAchievementsProgress(ctx, user);
+  } catch (error) {
+    logError(error, 'Прогресс достижений');
+  }
+});
+
+bot.action('achievements_rewards', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAchievementsRewards(ctx, user);
+  } catch (error) {
+    logError(error, 'Награды достижений');
   }
 });
 
