@@ -1,6 +1,28 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const { MongoClient } = require('mongodb');
+const http = require('http');
+
+// Создаем HTTP сервер для health check
+const server = http.createServer((req, res) => {
+  if (req.url === '/' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      status: 'ok', 
+      message: 'Magnum Stars Bot is running',
+      timestamp: new Date().toISOString()
+    }));
+  } else {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not found' }));
+  }
+});
+
+// Запускаем HTTP сервер на порту 3000
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`🌐 HTTP сервер запущен на порту ${PORT}`);
+});
 
 // Импорт модулей
 const UserModule = require('./userModule');
