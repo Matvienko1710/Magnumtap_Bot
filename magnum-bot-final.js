@@ -4215,7 +4215,7 @@ bot.on('text', async (ctx) => {
     
     const text = ctx.message.text;
     
-    // Проверяем, есть ли у пользователя adminState (для создания тикетов поддержки)
+    // Проверяем, есть ли у пользователя adminState
     if (user.adminState) {
       console.log(`Обработка текста пользователя ${ctx.from.id} с adminState:`, {
         adminState: user.adminState,
@@ -4232,6 +4232,10 @@ bot.on('text', async (ctx) => {
       } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
         console.log(`📝 Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
         await handleAdminAnswerTicket(ctx, user, text);
+        return;
+      } else if (user.adminState === 'entering_promocode') {
+        console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
+        await handleUserEnterPromocode(ctx, user, text);
         return;
       }
       
@@ -4273,25 +4277,22 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'creating_promocode') {
           console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
           await handleAdminCreatePromocode(ctx, user, text);
-        }
-      } else if (user.adminState === 'entering_promocode') {
-        console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
-        await handleUserEnterPromocode(ctx, user, text);
-      } else if (user.adminState === 'creating_support_ticket') {
-        console.log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
-        await handleCreateSupportTicket(ctx, user, text);
-      } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
-        console.log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
-        await handleAdminAnswerTicket(ctx, user, text);
-      } else {
-        // Если у пользователя нет adminState, но он админ - показываем сообщение
-        if (isAdmin(user.id)) {
-          console.log(`ℹ️ Админ ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
-          await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
         } else {
-          console.log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
-          await ctx.reply('❌ Неизвестная команда. Используйте меню для навигации.');
+          console.log(`ℹ️ Админ ${ctx.from.id} отправил текст с неизвестным adminState: "${text}"`);
+          await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
         }
+      } else {
+        console.log(`ℹ️ Пользователь ${ctx.from.id} отправил текст с неизвестным adminState: "${text}"`);
+        await ctx.reply('❌ Неизвестная команда. Используйте меню для навигации.');
+      }
+    } else {
+      // Если у пользователя нет adminState
+      if (isAdmin(user.id)) {
+        console.log(`ℹ️ Админ ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+        await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
+      } else {
+        console.log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+        await ctx.reply('❌ Неизвестная команда. Используйте меню для навигации.');
       }
     }
     
