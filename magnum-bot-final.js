@@ -4237,61 +4237,62 @@ bot.on('text', async (ctx) => {
       
       // Проверяем админские состояния (только для админов)
       if (isAdmin(user.id)) {
-    if (user.adminState === 'searching_user') {
-      console.log(`🔍 Админ ${ctx.from.id} ищет пользователя: "${text}"`);
-      await handleAdminSearchUser(ctx, user, text);
-    } else if (user.adminState === 'banning_user') {
-      console.log(`🚫 Админ ${ctx.from.id} блокирует пользователя: "${text}"`);
-      await handleAdminBanUser(ctx, user, text);
-    } else if (user.adminState === 'unbanning_user') {
-      console.log(`✅ Админ ${ctx.from.id} разблокирует пользователя: "${text}"`);
-      await handleAdminUnbanUser(ctx, user, text);
-    } else if (user.adminState === 'setting_farm_reward') {
-      console.log(`🌾 Админ ${ctx.from.id} устанавливает награду фарма: "${text}"`);
-      await handleAdminSetFarmReward(ctx, user, text);
-    } else if (user.adminState === 'setting_farm_cooldown') {
-      console.log(`⏰ Админ ${ctx.from.id} устанавливает кулдаун фарма: "${text}"`);
-      await handleAdminSetFarmCooldown(ctx, user, text);
-    } else if (user.adminState === 'setting_bonus_base') {
-      console.log(`🎁 Админ ${ctx.from.id} устанавливает базовый бонус: "${text}"`);
-      await handleAdminSetBonusBase(ctx, user, text);
-    } else if (user.adminState === 'setting_miner_reward') {
-      console.log(`⛏️ Админ ${ctx.from.id} устанавливает награду майнера: "${text}"`);
-      await handleAdminSetMinerReward(ctx, user, text);
-    } else if (user.adminState === 'setting_referral_reward') {
-      console.log(`👥 Админ ${ctx.from.id} устанавливает реферальную награду: "${text}"`);
-      await handleAdminSetReferralReward(ctx, user, text);
-    } else if (user.adminState === 'setting_subscription_channel') {
-      console.log(`📢 Админ ${ctx.from.id} устанавливает канал подписки: "${text}"`);
-      await handleAdminSetSubscriptionChannel(ctx, user, text);
-    } else if (user.adminState === 'creating_post_with_button') {
-      console.log(`📝 Админ ${ctx.from.id} создает пост с кнопкой: "${text}"`);
-      await handleAdminCreatePostWithButton(ctx, user, text);
-    } else if (user.adminState === 'creating_post_no_button') {
-      console.log(`📝 Админ ${ctx.from.id} создает пост без кнопки: "${text}"`);
-      await handleAdminCreatePostNoButton(ctx, user, text);
-    } else if (user.adminState === 'creating_promocode') {
-      console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
-      await handleAdminCreatePromocode(ctx, user, text);
-    } else if (user.adminState === 'entering_promocode') {
-      console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
-      await handleUserEnterPromocode(ctx, user, text);
-    } else if (user.adminState === 'creating_support_ticket') {
-      console.log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
-      await handleCreateSupportTicket(ctx, user, text);
-    } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
-      console.log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
-      await handleAdminAnswerTicket(ctx, user, text);
-    } else {
-      // Если у пользователя нет adminState, но он админ - показываем сообщение
-      if (isAdmin(user.id)) {
-        console.log(`ℹ️ Админ ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
-        await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
+        if (user.adminState === 'searching_user') {
+          console.log(`🔍 Админ ${ctx.from.id} ищет пользователя: "${text}"`);
+          await handleAdminSearchUser(ctx, user, text);
+        } else if (user.adminState === 'banning_user') {
+          console.log(`🚫 Админ ${ctx.from.id} блокирует пользователя: "${text}"`);
+          await handleAdminBanUser(ctx, user, text);
+        } else if (user.adminState === 'unbanning_user') {
+          console.log(`✅ Админ ${ctx.from.id} разблокирует пользователя: "${text}"`);
+          await handleAdminUnbanUser(ctx, user, text);
+        } else if (user.adminState === 'setting_farm_reward') {
+          console.log(`🌾 Админ ${ctx.from.id} устанавливает награду фарма: "${text}"`);
+          await handleAdminSetFarmReward(ctx, user, text);
+        } else if (user.adminState === 'setting_farm_cooldown') {
+          console.log(`⏰ Админ ${ctx.from.id} устанавливает кулдаун фарма: "${text}"`);
+          await handleAdminSetFarmCooldown(ctx, user, text);
+        } else if (user.adminState === 'setting_bonus_base') {
+          console.log(`🎁 Админ ${ctx.from.id} устанавливает базовый бонус: "${text}"`);
+          await handleAdminSetBonusBase(ctx, user, text);
+        } else if (user.adminState === 'setting_miner_reward') {
+          console.log(`⛏️ Админ ${ctx.from.id} устанавливает награду майнера: "${text}"`);
+          await handleAdminSetMinerReward(ctx, user, text);
+        } else if (user.adminState === 'setting_referral_reward') {
+          console.log(`👥 Админ ${ctx.from.id} устанавливает реферальную награду: "${text}"`);
+          await handleAdminSetReferralReward(ctx, user, text);
+        } else if (user.adminState === 'setting_subscription_channel') {
+          console.log(`📢 Админ ${ctx.from.id} устанавливает канал подписки: "${text}"`);
+          await handleAdminSetSubscriptionChannel(ctx, user, text);
+        } else if (user.adminState === 'creating_post_with_button') {
+          console.log(`📝 Админ ${ctx.from.id} создает пост с кнопкой: "${text}"`);
+          await handleAdminCreatePostWithButton(ctx, user, text);
+        } else if (user.adminState === 'creating_post_no_button') {
+          console.log(`📝 Админ ${ctx.from.id} создает пост без кнопки: "${text}"`);
+          await handleAdminCreatePostNoButton(ctx, user, text);
+        } else if (user.adminState === 'creating_promocode') {
+          console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
+          await handleAdminCreatePromocode(ctx, user, text);
+        }
+      } else if (user.adminState === 'entering_promocode') {
+        console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
+        await handleUserEnterPromocode(ctx, user, text);
+      } else if (user.adminState === 'creating_support_ticket') {
+        console.log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
+        await handleCreateSupportTicket(ctx, user, text);
+      } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
+        console.log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
+        await handleAdminAnswerTicket(ctx, user, text);
       } else {
-        console.log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
-        await ctx.reply('❌ Неизвестная команда. Используйте меню для навигации.');
+        // Если у пользователя нет adminState, но он админ - показываем сообщение
+        if (isAdmin(user.id)) {
+          console.log(`ℹ️ Админ ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+          await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
+        } else {
+          console.log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+          await ctx.reply('❌ Неизвестная команда. Используйте меню для навигации.');
+        }
       }
-    }
     
     console.log(`✅ Текстовое сообщение от ${ctx.from.id} обработано`);
     
