@@ -102,65 +102,113 @@ let client;
 
 async function connectDB() {
   try {
+    logFunction('connectDB');
     log('🔌 Подключение к MongoDB...');
+    
+    logDebug('Параметры подключения к MongoDB', {
+      uri: config.MONGODB_URI ? 'установлен' : 'отсутствует',
+      uriLength: config.MONGODB_URI?.length || 0
+    });
+    
     client = new MongoClient(config.MONGODB_URI);
     await client.connect();
     log('🔌 MongoDB клиент подключен');
+    
     db = client.db();
     log('📊 База данных получена');
     
+    logDebug('Информация о базе данных', {
+      databaseName: db.databaseName,
+      collections: await db.listCollections().toArray().then(cols => cols.map(c => c.name))
+    });
+    
+    log('📋 Создание индексов для оптимизации...');
+    
     // Создаем индексы для оптимизации
+    log('📋 Создание индексов для коллекции users...');
     await db.collection('users').createIndex({ id: 1 }, { unique: true });
     await db.collection('users').createIndex({ username: 1 });
     await db.collection('users').createIndex({ 'miner.active': 1 });
     await db.collection('users').createIndex({ lastSeen: -1 });
     await db.collection('users').createIndex({ referrerId: 1 });
+    log('✅ Индексы для users созданы');
     
+    log('📋 Создание индексов для коллекции promocodes...');
     await db.collection('promocodes').createIndex({ code: 1 }, { unique: true });
     await db.collection('promocodes').createIndex({ isActive: 1 });
     await db.collection('promocodes').createIndex({ expiresAt: 1 });
+    log('✅ Индексы для promocodes созданы');
     
+    log('📋 Создание индексов для коллекции withdrawalRequests...');
     await db.collection('withdrawalRequests').createIndex({ userId: 1 });
     await db.collection('withdrawalRequests').createIndex({ status: 1 });
     await db.collection('withdrawalRequests').createIndex({ createdAt: -1 });
+    log('✅ Индексы для withdrawalRequests созданы');
     
+    log('📋 Создание индексов для коллекции supportTickets...');
     await db.collection('supportTickets').createIndex({ userId: 1 });
     await db.collection('supportTickets').createIndex({ status: 1 });
     await db.collection('supportTickets').createIndex({ createdAt: -1 });
+    await db.collection('supportTickets').createIndex({ id: 1 }, { unique: true });
+    await db.collection('supportTickets').createIndex({ adminId: 1 });
+    await db.collection('supportTickets').createIndex({ updatedAt: -1 });
+    log('✅ Индексы для supportTickets созданы');
     
+    log('📋 Создание индексов для коллекции taskChecks...');
     await db.collection('taskChecks').createIndex({ userId: 1 });
     await db.collection('taskChecks').createIndex({ status: 1 });
     await db.collection('taskChecks').createIndex({ createdAt: -1 });
+    log('✅ Индексы для taskChecks созданы');
     
+    log('📋 Создание индексов для коллекции dailyTasks...');
     await db.collection('dailyTasks').createIndex({ userId: 1 });
     await db.collection('dailyTasks').createIndex({ date: 1 });
     await db.collection('dailyTasks').createIndex({ completed: 1 });
+    log('✅ Индексы для dailyTasks созданы');
     
+    log('📋 Создание индексов для коллекции exchangeHistory...');
     await db.collection('exchangeHistory').createIndex({ userId: 1 });
     await db.collection('exchangeHistory').createIndex({ timestamp: -1 });
+    log('✅ Индексы для exchangeHistory созданы');
     
     // Создаем индекс для резерва с проверкой на существующие записи
+    log('📋 Создание индекса для коллекции reserve...');
     try {
       await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+      log('✅ Индекс для reserve создан');
     } catch (error) {
       if (error.code === 11000) {
         // Если есть дублирующиеся записи, удаляем их и создаем индекс заново
         log('🔄 Исправляем дублирующиеся записи в резерве...');
-        await db.collection('reserve').deleteMany({ currency: null });
+        const deleteResult = await db.collection('reserve').deleteMany({ currency: null });
+        logDebug('Удаление дублирующихся записей', { deletedCount: deleteResult.deletedCount });
         await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+        log('✅ Индекс для reserve пересоздан');
       } else {
         throw error;
       }
     }
     
+    log('✅ Все индексы созданы успешно');
     log('✅ База данных подключена');
     
     log('💰 Инициализация резерва...');
     // Инициализируем резерв
     await initializeReserve();
     log('✅ Резерв инициализирован');
+    
+    logDebug('Подключение к БД завершено', {
+      databaseName: db.databaseName,
+      collectionsCount: (await db.listCollections().toArray()).length
+    });
+    
   } catch (error) {
     logError(error, 'Подключение к MongoDB');
+    logDebug('Ошибка подключения к БД', {
+      error: error.message,
+      stack: error.stack,
+      mongoUri: config.MONGODB_URI ? 'установлен' : 'отсутствует'
+    });
     process.exit(1);
   }
 }
@@ -431,12 +479,25 @@ function ensureUserFields(user) {
 
 async function getUser(id, ctx = null) {
   try {
+    logFunction('getUser', id, { ctx: ctx ? 'present' : 'null' });
+    
     // Проверяем кеш
+    logDebug(`Проверка кеша для пользователя ${id}`);
     const cached = getCachedUser(id);
     if (cached) {
+      log(`✅ Пользователь ${id} найден в кеше`);
+      logDebug(`Кешированный пользователь ${id}`, {
+        level: cached.level,
+        magnumCoins: cached.magnumCoins,
+        stars: cached.stars,
+        banned: cached.banned
+      });
+      
       // Проверяем, не заблокирован ли пользователь
       if (cached.banned) {
+        log(`🚫 Пользователь ${id} заблокирован (из кеша)`);
         if (ctx) {
+          log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
@@ -444,9 +505,18 @@ async function getUser(id, ctx = null) {
       return cached;
     }
 
+    log(`📊 Поиск пользователя ${id} в базе данных`);
     let user = await db.collection('users').findOne({ id: id });
     
     if (!user) {
+      log(`🆕 Создание нового пользователя ${id}`);
+      logDebug(`Данные для нового пользователя ${id}`, {
+        username: ctx?.from?.username || null,
+        firstName: ctx?.from?.first_name || null,
+        lastName: ctx?.from?.last_name || null,
+        hasContext: !!ctx
+      });
+      
       // Создаем нового пользователя
       user = {
         id: id,
@@ -524,26 +594,50 @@ async function getUser(id, ctx = null) {
         updatedAt: new Date()
       };
       
-      await db.collection('users').insertOne(user);
-      log(`👤 Создан новый пользователь: ${user.username || user.id}`);
+      log(`💾 Сохранение нового пользователя ${id} в базу данных`);
+      const insertResult = await db.collection('users').insertOne(user);
+      logDebug(`Результат вставки пользователя ${id}`, { insertedId: insertResult.insertedId });
+      log(`✅ Новый пользователь ${id} успешно создан: ${user.username || user.id}`);
     } else {
+      log(`✅ Пользователь ${id} найден в базе данных`);
+      logDebug(`Существующий пользователь ${id}`, {
+        level: user.level,
+        magnumCoins: user.magnumCoins,
+        stars: user.stars,
+        banned: user.banned,
+        lastSeen: user.statistics?.lastSeen
+      });
+      
       // Проверяем, не заблокирован ли пользователь
       if (user.banned) {
+        log(`🚫 Пользователь ${id} заблокирован (из БД)`);
         if (ctx) {
+          log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
       }
       
       // Проверяем и инициализируем все недостающие поля
+      logDebug(`Инициализация полей для существующего пользователя ${id}`);
       user = ensureUserFields(user);
       
       // Обновляем статистику
+      const oldLastSeen = user.statistics?.lastSeen;
+      const oldSessions = user.statistics?.totalSessions || 0;
       user.statistics.lastSeen = new Date();
-      user.statistics.totalSessions = (user.statistics.totalSessions || 0) + 1;
+      user.statistics.totalSessions = oldSessions + 1;
+      
+      logDebug(`Обновление статистики пользователя ${id}`, {
+        oldLastSeen,
+        newLastSeen: user.statistics.lastSeen,
+        oldSessions,
+        newSessions: user.statistics.totalSessions
+      });
       
       // Обновляем пользователя в базе данных
-      await db.collection('users').updateOne(
+      log(`💾 Обновление пользователя ${id} в базе данных`);
+      const updateResult = await db.collection('users').updateOne(
         { id: id },
         { 
           $set: { 
@@ -552,13 +646,24 @@ async function getUser(id, ctx = null) {
           }
         }
       );
+      logDebug(`Результат обновления пользователя ${id}`, { 
+        matchedCount: updateResult.matchedCount,
+        modifiedCount: updateResult.modifiedCount 
+      });
     }
     
     // Сохраняем в кеш
+    logDebug(`Сохранение пользователя ${id} в кеш`);
     setCachedUser(id, user);
+    
+    log(`✅ Пользователь ${id} успешно загружен`);
     return user;
   } catch (error) {
-    logError(error, 'Получение пользователя');
+    logError(error, `Получение пользователя ${id}`);
+    logDebug(`Ошибка при получении пользователя ${id}`, {
+      error: error.message,
+      stack: error.stack
+    });
     return null;
   }
 }
@@ -2547,16 +2652,64 @@ function log(message, type = 'INFO') {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] [${type}] ${message}`;
   console.log(logMessage);
+  
+  // Также записываем в файл для Railway
+  if (process.env.NODE_ENV === 'production') {
+    console.log(logMessage);
+  }
 }
 
-// Логирование ошибок
 function logError(error, context = '') {
   const timestamp = new Date().toISOString();
-  const errorMessage = `[${timestamp}] [ERROR] ${context}: ${error.message}`;
-  console.error(errorMessage);
-  if (error.stack) {
-    console.error(`[${timestamp}] [ERROR] Stack: ${error.stack}`);
+  const errorMessage = error.message || error;
+  const stack = error.stack || '';
+  const logMessage = `[${timestamp}] [ERROR] ${context}: ${errorMessage}`;
+  console.error(logMessage);
+  
+  if (stack) {
+    const stackMessage = `[${timestamp}] [ERROR] Stack: ${stack}`;
+    console.error(stackMessage);
   }
+  
+  // Также записываем в файл для Railway
+  if (process.env.NODE_ENV === 'production') {
+    console.error(logMessage);
+    if (stack) {
+      console.error(stackMessage);
+    }
+  }
+}
+
+function logDebug(message, data = null) {
+  const timestamp = new Date().toISOString();
+  let logMessage = `[${timestamp}] [DEBUG] ${message}`;
+  
+  if (data) {
+    logMessage += ` | Data: ${JSON.stringify(data, null, 2)}`;
+  }
+  
+  console.log(logMessage);
+}
+
+function logAction(userId, action, details = '') {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [ACTION] User ${userId} | Action: ${action} | Details: ${details}`;
+  console.log(logMessage);
+}
+
+function logFunction(functionName, userId = null, params = null) {
+  const timestamp = new Date().toISOString();
+  let logMessage = `[${timestamp}] [FUNCTION] ${functionName}`;
+  
+  if (userId) {
+    logMessage += ` | User: ${userId}`;
+  }
+  
+  if (params) {
+    logMessage += ` | Params: ${JSON.stringify(params)}`;
+  }
+  
+  console.log(logMessage);
 }
 
 // ==================== ОБМЕН ====================
@@ -4017,15 +4170,43 @@ const bot = new Telegraf(config.BOT_TOKEN);
 // Обработка команды /start
 bot.start(async (ctx) => {
   try {
+    logFunction('bot.start', ctx.from.id, { 
+      startPayload: ctx.startPayload,
+      username: ctx.from.username,
+      firstName: ctx.from.first_name
+    });
+    
+    log(`🚀 Команда /start от пользователя ${ctx.from.id}`);
+    logDebug(`Данные пользователя /start`, {
+      id: ctx.from.id,
+      username: ctx.from.username,
+      firstName: ctx.from.first_name,
+      lastName: ctx.from.last_name,
+      startPayload: ctx.startPayload
+    });
+    
+    log(`👤 Получение пользователя ${ctx.from.id}`);
     const user = await getUser(ctx.from.id, ctx);
     if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id}`);
       await ctx.reply('❌ Ошибка создания пользователя');
       return;
     }
     
+    logDebug(`Пользователь ${ctx.from.id} получен`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      stars: user.stars,
+      banned: user.banned
+    });
+    
     // Проверяем подписку
+    log(`🔍 Проверка подписки для пользователя ${ctx.from.id}`);
     const isSubscribed = await checkSubscription(ctx);
+    logDebug(`Результат проверки подписки для ${ctx.from.id}`, { isSubscribed });
+    
     if (!isSubscribed) {
+      log(`❌ Пользователь ${ctx.from.id} не подписан на канал`);
       await showSubscriptionMessage(ctx);
       return;
     }
@@ -4033,13 +4214,30 @@ bot.start(async (ctx) => {
     // Обрабатываем реферальную ссылку
     const startPayload = ctx.startPayload;
     if (startPayload && startPayload !== user.id.toString()) {
+      log(`👥 Обработка реферала: ${ctx.from.id} от ${startPayload}`);
+      logDebug(`Реферальные данные`, {
+        userId: ctx.from.id,
+        referrerId: startPayload,
+        currentReferrer: user.referrerId
+      });
       await handleReferral(user.id, parseInt(startPayload));
+    } else {
+      log(`ℹ️ Реферальная ссылка не используется для пользователя ${ctx.from.id}`);
     }
     
     // Для команды /start используем ctx.reply вместо editMessageText
+    log(`📱 Показ главного меню для пользователя ${ctx.from.id}`);
     await showMainMenuStart(ctx, user);
+    
+    log(`✅ Команда /start успешно обработана для пользователя ${ctx.from.id}`);
+    
   } catch (error) {
-    logError(error, 'Команда /start');
+    logError(error, `Команда /start для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в /start`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
     await ctx.reply('❌ Произошла ошибка. Попробуйте позже.');
   }
 });
@@ -4047,41 +4245,91 @@ bot.start(async (ctx) => {
 // Обработка текстовых сообщений для админ функций
 bot.on('text', async (ctx) => {
   try {
+    logFunction('bot.on.text', ctx.from.id, { 
+      text: ctx.message.text,
+      messageId: ctx.message.message_id
+    });
+    
+    log(`📝 Текстовое сообщение от пользователя ${ctx.from.id}: "${ctx.message.text}"`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user || !isAdmin(user.id)) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для обработки текста`);
+      return;
+    }
+    
+    if (!isAdmin(user.id)) {
+      log(`ℹ️ Пользователь ${ctx.from.id} не является админом, пропускаем обработку текста`);
+      return;
+    }
     
     const text = ctx.message.text;
+    logDebug(`Обработка текста админа ${ctx.from.id}`, {
+      adminState: user.adminState,
+      text: text,
+      textLength: text.length
+    });
     
     // Проверяем состояние админа
     if (user.adminState === 'searching_user') {
+      log(`🔍 Админ ${ctx.from.id} ищет пользователя: "${text}"`);
       await handleAdminSearchUser(ctx, user, text);
     } else if (user.adminState === 'banning_user') {
+      log(`🚫 Админ ${ctx.from.id} блокирует пользователя: "${text}"`);
       await handleAdminBanUser(ctx, user, text);
     } else if (user.adminState === 'unbanning_user') {
+      log(`✅ Админ ${ctx.from.id} разблокирует пользователя: "${text}"`);
       await handleAdminUnbanUser(ctx, user, text);
     } else if (user.adminState === 'setting_farm_reward') {
+      log(`🌾 Админ ${ctx.from.id} устанавливает награду фарма: "${text}"`);
       await handleAdminSetFarmReward(ctx, user, text);
     } else if (user.adminState === 'setting_farm_cooldown') {
+      log(`⏰ Админ ${ctx.from.id} устанавливает кулдаун фарма: "${text}"`);
       await handleAdminSetFarmCooldown(ctx, user, text);
     } else if (user.adminState === 'setting_bonus_base') {
+      log(`🎁 Админ ${ctx.from.id} устанавливает базовый бонус: "${text}"`);
       await handleAdminSetBonusBase(ctx, user, text);
     } else if (user.adminState === 'setting_miner_reward') {
+      log(`⛏️ Админ ${ctx.from.id} устанавливает награду майнера: "${text}"`);
       await handleAdminSetMinerReward(ctx, user, text);
     } else if (user.adminState === 'setting_referral_reward') {
+      log(`👥 Админ ${ctx.from.id} устанавливает реферальную награду: "${text}"`);
       await handleAdminSetReferralReward(ctx, user, text);
     } else if (user.adminState === 'setting_subscription_channel') {
+      log(`📢 Админ ${ctx.from.id} устанавливает канал подписки: "${text}"`);
       await handleAdminSetSubscriptionChannel(ctx, user, text);
     } else if (user.adminState === 'creating_post_with_button') {
+      log(`📝 Админ ${ctx.from.id} создает пост с кнопкой: "${text}"`);
       await handleAdminCreatePostWithButton(ctx, user, text);
     } else if (user.adminState === 'creating_post_no_button') {
+      log(`📝 Админ ${ctx.from.id} создает пост без кнопки: "${text}"`);
       await handleAdminCreatePostNoButton(ctx, user, text);
     } else if (user.adminState === 'creating_promocode') {
+      log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
       await handleAdminCreatePromocode(ctx, user, text);
     } else if (user.adminState === 'entering_promocode') {
+      log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
       await handleUserEnterPromocode(ctx, user, text);
+    } else if (user.adminState === 'creating_support_ticket') {
+      log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
+      await handleCreateSupportTicket(ctx, user, text);
+    } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
+      log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
+      await handleAdminAnswerTicket(ctx, user, text);
+    } else {
+      log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
     }
+    
+    log(`✅ Текстовое сообщение от ${ctx.from.id} обработано`);
+    
   } catch (error) {
-    logError(error, 'Обработка текстового сообщения админа');
+    logError(error, `Обработка текстового сообщения от ${ctx.from.id}`);
+    logDebug(`Ошибка в обработке текста`, {
+      userId: ctx.from.id,
+      text: ctx.message.text,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -4593,15 +4841,1093 @@ async function handleUserEnterPromocode(ctx, user, text) {
   }
 }
 
-// Обработка кнопок главного меню
-bot.action('main_menu', async (ctx) => {
+// ==================== СИСТЕМА ПОДДЕРЖКИ ====================
+async function handleCreateSupportTicket(ctx, user, text) {
+  try {
+    logFunction('handleCreateSupportTicket', user.id, { textLength: text.length });
+    log(`🆘 Создание тикета поддержки для пользователя ${user.id}`);
+    
+    if (text.length < 10) {
+      await ctx.reply('❌ Описание проблемы слишком короткое. Пожалуйста, опишите проблему подробнее (минимум 10 символов).');
+      return;
+    }
+    
+    if (text.length > 1000) {
+      await ctx.reply('❌ Описание проблемы слишком длинное. Пожалуйста, сократите описание до 1000 символов.');
+      return;
+    }
+    
+    // Создаем тикет в базе данных
+    const ticket = {
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      userId: user.id,
+      username: user.username,
+      firstName: user.firstName,
+      status: 'new', // new, in_progress, answered, closed
+      priority: 'normal', // low, normal, high, urgent
+      subject: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+      description: text,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      adminResponse: null,
+      adminId: null,
+      responseTime: null
+    };
+    
+    logDebug(`Создание тикета в БД`, {
+      ticketId: ticket.id,
+      userId: user.id,
+      status: ticket.status,
+      subject: ticket.subject
+    });
+    
+    await db.collection('supportTickets').insertOne(ticket);
+    
+    // Обновляем статистику пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          'support.ticketsCount': 1
+        },
+        $set: { 
+          'support.lastTicket': new Date(),
+          adminState: null,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Отправляем тикет в канал поддержки
+    const supportChannel = '@magnumsupported';
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Ответить', `support_answer_${ticket.id}`),
+        Markup.button.callback('⏳ В обработке', `support_progress_${ticket.id}`)
+      ],
+      [
+        Markup.button.callback('❌ Отклонить', `support_reject_${ticket.id}`),
+        Markup.button.callback('🔒 Закрыть', `support_close_${ticket.id}`)
+      ]
+    ]);
+    
+    const supportMessage = 
+      `🆘 *Новый тикет поддержки*\n\n` +
+      `🆔 *ID тикета:* \`${ticket.id}\`\n` +
+      `👤 *Пользователь:* ${user.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${user.username ? '@' + user.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${user.id}\`\n` +
+      `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+      `📊 *Уровень:* ${user.level || 1}\n` +
+      `💰 *Magnum Coins:* ${formatNumber(user.magnumCoins || 0)}\n` +
+      `⭐ *Stars:* ${formatNumber(user.stars || 0)}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `🎯 Выберите действие:`;
+    
+    try {
+      await ctx.telegram.sendMessage(supportChannel, supportMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+      
+      log(`✅ Тикет ${ticket.id} отправлен в канал поддержки ${supportChannel}`);
+    } catch (error) {
+      logError(error, `Отправка тикета ${ticket.id} в канал поддержки`);
+      logDebug(`Ошибка отправки в канал`, {
+        channel: supportChannel,
+        ticketId: ticket.id,
+        error: error.message
+      });
+    }
+    
+    // Отправляем подтверждение пользователю
+    const userKeyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в поддержку', 'support')]
+    ]);
+    
+    const userMessage = 
+      `✅ *Тикет создан успешно!*\n\n` +
+      `🆔 *ID тикета:* \`${ticket.id}\`\n` +
+      `📝 *Ваша проблема:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `⏰ *Время ответа:* 5-30 минут\n\n` +
+      `📋 *Что дальше:*\n` +
+      `• Мы рассмотрим ваш тикет\n` +
+      `• Ответим в ближайшее время\n` +
+      `• Вы получите уведомление\n\n` +
+      `💡 *Совет:* Пока ждете ответа, можете изучить FAQ - возможно, там уже есть ответ на ваш вопрос!`;
+    
+    await ctx.reply(userMessage, {
+      parse_mode: 'Markdown',
+      reply_markup: userKeyboard.reply_markup
+    });
+    
+    log(`✅ Тикет ${ticket.id} успешно создан для пользователя ${user.id}`);
+    
+  } catch (error) {
+    logError(error, `Создание тикета поддержки для пользователя ${user.id}`);
+    logDebug(`Ошибка создания тикета`, {
+      userId: user.id,
+      text: text,
+      error: error.message,
+      stack: error.stack
+    });
+    await ctx.reply('❌ Ошибка создания тикета. Попробуйте позже.');
+  }
+}
+
+// Обработка ответа админа на тикет
+async function handleAdminAnswerTicket(ctx, user, text) {
+  try {
+    logFunction('handleAdminAnswerTicket', user.id, { textLength: text.length });
+    
+    // Извлекаем ID тикета из adminState
+    const ticketId = user.adminState.replace('answering_ticket_', '');
+    log(`✅ Админ ${user.id} отвечает на тикет ${ticketId}`);
+    
+    if (text.length < 5) {
+      await ctx.reply('❌ Ответ слишком короткий. Пожалуйста, напишите более подробный ответ.');
+      return;
+    }
+    
+    if (text.length > 2000) {
+      await ctx.reply('❌ Ответ слишком длинный. Пожалуйста, сократите ответ до 2000 символов.');
+      return;
+    }
+    
+    // Получаем тикет из базы данных
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (!ticket) {
+      await ctx.reply('❌ Тикет не найден');
+      return;
+    }
+    
+    // Обновляем тикет с ответом админа
+    const responseTime = Date.now() - ticket.createdAt.getTime();
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'answered',
+          adminResponse: text,
+          adminId: user.id,
+          responseTime: responseTime,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    logDebug(`Ответ админа сохранен в БД`, {
+      ticketId: ticketId,
+      adminId: user.id,
+      responseLength: text.length,
+      responseTime: responseTime
+    });
+    
+    // Отправляем ответ пользователю
+    try {
+      const userMessage = 
+        `✅ *Ответ на ваш тикет*\n\n` +
+        `🆔 *ID тикета:* \`${ticketId}\`\n` +
+        `📝 *Ваша проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
+        `👨‍💼 *Ответ поддержки:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+        `⏰ *Время ответа:* ${Math.floor(responseTime / 1000 / 60)} минут\n\n` +
+        `💡 Если у вас есть дополнительные вопросы, создайте новый тикет.`;
+      
+      await ctx.telegram.sendMessage(ticket.userId, userMessage, {
+        parse_mode: 'Markdown'
+      });
+      
+      log(`✅ Ответ отправлен пользователю ${ticket.userId}`);
+    } catch (error) {
+      logError(error, `Отправка ответа пользователю ${ticket.userId}`);
+      logDebug(`Ошибка отправки ответа`, {
+        userId: ticket.userId,
+        ticketId: ticketId,
+        error: error.message
+      });
+    }
+    
+    // Обновляем сообщение в канале поддержки
+    const supportChannel = '@magnumsupported';
+    const message = 
+      `✅ *Тикет отвечен*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket.userId}\`\n` +
+      `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${user.firstName || user.username || user.id}\n` +
+      `⏰ *Время ответа:* ${Math.floor(responseTime / 1000 / 60)} минут\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
+      `✅ *Ответ:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `✅ *Статус:* Отвечен`;
+    
+    try {
+      await ctx.telegram.sendMessage(supportChannel, message, {
+        parse_mode: 'Markdown'
+      });
+      log(`✅ Обновленное сообщение отправлено в канал поддержки`);
+    } catch (error) {
+      logError(error, `Отправка обновленного сообщения в канал поддержки`);
+    }
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    // Отправляем подтверждение админу
+    const adminKeyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в админ панель', 'admin')]
+    ]);
+    
+    const adminMessage = 
+      `✅ *Ответ отправлен успешно!*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
+      `📝 *Ответ:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
+      `⏰ *Время ответа:* ${Math.floor(responseTime / 1000 / 60)} минут\n\n` +
+      `✅ Пользователь получил ваш ответ.`;
+    
+    await ctx.reply(adminMessage, {
+      parse_mode: 'Markdown',
+      reply_markup: adminKeyboard.reply_markup
+    });
+    
+    log(`✅ Ответ на тикет ${ticketId} успешно обработан админом ${user.id}`);
+    
+  } catch (error) {
+    logError(error, `Ответ админа ${user.id} на тикет`);
+    logDebug(`Ошибка ответа админа`, {
+      adminId: user.id,
+      adminState: user.adminState,
+      text: text,
+      error: error.message,
+      stack: error.stack
+    });
+    await ctx.reply('❌ Ошибка отправки ответа. Попробуйте позже.');
+  }
+}
+
+// ==================== FAQ ОБРАБОТЧИКИ ====================
+bot.action('faq_farm', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showMainMenu(ctx, user);
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `🌾 *FAQ - Фарм*\n\n` +
+      `*❓ Что такое фарм?*\n` +
+      `Фарм - это основной способ заработка Magnum Coins в боте. Вы нажимаете кнопку "Фарм" и получаете награду.\n\n` +
+      `*❓ Как часто можно фармить?*\n` +
+      `Фарм доступен каждые ${config.FARM_COOLDOWN || 10} секунд. После нажатия кнопки начинается обратный отсчет.\n\n` +
+      `*❓ Сколько Magnum Coins я получаю за фарм?*\n` +
+      `За каждый фарм вы получаете ${config.FARM_REWARD || 1} Magnum Coins. Количество может увеличиваться с уровнем.\n\n` +
+      `*❓ Что такое кулдаун?*\n` +
+      `Кулдаун - это время ожидания между фармами. Во время кулдауна кнопка показывает обратный отсчет.\n\n` +
+      `*❓ Как увеличить награду за фарм?*\n` +
+      `Награда за фарм увеличивается с повышением уровня. Также можно получить бонусы через достижения.\n\n` +
+      `*❓ Что такое статистика фарма?*\n` +
+      `В статистике отображается общее количество фармов, заработанные Magnum Coins и время последнего фарма.\n\n` +
+      `*❓ Что такое бонусы фарма?*\n` +
+      `Бонусы фарма - это дополнительные награды, которые можно получить за выполнение определенных условий.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
   } catch (error) {
-    logError(error, 'Главное меню');
+    logError(error, 'FAQ Фарм');
+  }
+});
+
+bot.action('faq_miner', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `⛏️ *FAQ - Майнер*\n\n` +
+      `*❓ Что такое майнер?*\n` +
+      `Майнер - это автоматический способ заработка Stars. Он работает в фоновом режиме и приносит награды каждый час.\n\n` +
+      `*❓ Как запустить майнер?*\n` +
+      `Перейдите в раздел "Фарм" → "⛏️ Майнер" и нажмите "▶️ Запустить майнер".\n\n` +
+      `*❓ Как часто майнер приносит награды?*\n` +
+      `Майнер приносит награды каждые 60 минут (1 час).\n\n` +
+      `*❓ Сколько Stars я получаю от майнера?*\n` +
+      `За час работы майнер приносит ${config.MINER_REWARD_PER_HOUR || 10} Stars. Награда зависит от уровня майнера.\n\n` +
+      `*❓ Как улучшить майнер?*\n` +
+      `Майнер можно улучшить, потратив Magnum Coins. Улучшения увеличивают эффективность и награды.\n\n` +
+      `*❓ Что такое эффективность майнера?*\n` +
+      `Эффективность показывает множитель награды. Например, эффективность 2x означает двойную награду.\n\n` +
+      `*❓ Можно ли остановить майнер?*\n` +
+      `Да, майнер можно остановить в любой момент, нажав кнопку "⏹️ Остановить майнер".\n\n` +
+      `*❓ Что происходит при остановке майнера?*\n` +
+      `При остановке майнер перестает приносить награды, но прогресс сохраняется.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ Майнер');
+  }
+});
+
+bot.action('faq_bonus', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `🎁 *FAQ - Бонусы*\n\n` +
+      `*❓ Что такое ежедневный бонус?*\n` +
+      `Ежедневный бонус - это награда, которую можно получить раз в день. Бонус увеличивается с каждым днем подряд.\n\n` +
+      `*❓ Как часто можно получать бонус?*\n` +
+      `Бонус доступен каждые 24 часа. Если вы пропустите день, серия сбрасывается.\n\n` +
+      `*❓ Что такое серия бонусов?*\n` +
+      `Серия - это количество дней подряд, когда вы забирали бонус. Чем длиннее серия, тем больше награда.\n\n` +
+      `*❓ Сколько Magnum Coins в бонусе?*\n` +
+      `Базовый бонус составляет ${config.DAILY_BONUS_BASE || 10} Magnum Coins. С каждым днем серии награда увеличивается.\n\n` +
+      `*❓ Что происходит при пропуске дня?*\n` +
+      `Если вы пропустите день, серия сбрасывается на 1, и награда возвращается к базовому значению.\n\n` +
+      `*❓ Как посмотреть статистику бонусов?*\n` +
+      `В разделе "Бонусы" → "📊 Статистика" можно посмотреть общую статистику полученных бонусов.\n\n` +
+      `*❓ Что такое серия бонусов?*\n` +
+      `В разделе "Бонусы" → "🔥 Серия" отображается текущая серия и награда за следующий день.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ Бонусы');
+  }
+});
+
+bot.action('faq_exchange', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `💎 *FAQ - Обмен*\n\n` +
+      `*❓ Что такое обмен?*\n` +
+      `Обмен позволяет конвертировать Magnum Coins в Stars по фиксированному курсу.\n\n` +
+      `*❓ Какой курс обмена?*\n` +
+      `Курс обмена: 1 Magnum Coin = 1 Star (1:1).\n\n` +
+      `*❓ Какие суммы можно обменивать?*\n` +
+      `Доступные суммы: 10, 50, 100, 500, 1000, 5000 Magnum Coins.\n\n` +
+      `*❓ Можно ли обменять Stars обратно на Magnum Coins?*\n` +
+      `Нет, обмен работает только в одну сторону: Magnum Coins → Stars.\n\n` +
+      `*❓ Есть ли комиссия за обмен?*\n` +
+      `Нет, обмен происходит без комиссии по курсу 1:1.\n\n` +
+      `*❓ Зачем нужны Stars?*\n` +
+      `Stars используются для вывода средств и других операций в боте.\n\n` +
+      `*❓ Можно ли отменить обмен?*\n` +
+      `Нет, обмен нельзя отменить после подтверждения.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ Обмен');
+  }
+});
+
+bot.action('faq_promocodes', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `🎫 *FAQ - Промокоды*\n\n` +
+      `*❓ Что такое промокоды?*\n` +
+      `Промокоды - это специальные коды, которые дают бонусные Magnum Coins при активации.\n\n` +
+      `*❓ Как активировать промокод?*\n` +
+      `Перейдите в "🎫 Промокод" → "🎫 Ввести промокод" и введите код.\n\n` +
+      `*❓ Какие награды дают промокоды?*\n` +
+      `Промокоды дают Magnum Coins. Количество зависит от конкретного промокода.\n\n` +
+      `*❓ Можно ли использовать один промокод несколько раз?*\n` +
+      `Нет, каждый промокод можно использовать только один раз на аккаунт.\n\n` +
+      `*❓ Что если промокод не работает?*\n` +
+      `Возможные причины: промокод уже использован, закончились активации, неверный код.\n\n` +
+      `*❓ Где взять промокоды?*\n` +
+      `Промокоды публикуются в официальном канале бота и в социальных сетях.\n\n` +
+      `*❓ Как посмотреть историю промокодов?*\n` +
+      `В разделе "🎫 Промокод" → "📊 История промокодов" можно посмотреть использованные коды.\n\n` +
+      `*❓ Что такое активации промокода?*\n` +
+      `Активации - это количество раз, которое можно использовать промокод. Когда активации заканчиваются, промокод становится недействительным.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ Промокоды');
+  }
+});
+
+bot.action('faq_referrals', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `👥 *FAQ - Рефералы*\n\n` +
+      `*❓ Что такое реферальная система?*\n` +
+      `Реферальная система позволяет получать награды за приглашение друзей в бота.\n\n` +
+      `*❓ Как пригласить друга?*\n` +
+      `Перейдите в "👥 Рефералы" → "🔗 Реферальная ссылка" и отправьте ссылку другу.\n\n` +
+      `*❓ Как работает реферальная ссылка?*\n` +
+      `Когда друг переходит по вашей ссылке и запускает бота, он становится вашим рефералом.\n\n` +
+      `*❓ Какие награды за рефералов?*\n` +
+      `За каждого реферала вы получаете ${config.REFERRAL_REWARD || 10} Magnum Coins.\n\n` +
+      `*❓ Что такое уровни рефералов?*\n` +
+      `Уровни зависят от количества рефералов:\n` +
+      `• 1-5 рефералов: Новичок\n` +
+      `• 6-15 рефералов: Опытный\n` +
+      `• 16-30 рефералов: Эксперт\n` +
+      `• 31+ рефералов: Мастер\n\n` +
+      `*❓ Можно ли потерять рефералов?*\n` +
+      `Нет, рефералы остаются с вами навсегда после регистрации.\n\n` +
+      `*❓ Как посмотреть список рефералов?*\n` +
+      `В разделе "👥 Рефералы" → "📋 Список рефералов" можно посмотреть всех приглашенных друзей.\n\n` +
+      `*❓ Что такое реферальная статистика?*\n` +
+      `В статистике отображается общее количество рефералов, заработанные награды и уровень.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ Рефералы');
+  }
+});
+
+bot.action('faq_achievements', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `🏆 *FAQ - Достижения*\n\n` +
+      `*❓ Что такое достижения?*\n` +
+      `Достижения - это система наград за выполнение различных задач в боте.\n\n` +
+      `*❓ Какие бывают достижения?*\n` +
+      `• Фарм достижения - за количество фармов\n` +
+      `• Майнер достижения - за время работы майнера\n` +
+      `• Бонус достижения - за серии бонусов\n` +
+      `• Реферал достижения - за количество рефералов\n` +
+      `• Обмен достижения - за обмены валют\n` +
+      `• Общие достижения - за общую активность\n\n` +
+      `*❓ Как получить достижения?*\n` +
+      `Достижения получаются автоматически при выполнении условий. Прогресс отображается в процентах.\n\n` +
+      `*❓ Какие награды за достижения?*\n` +
+      `За достижения даются Magnum Coins. Количество зависит от сложности достижения.\n\n` +
+      `*❓ Как посмотреть прогресс достижений?*\n` +
+      `В разделе "🏆 Достижения" → "📊 Прогресс" можно посмотреть прогресс по всем достижениям.\n\n` +
+      `*❓ Можно ли потерять достижения?*\n` +
+      `Нет, полученные достижения остаются навсегда.\n\n` +
+      `*❓ Что такое награды достижений?*\n` +
+      `В разделе "🏆 Достижения" → "🎁 Награды" можно посмотреть все доступные награды.\n\n` +
+      `*❓ Как часто обновляется прогресс?*\n` +
+      `Прогресс обновляется в реальном времени при выполнении действий.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ Достижения');
+  }
+});
+
+bot.action('faq_tasks', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support_faq')]
+    ]);
+    
+    const message = 
+      `📋 *FAQ - Задания*\n\n` +
+      `*❓ Что такое задания?*\n` +
+      `Задания - это способ получить дополнительные Magnum Coins за выполнение различных действий.\n\n` +
+      `*❓ Какие бывают задания?*\n` +
+      `• Спонсорские задания - подписка на каналы, запуск ботов\n` +
+      `• Ежедневные задания - регулярные задачи\n` +
+      `• Специальные задания - временные акции\n\n` +
+      `*❓ Как выполнить спонсорское задание?*\n` +
+      `1. Выберите задание в разделе "📋 Задания" → "🎯 Спонсорские"\n` +
+      `2. Нажмите "✅ Выполнить"\n` +
+      `3. Подпишитесь на канал или запустите бота\n` +
+      `4. Вернитесь и нажмите "🎁 Получить награду"\n\n` +
+      `*❓ Как проверить выполнение задания?*\n` +
+      `Бот автоматически проверяет выполнение заданий. Если задание выполнено, появится кнопка "🎁 Получить награду".\n\n` +
+      `*❓ Какие награды за задания?*\n` +
+      `Задания дают Magnum Coins. Количество зависит от сложности задания.\n\n` +
+      `*❓ Можно ли выполнить задание несколько раз?*\n` +
+      `Нет, каждое задание можно выполнить только один раз.\n\n` +
+      `*❓ Что такое прогресс заданий?*\n` +
+      `В разделе "📋 Задания" → "📊 Прогресс" можно посмотреть статистику выполненных заданий.\n\n` +
+      `*❓ Что если задание не работает?*\n` +
+      `Убедитесь, что вы подписались на канал или запустили бота. Иногда требуется время для проверки.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ Задания');
+  }
+});
+
+// Обработчик для создания тикета поддержки
+bot.action('contact_support', async (ctx) => {
+  try {
+    logFunction('bot.action.contact_support', ctx.from.id);
+    log(`🆘 Запрос создания тикета поддержки от пользователя ${ctx.from.id}`);
+    
+    const user = await getUser(ctx.from.id);
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для создания тикета`);
+      return;
+    }
+    
+    // Устанавливаем состояние для создания тикета
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_support_ticket', updatedAt: new Date() } }
+    );
+    
+    logDebug(`Установлен adminState для пользователя ${ctx.from.id}`, { adminState: 'creating_support_ticket' });
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'support')]
+    ]);
+    
+    const message = 
+      `🆘 *Создание тикета поддержки*\n\n` +
+      `Ваш ID: \`${user.id}\`\n\n` +
+      `📝 Опишите вашу проблему в одном сообщении.\n\n` +
+      `*Пример:*\n` +
+      `"Не могу получить ежедневный бонус, пишет ошибка"\n\n` +
+      `⚠️ *Важно:* Опишите проблему максимально подробно, чтобы мы могли помочь быстрее.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Пользователю ${ctx.from.id} показана форма создания тикета`);
+    
+  } catch (error) {
+    logError(error, `Создание тикета поддержки для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в contact_support`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// ==================== ОБРАБОТЧИКИ КАНАЛА ПОДДЕРЖКИ ====================
+// Обработчик для ответа на тикет
+bot.action(/^support_answer_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_answer', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`✅ Админ ${ctx.from.id} отвечает на тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ответа на тикет
+    await db.collection('users').updateOne(
+      { id: admin.id },
+      { $set: { adminState: `answering_ticket_${ticketId}`, updatedAt: new Date() } }
+    );
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', `support_cancel_${ticketId}`)]
+    ]);
+    
+    const message = 
+      `✅ *Ответ на тикет*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n\n` +
+      `📝 Напишите ответ пользователю:\n\n` +
+      `💡 *Советы:*\n` +
+      `• Будьте вежливы и профессиональны\n` +
+      `• Дайте четкий и понятный ответ\n` +
+      `• Если нужно, задайте уточняющие вопросы`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Админу ${ctx.from.id} показана форма ответа на тикет ${ticketId}`);
+    
+  } catch (error) {
+    logError(error, `Ответ на тикет ${ctx.match[1]} админом ${ctx.from.id}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для установки статуса "В обработке"
+bot.action(/^support_progress_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_progress', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`⏳ Админ ${ctx.from.id} устанавливает статус "В обработке" для тикета ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Обновляем статус тикета
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'in_progress',
+          adminId: admin.id,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      try {
+        await ctx.telegram.sendMessage(ticket.userId, 
+          `⏳ *Ваш тикет взят в обработку*\n\n` +
+          `🆔 *ID тикета:* \`${ticketId}\`\n` +
+          `📝 *Проблема:* ${ticket.subject}\n\n` +
+          `⏰ Мы работаем над решением вашей проблемы.\n` +
+          `📧 Ответим в ближайшее время!`
+        );
+        log(`✅ Уведомление отправлено пользователю ${ticket.userId}`);
+      } catch (error) {
+        logError(error, `Отправка уведомления пользователю ${ticket.userId}`);
+      }
+    }
+    
+    // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Ответить', `support_answer_${ticketId}`),
+        Markup.button.callback('❌ Отклонить', `support_reject_${ticketId}`)
+      ],
+      [
+        Markup.button.callback('🔒 Закрыть', `support_close_${ticketId}`)
+      ]
+    ]);
+    
+    const message = 
+      `⏳ *Тикет в обработке*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket?.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket?.userId}\`\n` +
+      `📅 *Дата:* ${ticket?.createdAt?.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${admin.firstName || admin.username || admin.id}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket?.description}\n\`\`\`\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    await ctx.answerCbQuery('✅ Статус обновлен');
+    log(`✅ Статус тикета ${ticketId} обновлен на "В обработке"`);
+    
+  } catch (error) {
+    logError(error, `Установка статуса "В обработке" для тикета ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для отклонения тикета
+bot.action(/^support_reject_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_reject', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`❌ Админ ${ctx.from.id} отклоняет тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Обновляем статус тикета
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'rejected',
+          adminId: admin.id,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      try {
+        await ctx.telegram.sendMessage(ticket.userId, 
+          `❌ *Ваш тикет отклонен*\n\n` +
+          `🆔 *ID тикета:* \`${ticketId}\`\n` +
+          `📝 *Проблема:* ${ticket.subject}\n\n` +
+          `⚠️ Ваш тикет был отклонен.\n` +
+          `💡 Попробуйте создать новый тикет с более подробным описанием проблемы.`
+        );
+        log(`✅ Уведомление об отклонении отправлено пользователю ${ticket.userId}`);
+      } catch (error) {
+        logError(error, `Отправка уведомления об отклонении пользователю ${ticket.userId}`);
+      }
+    }
+    
+    // Обновляем сообщение в канале
+    const message = 
+      `❌ *Тикет отклонен*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket?.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket?.userId}\`\n` +
+      `📅 *Дата:* ${ticket?.createdAt?.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${admin.firstName || admin.username || admin.id}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket?.description}\n\`\`\`\n\n` +
+      `❌ *Статус:* Отклонен`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown'
+    });
+    
+    await ctx.answerCbQuery('✅ Тикет отклонен');
+    log(`✅ Тикет ${ticketId} отклонен админом ${ctx.from.id}`);
+    
+  } catch (error) {
+    logError(error, `Отклонение тикета ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для закрытия тикета
+bot.action(/^support_close_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_close', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`🔒 Админ ${ctx.from.id} закрывает тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Обновляем статус тикета
+    await db.collection('supportTickets').updateOne(
+      { id: ticketId },
+      { 
+        $set: { 
+          status: 'closed',
+          adminId: admin.id,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      try {
+        await ctx.telegram.sendMessage(ticket.userId, 
+          `🔒 *Ваш тикет закрыт*\n\n` +
+          `🆔 *ID тикета:* \`${ticketId}\`\n` +
+          `📝 *Проблема:* ${ticket.subject}\n\n` +
+          `✅ Ваш тикет был закрыт.\n` +
+          `💡 Если у вас есть новые вопросы, создайте новый тикет.`
+        );
+        log(`✅ Уведомление о закрытии отправлено пользователю ${ticket.userId}`);
+      } catch (error) {
+        logError(error, `Отправка уведомления о закрытии пользователю ${ticket.userId}`);
+      }
+    }
+    
+    // Обновляем сообщение в канале
+    const message = 
+      `🔒 *Тикет закрыт*\n\n` +
+      `🆔 *ID тикета:* \`${ticketId}\`\n` +
+      `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
+      `📱 *Username:* ${ticket?.username ? '@' + ticket.username : 'Не указан'}\n` +
+      `🆔 *User ID:* \`${ticket?.userId}\`\n` +
+      `📅 *Дата:* ${ticket?.createdAt?.toLocaleString('ru-RU')}\n` +
+      `👨‍💼 *Админ:* ${admin.firstName || admin.username || admin.id}\n\n` +
+      `📝 *Проблема:*\n\`\`\`\n${ticket?.description}\n\`\`\`\n\n` +
+      `🔒 *Статус:* Закрыт`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown'
+    });
+    
+    await ctx.answerCbQuery('✅ Тикет закрыт');
+    log(`✅ Тикет ${ticketId} закрыт админом ${ctx.from.id}`);
+    
+  } catch (error) {
+    logError(error, `Закрытие тикета ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик для отмены ответа на тикет
+bot.action(/^support_cancel_(.+)$/, async (ctx) => {
+  try {
+    logFunction('bot.action.support_cancel', ctx.from.id, { ticketId: ctx.match[1] });
+    log(`🔙 Админ ${ctx.from.id} отменяет ответ на тикет ${ctx.match[1]}`);
+    
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
+    
+    if (!admin || !isAdmin(admin.id)) {
+      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: admin.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    // Возвращаемся к исходному сообщению тикета
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
+    if (ticket) {
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Ответить', `support_answer_${ticketId}`),
+          Markup.button.callback('⏳ В обработке', `support_progress_${ticketId}`)
+        ],
+        [
+          Markup.button.callback('❌ Отклонить', `support_reject_${ticketId}`),
+          Markup.button.callback('🔒 Закрыть', `support_close_${ticketId}`)
+        ]
+      ]);
+      
+      const message = 
+        `🆘 *Тикет поддержки*\n\n` +
+        `🆔 *ID тикета:* \`${ticketId}\`\n` +
+        `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
+        `📱 *Username:* ${ticket.username ? '@' + ticket.username : 'Не указан'}\n` +
+        `🆔 *User ID:* \`${ticket.userId}\`\n` +
+        `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
+        `📊 *Уровень:* ${ticket.level || 1}\n` +
+        `💰 *Magnum Coins:* ${formatNumber(ticket.magnumCoins || 0)}\n` +
+        `⭐ *Stars:* ${formatNumber(ticket.stars || 0)}\n\n` +
+        `📝 *Проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
+        `🎯 Выберите действие:`;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    }
+    
+    await ctx.answerCbQuery('✅ Отменено');
+    log(`✅ Ответ на тикет ${ticketId} отменен админом ${ctx.from.id}`);
+    
+  } catch (error) {
+    logError(error, `Отмена ответа на тикет ${ctx.match[1]}`);
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчики для разных способов связи
+bot.action('support_telegram', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'contact_support')]
+    ]);
+    
+    const message = 
+      `📧 *Поддержка через Telegram*\n\n` +
+      `Для связи с поддержкой через Telegram:\n\n` +
+      `👤 *Администратор:* @magnum_support\n` +
+      `📱 *Канал поддержки:* @magnumtap\n\n` +
+      `💬 *Как написать:*\n` +
+      `1. Нажмите на ссылку @magnum_support\n` +
+      `2. Напишите ваш вопрос\n` +
+      `3. Укажите ваш ID: \`${user.id}\`\n\n` +
+      `📋 *Что указать в сообщении:*\n` +
+      `• Ваш ID: \`${user.id}\`\n` +
+      `• Описание проблемы\n` +
+      `• Скриншот (если нужно)\n\n` +
+      `⏰ *Время ответа:* 5-15 минут`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Поддержка Telegram');
+  }
+});
+
+bot.action('support_whatsapp', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'contact_support')]
+    ]);
+    
+    const message = 
+      `📱 *Поддержка через WhatsApp*\n\n` +
+      `Для связи с поддержкой через WhatsApp:\n\n` +
+      `📞 *Номер:* +7 (999) 123-45-67\n` +
+      `💬 *WhatsApp:* https://wa.me/79991234567\n\n` +
+      `💬 *Как написать:*\n` +
+      `1. Нажмите на ссылку WhatsApp\n` +
+      `2. Напишите ваш вопрос\n` +
+      `3. Укажите ваш ID: \`${user.id}\`\n\n` +
+      `📋 *Что указать в сообщении:*\n` +
+      `• Ваш ID: \`${user.id}\`\n` +
+      `• Описание проблемы\n` +
+      `• Скриншот (если нужно)\n\n` +
+      `⏰ *Время ответа:* 10-30 минут`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Поддержка WhatsApp');
+  }
+});
+
+bot.action('support_email', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'contact_support')]
+    ]);
+    
+    const message = 
+      `📧 *Поддержка через Email*\n\n` +
+      `Для связи с поддержкой через Email:\n\n` +
+      `📧 *Email:* support@magnumtap.com\n` +
+      `📧 *Тема письма:* Поддержка Magnum Bot\n\n` +
+      `📝 *Содержание письма:*\n` +
+      `• Ваш ID: \`${user.id}\`\n` +
+      `• Имя пользователя: ${user.firstName || 'Не указано'}\n` +
+      `• Описание проблемы\n` +
+      `• Скриншоты (если нужно)\n\n` +
+      `📋 *Пример письма:*\n` +
+      `Здравствуйте!\n\n` +
+      `Мой ID: ${user.id}\n` +
+      `Проблема: [опишите проблему]\n\n` +
+      `С уважением,\n` +
+      `${user.firstName || 'Пользователь'}\n\n` +
+      `⏰ *Время ответа:* 1-24 часа`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Поддержка Email');
+  }
+});
+
+// Обработка кнопок главного меню
+bot.action('main_menu', async (ctx) => {
+  try {
+    logFunction('bot.action.main_menu', ctx.from.id);
+    log(`🏠 Запрос главного меню от пользователя ${ctx.from.id}`);
+    
+    const user = await getUser(ctx.from.id);
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для главного меню`);
+      return;
+    }
+    
+    logDebug(`Показ главного меню для пользователя ${ctx.from.id}`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      stars: user.stars,
+      isAdmin: isAdmin(user.id)
+    });
+    
+    await showMainMenu(ctx, user);
+    log(`✅ Главное меню показано пользователю ${ctx.from.id}`);
+    
+  } catch (error) {
+    logError(error, `Главное меню для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в главном меню`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -4642,12 +5968,32 @@ bot.action('stop_miner', async (ctx) => {
 // Фарм
 bot.action('farm', async (ctx) => {
   try {
+    logFunction('bot.action.farm', ctx.from.id);
+    log(`🌾 Запрос меню фарма от пользователя ${ctx.from.id}`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для меню фарма`);
+      return;
+    }
+    
+    logDebug(`Показ меню фарма для пользователя ${ctx.from.id}`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      lastFarm: user.farm?.lastFarm,
+      farmCount: user.farm?.farmCount
+    });
     
     await showFarmMenu(ctx, user);
+    log(`✅ Меню фарма показано пользователю ${ctx.from.id}`);
+    
   } catch (error) {
-    logError(error, 'Меню фарма');
+    logError(error, `Меню фарма для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в меню фарма`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -5026,12 +6372,33 @@ bot.action(/^verify_sponsor_(\d+)$/, async (ctx) => {
 
 bot.action('do_farm', async (ctx) => {
   try {
+    logFunction('bot.action.do_farm', ctx.from.id);
+    log(`🌾 Запрос действия фарма от пользователя ${ctx.from.id}`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для действия фарма`);
+      return;
+    }
+    
+    logDebug(`Выполнение фарма для пользователя ${ctx.from.id}`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      lastFarm: user.farm?.lastFarm,
+      farmCount: user.farm?.farmCount,
+      farmCooldown: config.FARM_COOLDOWN
+    });
     
     await doFarm(ctx, user);
+    log(`✅ Действие фарма выполнено для пользователя ${ctx.from.id}`);
+    
   } catch (error) {
-    logError(error, 'Фарм (обработчик)');
+    logError(error, `Действие фарма для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в действии фарма`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -5375,6 +6742,56 @@ bot.action('support', async (ctx) => {
   }
 });
 
+// Обработчик для FAQ
+bot.action('support_faq', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🌾 Фарм FAQ', 'faq_farm'),
+        Markup.button.callback('⛏️ Майнер FAQ', 'faq_miner')
+      ],
+      [
+        Markup.button.callback('🎁 Бонусы FAQ', 'faq_bonus'),
+        Markup.button.callback('💎 Обмен FAQ', 'faq_exchange')
+      ],
+      [
+        Markup.button.callback('🎫 Промокоды FAQ', 'faq_promocodes'),
+        Markup.button.callback('👥 Рефералы FAQ', 'faq_referrals')
+      ],
+      [
+        Markup.button.callback('🏆 Достижения FAQ', 'faq_achievements'),
+        Markup.button.callback('📋 Задания FAQ', 'faq_tasks')
+      ],
+      [
+        Markup.button.callback('🔙 Назад', 'support')
+      ]
+    ]);
+    
+    const message = 
+      `❓ *Часто задаваемые вопросы (FAQ)*\n\n` +
+      `Выберите раздел, чтобы получить подробную информацию:\n\n` +
+      `🌾 *Фарм* - Как фармить Magnum Coins\n` +
+      `⛏️ *Майнер* - Как работает майнинг\n` +
+      `🎁 *Бонусы* - Ежедневные бонусы и серии\n` +
+      `💎 *Обмен* - Обмен Magnum Coins на Stars\n` +
+      `🎫 *Промокоды* - Как использовать промокоды\n` +
+      `👥 *Рефералы* - Реферальная система\n` +
+      `🏆 *Достижения* - Система достижений\n` +
+      `📋 *Задания* - Выполнение заданий\n\n` +
+      `🎯 Выберите раздел:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ (обработчик)');
+  }
+});
+
 bot.action('admin_settings', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -5626,11 +7043,30 @@ bot.action('admin_subscription_add', async (ctx) => {
 // Обработка ошибок
 bot.catch((err, ctx) => {
   logError(err, `Обработка ${ctx.updateType}`);
+  logDebug('Ошибка в боте', {
+    updateType: ctx.updateType,
+    userId: ctx.from?.id,
+    chatId: ctx.chat?.id,
+    messageId: ctx.message?.message_id,
+    callbackData: ctx.callbackQuery?.data,
+    error: err.message,
+    stack: err.stack
+  });
 });
 
 // ==================== ЗАПУСК БОТА ====================
 async function startBot() {
   try {
+    logFunction('startBot');
+    log('🚀 Начинаем запуск Magnum Stars Bot...');
+    
+    logDebug('Проверка переменных окружения', {
+      BOT_TOKEN: process.env.BOT_TOKEN ? 'установлен' : 'отсутствует',
+      MONGODB_URI: process.env.MONGODB_URI ? 'установлен' : 'отсутствует',
+      PORT: process.env.PORT || 3000,
+      NODE_ENV: process.env.NODE_ENV || 'development'
+    });
+    
     log('🔗 Подключение к базе данных...');
     await connectDB();
     log('✅ База данных подключена успешно');
@@ -5641,26 +7077,59 @@ async function startBot() {
     log('✅ HTTP сервер запущен');
     
     log('⏰ Настройка интервалов...');
+    logDebug('Настройка интервалов', {
+      minerRewardsInterval: '30 минут',
+      cacheCleanupInterval: '5 минут',
+      userCacheTTL: config.USER_CACHE_TTL,
+      statsCacheTTL: config.STATS_CACHE_TTL
+    });
+    
     // Запускаем обработку майнера каждые 30 минут
-    setInterval(processMinerRewards, 30 * 60 * 1000);
+    setInterval(() => {
+      log('⛏️ Запуск обработки наград майнера по расписанию');
+      processMinerRewards();
+    }, 30 * 60 * 1000);
     
     // Очистка кеша каждые 5 минут
     setInterval(() => {
+      log('🧹 Запуск очистки кеша по расписанию');
       const now = Date.now();
+      let userCacheCleared = 0;
+      let statsCacheCleared = 0;
+      
       for (const [key, value] of userCache.entries()) {
         if (now - value.timestamp > config.USER_CACHE_TTL) {
           userCache.delete(key);
+          userCacheCleared++;
         }
       }
+      
       for (const [key, value] of statsCache.entries()) {
         if (now - value.timestamp > config.STATS_CACHE_TTL) {
           statsCache.delete(key);
+          statsCacheCleared++;
         }
+      }
+      
+      if (userCacheCleared > 0 || statsCacheCleared > 0) {
+        log(`🧹 Очистка кеша завершена: пользователей ${userCacheCleared}, статистики ${statsCacheCleared}`);
       }
     }, 5 * 60 * 1000);
     
+    log('🤖 Запуск Telegram бота...');
     await bot.launch();
-    log('🚀 Magnum Stars Bot запущен!');
+    log('🚀 Magnum Stars Bot запущен успешно!');
+    
+    logDebug('Бот запущен', {
+      botInfo: await bot.telegram.getMe(),
+      config: {
+        farmCooldown: config.FARM_COOLDOWN,
+        farmReward: config.FARM_BASE_REWARD,
+        bonusBase: config.DAILY_BONUS_BASE,
+        minerReward: config.MINER_REWARD,
+        referralReward: config.REFERRAL_REWARD
+      }
+    });
     
     // Graceful stop
     process.once('SIGINT', () => {
@@ -5686,8 +7155,19 @@ async function startBot() {
         bot.stop('SIGTERM');
       }
     });
+    
+    log('✅ Все обработчики сигналов настроены');
+    
   } catch (error) {
     logError(error, 'Запуск бота');
+    logDebug('Критическая ошибка при запуске', {
+      error: error.message,
+      stack: error.stack,
+      config: {
+        hasBotToken: !!process.env.BOT_TOKEN,
+        hasMongoUri: !!process.env.MONGODB_URI
+      }
+    });
     process.exit(1);
   }
 }
@@ -5695,11 +7175,25 @@ async function startBot() {
 // Обработчики необработанных ошибок
 process.on('uncaughtException', (error) => {
   logError(error, 'Необработанная ошибка (uncaughtException)');
+  logDebug('Критическая ошибка uncaughtException', {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+    memoryUsage: process.memoryUsage(),
+    uptime: process.uptime()
+  });
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   logError(new Error(`Необработанное отклонение промиса: ${reason}`), 'unhandledRejection');
+  logDebug('Критическая ошибка unhandledRejection', {
+    reason: reason,
+    promise: promise,
+    timestamp: new Date().toISOString(),
+    memoryUsage: process.memoryUsage(),
+    uptime: process.uptime()
+  });
   process.exit(1);
 });
 
