@@ -109,12 +109,54 @@ async function connectDB() {
     await db.collection('exchangeHistory').createIndex({ userId: 1 });
     await db.collection('exchangeHistory').createIndex({ timestamp: -1 });
     
-    await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+    // Создаем индекс для резерва с проверкой на существующие записи
+    try {
+      await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+    } catch (error) {
+      if (error.code === 11000) {
+        // Если есть дублирующиеся записи, удаляем их и создаем индекс заново
+        console.log('🔄 Исправляем дублирующиеся записи в резерве...');
+        await db.collection('reserve').deleteMany({ currency: null });
+        await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+      } else {
+        throw error;
+      }
+    }
     
     console.log('✅ База данных подключена');
+    
+    // Инициализируем резерв
+    await initializeReserve();
   } catch (error) {
     console.error('❌ Ошибка подключения к MongoDB:', error);
     process.exit(1);
+  }
+}
+
+// Инициализация резерва
+async function initializeReserve() {
+  try {
+    // Очищаем некорректные записи
+    await db.collection('reserve').deleteMany({ currency: null });
+    
+    let reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    
+    if (!reserve) {
+      reserve = {
+        currency: 'main',
+        stars: config.INITIAL_RESERVE_STARS,
+        magnumCoins: config.INITIAL_RESERVE_MAGNUM_COINS,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      await db.collection('reserve').insertOne(reserve);
+      console.log('💰 Резерв валют инициализирован');
+    } else {
+      console.log('💰 Резерв валют уже существует');
+    }
+  } catch (error) {
+    console.error('❌ Ошибка инициализации резерва:', error);
   }
 }
 
