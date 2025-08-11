@@ -760,11 +760,15 @@ async function showMinerMenu(ctx, user) {
 
 async function startMiner(ctx, user) {
   try {
+    log(`⛏️ Попытка запуска майнера для пользователя ${user.id}`);
+    
     if (user.miner.active) {
+      log(`⚠️ Майнер уже запущен для пользователя ${user.id}`);
       await ctx.answerCbQuery('⚠️ Майнер уже запущен!');
       return;
     }
     
+    log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
       { id: user.id },
       { 
@@ -776,10 +780,13 @@ async function startMiner(ctx, user) {
       }
     );
     
+    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    log(`✅ Майнер успешно запущен для пользователя ${user.id}`);
     await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Stars каждый час.');
     
+    log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
     // Обновляем меню майнера
     await updateMinerMenu(ctx, { ...user, miner: { ...user.miner, active: true } });
   } catch (error) {
@@ -790,11 +797,15 @@ async function startMiner(ctx, user) {
 
 async function stopMiner(ctx, user) {
   try {
+    log(`⏹️ Попытка остановки майнера для пользователя ${user.id}`);
+    
     if (!user.miner.active) {
+      log(`⚠️ Майнер уже остановлен для пользователя ${user.id}`);
       await ctx.answerCbQuery('⚠️ Майнер уже остановлен!');
       return;
     }
     
+    log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
       { id: user.id },
       { 
@@ -805,10 +816,13 @@ async function stopMiner(ctx, user) {
       }
     );
     
+    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    log(`✅ Майнер успешно остановлен для пользователя ${user.id}`);
     await ctx.answerCbQuery('⏹️ Майнер остановлен!');
     
+    log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
     // Обновляем меню майнера
     await updateMinerMenu(ctx, { ...user, miner: { ...user.miner, active: false } });
   } catch (error) {
@@ -864,14 +878,19 @@ async function showFarmMenu(ctx, user) {
 
 async function doFarm(ctx, user) {
   try {
+    log(`🌾 Попытка фарма для пользователя ${user.id}`);
+    
     const farm = user.farm;
     const now = Date.now();
     const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
     const timeSince = Math.floor((now - lastFarm) / 1000);
     const cooldown = config.FARM_COOLDOWN;
     
+    log(`⏰ Время с последнего фарма: ${timeSince}с, кулдаун: ${cooldown}с`);
+    
     if (timeSince < cooldown) {
       const remaining = cooldown - timeSince;
+      log(`⏳ Кулдаун фарма для пользователя ${user.id}, осталось: ${remaining}с`);
       await ctx.answerCbQuery(`⏳ Подождите ${formatTime(remaining)} перед следующим фармом!`);
       return;
     }
@@ -880,7 +899,10 @@ async function doFarm(ctx, user) {
     const bonus = Math.min(user.level * 0.1, 2);
     const totalReward = baseReward + bonus;
     
+    log(`💰 Расчет награды: базовая ${baseReward}, бонус ${bonus}, итого ${totalReward} Stars`);
+    
     // Обновляем пользователя
+    log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
       { id: user.id },
       { 
@@ -899,12 +921,15 @@ async function doFarm(ctx, user) {
       }
     );
     
+    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    log(`✅ Фарм успешно завершен для пользователя ${user.id}, заработано: ${totalReward} Stars`);
     await ctx.answerCbQuery(
       `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Stars`
     );
     
+    log(`🔄 Обновление меню фарма для пользователя ${user.id}`);
     // Обновляем меню фарма
     await updateFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
   } catch (error) {
@@ -915,16 +940,20 @@ async function doFarm(ctx, user) {
 
 // ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
 async function updateMinerMenu(ctx, user) {
-  // Убеждаемся, что все поля майнера инициализированы
-  if (!user.miner) {
-    user.miner = {
-      active: false,
-      level: 1,
-      efficiency: 1,
-      lastReward: null,
-      totalMined: 0
-    };
-  }
+  try {
+    log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
+    
+    // Убеждаемся, что все поля майнера инициализированы
+    if (!user.miner) {
+      log(`🔧 Инициализация полей майнера для пользователя ${user.id}`);
+      user.miner = {
+        active: false,
+        level: 1,
+        efficiency: 1,
+        lastReward: null,
+        totalMined: 0
+      };
+    }
   
   const miner = user.miner;
   const isActive = miner.active || false;
@@ -965,23 +994,30 @@ async function updateMinerMenu(ctx, user) {
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Stars${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
   
-  try {
+    log(`📝 Отправка обновленного меню майнера для пользователя ${user.id}`);
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
+    log(`✅ Меню майнера успешно обновлено для пользователя ${user.id}`);
   } catch (error) {
+    logError(error, `Обновление меню майнера для пользователя ${user.id}`);
     // Если не удалось обновить, показываем новое меню
+    log(`🔄 Fallback: показ нового меню майнера для пользователя ${user.id}`);
     await showMinerMenu(ctx, user);
   }
 }
+}
 
 async function updateFarmMenu(ctx, user) {
-  const farm = user.farm;
-  const now = Date.now();
-  const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-  const timeSince = Math.floor((now - lastFarm) / 1000);
-  const cooldown = config.FARM_COOLDOWN;
+  try {
+    log(`🔄 Обновление меню фарма для пользователя ${user.id}`);
+    
+    const farm = user.farm;
+    const now = Date.now();
+    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
+    const timeSince = Math.floor((now - lastFarm) / 1000);
+    const cooldown = config.FARM_COOLDOWN;
   
   const canFarm = timeSince >= cooldown;
   const remainingTime = canFarm ? 0 : cooldown - timeSince;
@@ -1014,15 +1050,19 @@ async function updateFarmMenu(ctx, user) {
     `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Stars\n\n` +
     `🎯 Выберите действие:`;
   
-  try {
+    log(`📝 Отправка обновленного меню фарма для пользователя ${user.id}`);
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
+    log(`✅ Меню фарма успешно обновлено для пользователя ${user.id}`);
   } catch (error) {
+    logError(error, `Обновление меню фарма для пользователя ${user.id}`);
     // Если не удалось обновить, показываем новое меню
+    log(`🔄 Fallback: показ нового меню фарма для пользователя ${user.id}`);
     await showFarmMenu(ctx, user);
   }
+}
 }
 
 async function showBonusMenu(ctx, user) {
@@ -1081,9 +1121,12 @@ async function showBonusMenu(ctx, user) {
 }
 
 async function updateBonusMenu(ctx, user) {
-  const bonus = user.dailyBonus;
-  const now = new Date();
-  const lastBonus = bonus.lastBonus;
+  try {
+    log(`🔄 Обновление меню бонуса для пользователя ${user.id}`);
+    
+    const bonus = user.dailyBonus;
+    const now = new Date();
+    const lastBonus = bonus.lastBonus;
   
   let canClaim = false;
   let timeUntilNext = 0;
@@ -1129,19 +1172,25 @@ async function updateBonusMenu(ctx, user) {
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
   
-  try {
+    log(`📝 Отправка обновленного меню бонуса для пользователя ${user.id}`);
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
+    log(`✅ Меню бонуса успешно обновлено для пользователя ${user.id}`);
   } catch (error) {
+    logError(error, `Обновление меню бонуса для пользователя ${user.id}`);
     // Если не удалось обновить, показываем новое меню
+    log(`🔄 Fallback: показ нового меню бонуса для пользователя ${user.id}`);
     await showBonusMenu(ctx, user);
   }
+}
 }
 
 async function claimBonus(ctx, user) {
   try {
+    log(`🎁 Попытка получения бонуса для пользователя ${user.id}`);
+    
     const bonus = user.dailyBonus;
     const now = new Date();
     const lastBonus = bonus.lastBonus;
@@ -1150,8 +1199,11 @@ async function claimBonus(ctx, user) {
       const timeSince = now.getTime() - lastBonus.getTime();
       const dayInMs = 24 * 60 * 60 * 1000;
       
+      log(`⏰ Время с последнего бонуса: ${Math.floor(timeSince / 1000)}с`);
+      
       if (timeSince < dayInMs) {
         const remaining = dayInMs - timeSince;
+        log(`⏳ Кулдаун бонуса для пользователя ${user.id}, осталось: ${Math.floor(remaining / 1000)}с`);
         await ctx.answerCbQuery(`⏳ Подождите ${formatTime(Math.floor(remaining / 1000))} до следующего бонуса!`);
         return;
       }
@@ -1161,6 +1213,8 @@ async function claimBonus(ctx, user) {
     const streakBonus = Math.min(bonus.streak * 0.5, 5);
     const totalReward = baseReward + streakBonus;
     
+    log(`💰 Расчет бонуса: базовая ${baseReward}, серия ${bonus.streak}, бонус серии ${streakBonus}, итого ${totalReward} Stars`);
+    
     // Проверяем, не пропустил ли день
     let newStreak = bonus.streak + 1;
     if (lastBonus) {
@@ -1168,10 +1222,14 @@ async function claimBonus(ctx, user) {
       const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
       if (timeSince > twoDaysInMs) {
         newStreak = 1; // Сбрасываем серию
+        log(`🔄 Сброс серии бонусов для пользователя ${user.id} (пропущен день)`);
       }
     }
     
+    log(`📈 Новая серия бонусов: ${newStreak}`);
+    
     // Обновляем пользователя
+    log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
       { id: user.id },
       { 
@@ -1190,12 +1248,15 @@ async function claimBonus(ctx, user) {
       }
     );
     
+    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Stars, серия: ${newStreak} дней`);
     await ctx.answerCbQuery(
       `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Stars, серия: ${newStreak} дней`
     );
     
+    log(`🔄 Обновление меню бонуса для пользователя ${user.id}`);
     // Обновляем меню бонуса
     await updateBonusMenu(ctx, { ...user, dailyBonus: { ...bonus, lastBonus: now, streak: newStreak } });
   } catch (error) {
