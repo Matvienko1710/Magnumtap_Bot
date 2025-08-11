@@ -9,6 +9,9 @@ const ExchangeModule = require('./exchange-module');
 const WithdrawalModule = require('./withdrawal-module');
 
 // ==================== КОНФИГУРАЦИЯ ====================
+log('🚀 Запуск Magnum Stars Bot...');
+log('📋 Проверка переменных окружения...');
+
 const config = {
   BOT_TOKEN: process.env.BOT_TOKEN,
   MONGODB_URI: process.env.MONGODB_URI,
@@ -54,7 +57,11 @@ let server;
 const PORT = process.env.PORT || 3000;
 
 function startHttpServer() {
+  log(`🔧 Создание HTTP сервера на порту ${PORT}...`);
+  
   server = http.createServer((req, res) => {
+    log(`📡 HTTP запрос: ${req.method} ${req.url}`);
+    
     if (req.url === '/' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ 
@@ -62,14 +69,20 @@ function startHttpServer() {
         message: 'Magnum Stars Bot is running',
         timestamp: new Date().toISOString()
       }));
+      log('✅ Health check ответ отправлен');
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
+      log('❌ 404 ответ отправлен');
     }
   });
 
   server.listen(PORT, () => {
     log(`🌐 HTTP сервер запущен на порту ${PORT}`);
+  });
+  
+  server.on('error', (error) => {
+    logError(error, 'HTTP сервер');
   });
 }
 
@@ -79,9 +92,12 @@ let client;
 
 async function connectDB() {
   try {
+    log('🔌 Подключение к MongoDB...');
     client = new MongoClient(config.MONGODB_URI);
     await client.connect();
+    log('🔌 MongoDB клиент подключен');
     db = client.db();
+    log('📊 База данных получена');
     
     // Создаем индексы для оптимизации
     await db.collection('users').createIndex({ id: 1 }, { unique: true });
@@ -129,8 +145,10 @@ async function connectDB() {
     
     log('✅ База данных подключена');
     
+    log('💰 Инициализация резерва...');
     // Инициализируем резерв
     await initializeReserve();
+    log('✅ Резерв инициализирован');
   } catch (error) {
     logError(error, 'Подключение к MongoDB');
     process.exit(1);
@@ -1408,11 +1426,16 @@ bot.catch((err, ctx) => {
 // ==================== ЗАПУСК БОТА ====================
 async function startBot() {
   try {
+    log('🔗 Подключение к базе данных...');
     await connectDB();
+    log('✅ База данных подключена успешно');
     
+    log('🌐 Запуск HTTP сервера...');
     // Запускаем HTTP сервер для health check
     startHttpServer();
+    log('✅ HTTP сервер запущен');
     
+    log('⏰ Настройка интервалов...');
     // Запускаем обработку майнера каждые 30 минут
     setInterval(processMinerRewards, 30 * 60 * 1000);
     
