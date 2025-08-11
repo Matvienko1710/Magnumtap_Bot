@@ -1437,6 +1437,108 @@ async function claimBonus(ctx, user) {
   }
 }
 
+// ==================== СТАТИСТИКА БОНУСА ====================
+async function showBonusStats(ctx, user) {
+  try {
+    log(`📊 Показ статистики бонуса для пользователя ${user.id}`);
+    
+    const bonus = user.dailyBonus;
+    const totalEarned = bonus.totalEarned || 0;
+    const claimedCount = bonus.claimedCount || 0;
+    const maxStreak = bonus.maxStreak || 0;
+    const currentStreak = bonus.streak || 0;
+    
+    const averageReward = claimedCount > 0 ? totalEarned / claimedCount : 0;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'bonus')]
+    ]);
+    
+    const message = 
+      `📊 *Статистика бонусов*\n\n` +
+      `💰 *Общая статистика:*\n` +
+      `├ Получено бонусов: \`${claimedCount}\`\n` +
+      `├ Всего заработано: \`${formatNumber(totalEarned)}\` Magnum Coins\n` +
+      `├ Средняя награда: \`${formatNumber(averageReward)}\` Magnum Coins\n` +
+      `└ Максимальная серия: \`${maxStreak}\` дней\n\n` +
+      `🔥 *Текущая серия:*\n` +
+      `├ Активная серия: \`${currentStreak}\` дней\n` +
+      `└ Рекордная серия: \`${maxStreak}\` дней\n\n` +
+      `📈 *Прогресс:*\n` +
+      `├ До 7 дней: \`${Math.min(currentStreak, 7)}/7\`\n` +
+      `├ До 30 дней: \`${Math.min(currentStreak, 30)}/30\`\n` +
+      `└ До 100 дней: \`${Math.min(currentStreak, 100)}/100\`\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Статистика бонуса показана для пользователя ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ статистики бонуса для пользователя ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа статистики');
+  }
+}
+
+async function showBonusStreak(ctx, user) {
+  try {
+    log(`🔥 Показ серии бонусов для пользователя ${user.id}`);
+    
+    const bonus = user.dailyBonus;
+    const currentStreak = bonus.streak || 0;
+    const maxStreak = bonus.maxStreak || 0;
+    const lastBonus = bonus.lastBonus;
+    
+    // Рассчитываем время до следующего бонуса
+    let timeUntilNext = 0;
+    if (lastBonus) {
+      const now = new Date();
+      const timeSince = now.getTime() - lastBonus.getTime();
+      const dayInMs = 24 * 60 * 60 * 1000;
+      timeUntilNext = Math.max(0, dayInMs - timeSince);
+    }
+    
+    const canClaim = timeUntilNext === 0;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          canClaim ? '🎁 Получить бонус' : `⏳ ${formatTime(Math.floor(timeUntilNext / 1000))}`,
+          canClaim ? 'claim_bonus' : 'bonus_cooldown'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'bonus')]
+    ]);
+    
+    const message = 
+      `🔥 *Серия бонусов*\n\n` +
+      `📊 *Ваша серия:*\n` +
+      `├ Текущая серия: \`${currentStreak}\` дней\n` +
+      `├ Рекордная серия: \`${maxStreak}\` дней\n` +
+      `└ Статус: ${canClaim ? '🟢 Можете получить' : '🔴 Кулдаун'}\n\n` +
+      `⏰ *Время до следующего бонуса:*\n` +
+      `└ ${canClaim ? 'Сейчас доступен!' : formatTime(Math.floor(timeUntilNext / 1000))}\n\n` +
+      `🏆 *Достижения серии:*\n` +
+      `├ 7 дней подряд: ${currentStreak >= 7 ? '✅' : '❌'}\n` +
+      `├ 30 дней подряд: ${currentStreak >= 30 ? '✅' : '❌'}\n` +
+      `└ 100 дней подряд: ${currentStreak >= 100 ? '✅' : '❌'}\n\n` +
+      `💡 *Совет:* Чем длиннее серия, тем больше бонус!\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Серия бонусов показана для пользователя ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ серии бонусов для пользователя ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа серии');
+  }
+}
+
 // ==================== ОБРАБОТКА МАЙНЕРА ====================
 async function processMinerRewards() {
   try {
@@ -3460,6 +3562,28 @@ bot.action('claim_bonus', async (ctx) => {
     await claimBonus(ctx, user);
   } catch (error) {
     logError(error, 'Получение бонуса (обработчик)');
+  }
+});
+
+bot.action('bonus_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showBonusStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика бонуса (обработчик)');
+  }
+});
+
+bot.action('bonus_streak', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showBonusStreak(ctx, user);
+  } catch (error) {
+    logError(error, 'Серия бонуса (обработчик)');
   }
 });
 
