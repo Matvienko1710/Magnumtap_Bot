@@ -737,7 +737,7 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('👥 Рефералы', 'referrals')
     ],
     [
-      Markup.button.callback('🆘 Поддержка', 'support'),
+      Markup.button.callback('🎫 Промокод', 'promocode'),
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
@@ -1450,6 +1450,120 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
   log(`⏰ Запущен обратный отсчет бонуса для пользователя ${user.id}, осталось: ${remainingSeconds}с`);
 }
 
+// ==================== АДМИН ПОСТЫ ====================
+async function showAdminPosts(ctx, user) {
+  try {
+    log(`📝 Показ управления постами для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📝 Создать пост с кнопкой', 'admin_create_post_with_button'),
+        Markup.button.callback('📝 Создать пост без кнопки', 'admin_create_post_no_button')
+      ],
+      [
+        Markup.button.callback('📊 Статистика постов', 'admin_posts_stats')
+      ],
+      [
+        Markup.button.callback('🔙 Назад', 'admin')
+      ]
+    ]);
+    
+    const message = 
+      `📝 *Управление постами*\n\n` +
+      `Здесь вы можете создавать посты в канал @magnumtap\n\n` +
+      `🎯 *Доступные действия:*\n` +
+      `├ 📝 Создать пост с кнопкой\n` +
+      `├ 📝 Создать пост без кнопки\n` +
+      `└ 📊 Статистика постов\n\n` +
+      `Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ управления постами');
+  }
+}
+
+// ==================== АДМИН ПРОМОКОДЫ ====================
+async function showAdminPromocodes(ctx, user) {
+  try {
+    log(`🎫 Показ управления промокодами для админа ${user.id}`);
+    
+    // Получаем статистику промокодов
+    const promocodes = await db.collection('promocodes').find({}).toArray();
+    const totalPromocodes = promocodes.length;
+    const activePromocodes = promocodes.filter(p => p.activations > 0).length;
+    const totalActivations = promocodes.reduce((sum, p) => sum + (p.totalActivations || 0), 0);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🎫 Создать промокод', 'admin_create_promocode')
+      ],
+      [
+        Markup.button.callback('📊 Статистика промокодов', 'admin_promocodes_stats')
+      ],
+      [
+        Markup.button.callback('🔙 Назад', 'admin')
+      ]
+    ]);
+    
+    const message = 
+      `🎫 *Управление промокодами*\n\n` +
+      `Здесь вы можете создавать и управлять промокодами\n\n` +
+      `📊 *Статистика:*\n` +
+      `├ Всего промокодов: \`${totalPromocodes}\`\n` +
+      `├ Активных промокодов: \`${activePromocodes}\`\n` +
+      `└ Всего активаций: \`${totalActivations}\`\n\n` +
+      `🎯 *Доступные действия:*\n` +
+      `├ 🎫 Создать промокод\n` +
+      `└ 📊 Статистика промокодов\n\n` +
+      `Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ управления промокодами');
+  }
+}
+
+// ==================== ПРОМОКОДЫ ====================
+async function showPromocodeMenu(ctx, user) {
+  try {
+    log(`🎫 Показ меню промокодов для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🎫 Ввести промокод', 'enter_promocode')
+      ],
+      [
+        Markup.button.callback('📊 История промокодов', 'promocode_history')
+      ],
+      [
+        Markup.button.callback('🔙 Назад', 'main_menu')
+      ]
+    ]);
+    
+    const message = 
+      `🎫 *Промокоды*\n\n` +
+      `Здесь вы можете вводить промокоды и получать награды!\n\n` +
+      `🎯 *Доступные действия:*\n` +
+      `├ 🎫 Ввести промокод\n` +
+      `└ 📊 История промокодов\n\n` +
+      `Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню промокодов');
+  }
+}
+
 async function showBonusMenu(ctx, user) {
   const bonus = user.dailyBonus;
   const now = new Date();
@@ -1770,6 +1884,10 @@ async function showAdminPanel(ctx, user) {
         Markup.button.callback('⚙️ Настройки бота', 'admin_settings')
       ],
       [
+        Markup.button.callback('📝 Управление постами', 'admin_posts'),
+        Markup.button.callback('🎫 Управление промокодами', 'admin_promocodes')
+      ],
+      [
         Markup.button.callback('📢 Рассылка', 'admin_broadcast'),
         Markup.button.callback('🔄 Обновление кеша', 'admin_cache')
       ],
@@ -1784,6 +1902,8 @@ async function showAdminPanel(ctx, user) {
       `├ 👥 Управление пользователями - поиск и управление\n` +
       `├ 💰 Управление балансами - изменение балансов\n` +
       `├ ⚙️ Настройки бота - конфигурация\n` +
+      `├ 📝 Управление постами - создание постов в канал\n` +
+      `├ 🎫 Управление промокодами - создание промокодов\n` +
       `├ 📢 Рассылка - отправка сообщений\n` +
       `└ 🔄 Обновление кеша - очистка кеша\n\n` +
       `🎯 Выберите действие:`;
@@ -3080,6 +3200,9 @@ async function showSettingsMenu(ctx, user) {
         Markup.button.callback('🌐 Язык', 'settings_language'),
         Markup.button.callback('🔄 Сброс', 'settings_reset')
       ],
+      [
+        Markup.button.callback('🆘 Поддержка', 'support')
+      ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
@@ -3948,6 +4071,14 @@ bot.on('text', async (ctx) => {
       await handleAdminSetReferralReward(ctx, user, text);
     } else if (user.adminState === 'setting_subscription_channel') {
       await handleAdminSetSubscriptionChannel(ctx, user, text);
+    } else if (user.adminState === 'creating_post_with_button') {
+      await handleAdminCreatePostWithButton(ctx, user, text);
+    } else if (user.adminState === 'creating_post_no_button') {
+      await handleAdminCreatePostNoButton(ctx, user, text);
+    } else if (user.adminState === 'creating_promocode') {
+      await handleAdminCreatePromocode(ctx, user, text);
+    } else if (user.adminState === 'entering_promocode') {
+      await handleUserEnterPromocode(ctx, user, text);
     }
   } catch (error) {
     logError(error, 'Обработка текстового сообщения админа');
@@ -4291,6 +4422,174 @@ async function handleAdminSetSubscriptionChannel(ctx, user, text) {
   } catch (error) {
     logError(error, 'Изменение канала подписки админом');
     await ctx.reply('❌ Ошибка изменения канала подписки');
+  }
+}
+
+// Функции для обработки постов и промокодов
+async function handleAdminCreatePostWithButton(ctx, user, text) {
+  try {
+    const lines = text.split('\n');
+    const postText = lines[0];
+    const buttonData = lines[1];
+    
+    if (!postText || !buttonData) {
+      await ctx.reply('❌ Неверный формат. Отправьте текст поста, а затем кнопку в формате: Текст | Ссылка');
+      return;
+    }
+    
+    const [buttonText, buttonUrl] = buttonData.split('|').map(s => s.trim());
+    
+    if (!buttonText || !buttonUrl) {
+      await ctx.reply('❌ Неверный формат кнопки. Используйте: Текст | Ссылка');
+      return;
+    }
+    
+    // Отправляем пост в канал
+    await ctx.telegram.sendMessage('@magnumtap', postText, {
+      parse_mode: 'Markdown',
+      reply_markup: Markup.inlineKeyboard([
+        [Markup.button.url(buttonText, buttonUrl)]
+      ]).reply_markup
+    });
+    
+    await ctx.reply('✅ Пост с кнопкой успешно опубликован в канале @magnumtap!');
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Создание поста с кнопкой');
+    await ctx.reply('❌ Ошибка создания поста');
+  }
+}
+
+async function handleAdminCreatePostNoButton(ctx, user, text) {
+  try {
+    // Отправляем пост в канал
+    await ctx.telegram.sendMessage('@magnumtap', text, {
+      parse_mode: 'Markdown'
+    });
+    
+    await ctx.reply('✅ Пост без кнопки успешно опубликован в канале @magnumtap!');
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Создание поста без кнопки');
+    await ctx.reply('❌ Ошибка создания поста');
+  }
+}
+
+async function handleAdminCreatePromocode(ctx, user, text) {
+  try {
+    const [name, amount, activations] = text.split('|').map(s => s.trim());
+    
+    if (!name || !amount || !activations) {
+      await ctx.reply('❌ Неверный формат. Используйте: Название | Количество | Активации');
+      return;
+    }
+    
+    const magnumCoins = parseFloat(amount);
+    const maxActivations = parseInt(activations);
+    
+    if (isNaN(magnumCoins) || isNaN(maxActivations)) {
+      await ctx.reply('❌ Неверные числовые значения');
+      return;
+    }
+    
+    // Создаем промокод в базе данных
+    await db.collection('promocodes').insertOne({
+      name: name.toUpperCase(),
+      magnumCoins: magnumCoins,
+      maxActivations: maxActivations,
+      activations: maxActivations,
+      totalActivations: 0,
+      createdBy: user.id,
+      createdAt: new Date()
+    });
+    
+    await ctx.reply(`✅ Промокод "${name.toUpperCase()}" создан!\n💰 Награда: ${magnumCoins} Magnum Coins\n🎫 Активаций: ${maxActivations}`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Создание промокода');
+    await ctx.reply('❌ Ошибка создания промокода');
+  }
+}
+
+async function handleUserEnterPromocode(ctx, user, text) {
+  try {
+    const promocodeName = text.toUpperCase().trim();
+    
+    // Ищем промокод в базе данных
+    const promocode = await db.collection('promocodes').findOne({ name: promocodeName });
+    
+    if (!promocode) {
+      await ctx.reply('❌ Промокод не найден');
+      return;
+    }
+    
+    if (promocode.activations <= 0) {
+      await ctx.reply('❌ Промокод больше не действителен (закончились активации)');
+      return;
+    }
+    
+    // Проверяем, не использовал ли пользователь уже этот промокод
+    const usedPromocodes = user.usedPromocodes || [];
+    if (usedPromocodes.includes(promocodeName)) {
+      await ctx.reply('❌ Вы уже использовали этот промокод');
+      return;
+    }
+    
+    // Активируем промокод
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: promocode.magnumCoins,
+          totalEarnedMagnumCoins: promocode.magnumCoins
+        },
+        $push: { usedPromocodes: promocodeName },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    await db.collection('promocodes').updateOne(
+      { name: promocodeName },
+      { 
+        $inc: { 
+          activations: -1,
+          totalActivations: 1
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    await ctx.reply(`✅ Промокод "${promocodeName}" активирован!\n💰 Получено: ${promocode.magnumCoins} Magnum Coins`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Активация промокода');
+    await ctx.reply('❌ Ошибка активации промокода');
   }
 }
 
@@ -4922,6 +5221,157 @@ bot.action('admin_balance', async (ctx) => {
     await showAdminBalance(ctx, user);
   } catch (error) {
     logError(error, 'Управление балансами (обработчик)');
+  }
+});
+
+bot.action('admin_posts', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminPosts(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление постами (обработчик)');
+  }
+});
+
+bot.action('admin_promocodes', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminPromocodes(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление промокодами (обработчик)');
+  }
+});
+
+// Обработчики для создания постов
+bot.action('admin_create_post_with_button', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    user.adminState = 'creating_post_with_button';
+    await ctx.editMessageText(
+      `📝 *Создание поста с кнопкой*\n\n` +
+      `Отправьте текст поста в следующем сообщении.\n\n` +
+      `После текста поста отправьте кнопку в формате:\n` +
+      `Текст кнопки | Ссылка\n\n` +
+      `Например:\n` +
+      `Присоединиться | https://t.me/magnumtap\n\n` +
+      `🔙 Для отмены нажмите /cancel`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    logError(error, 'Создание поста с кнопкой');
+  }
+});
+
+bot.action('admin_create_post_no_button', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    user.adminState = 'creating_post_no_button';
+    await ctx.editMessageText(
+      `📝 *Создание поста без кнопки*\n\n` +
+      `Отправьте текст поста в следующем сообщении.\n\n` +
+      `🔙 Для отмены нажмите /cancel`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    logError(error, 'Создание поста без кнопки');
+  }
+});
+
+// Обработчики для промокодов
+bot.action('admin_create_promocode', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    user.adminState = 'creating_promocode';
+    await ctx.editMessageText(
+      `🎫 *Создание промокода*\n\n` +
+      `Отправьте данные промокода в формате:\n` +
+      `Название | Количество Magnum Coins | Количество активаций\n\n` +
+      `Например:\n` +
+      `WELCOME | 100 | 50\n\n` +
+      `🔙 Для отмены нажмите /cancel`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    logError(error, 'Создание промокода');
+  }
+});
+
+// Обработчики для промокодов
+bot.action('promocode', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showPromocodeMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Промокоды (обработчик)');
+  }
+});
+
+bot.action('enter_promocode', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    user.adminState = 'entering_promocode';
+    await ctx.editMessageText(
+      `🎫 *Ввод промокода*\n\n` +
+      `Отправьте промокод в следующем сообщении.\n\n` +
+      `🔙 Для отмены нажмите /cancel`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    logError(error, 'Ввод промокода');
+  }
+});
+
+// Обработчик для поддержки
+bot.action('support', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📧 Написать в поддержку', 'contact_support')
+      ],
+      [
+        Markup.button.callback('❓ FAQ', 'support_faq')
+      ],
+      [
+        Markup.button.callback('🔙 Назад', 'settings')
+      ]
+    ]);
+    
+    const message = 
+      `🆘 *Поддержка*\n\n` +
+      `Если у вас возникли вопросы или проблемы, мы готовы помочь!\n\n` +
+      `📧 *Связаться с поддержкой:*\n` +
+      `├ Написать сообщение\n` +
+      `└ Получить быстрый ответ\n\n` +
+      `❓ *Часто задаваемые вопросы:*\n` +
+      `├ Как фармить Magnum Coins\n` +
+      `├ Как работает майнер\n` +
+      `├ Как получить бонусы\n` +
+      `└ Другие вопросы\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Поддержка (обработчик)');
   }
 });
 
