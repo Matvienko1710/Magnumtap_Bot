@@ -622,8 +622,8 @@ async function handleReferral(userId, referrerId) {
         $inc: { 
           referralsCount: 1,
           totalReferralEarnings: config.REFERRAL_BONUS,
-          stars: config.REFERRAL_BONUS,
-          totalEarnedStars: config.REFERRAL_BONUS
+          magnumCoins: config.REFERRAL_BONUS,
+          totalEarnedMagnumCoins: config.REFERRAL_BONUS
         },
         $push: { referrals: userId },
         $set: { updatedAt: new Date() }
@@ -647,7 +647,6 @@ async function showMainMenu(ctx, user) {
   // Создаем базовые кнопки
   const buttons = [
     [
-      Markup.button.callback('⛏️ Майнинг', 'miner'),
       Markup.button.callback('🌾 Фарм', 'farm')
     ],
     [
@@ -706,7 +705,6 @@ async function showMainMenuStart(ctx, user) {
   // Создаем базовые кнопки
   const buttons = [
     [
-      Markup.button.callback('⛏️ Майнинг', 'miner'),
       Markup.button.callback('🌾 Фарм', 'farm')
     ],
     [
@@ -915,6 +913,9 @@ async function showFarmMenu(ctx, user) {
     [
       Markup.button.callback('📊 Статистика', 'farm_stats'),
       Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
+    ],
+    [
+      Markup.button.callback('⛏️ Майнер', 'miner')
     ],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
@@ -1207,6 +1208,9 @@ async function updateFarmMenu(ctx, user) {
       Markup.button.callback('📊 Статистика', 'farm_stats'),
       Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
     ],
+    [
+      Markup.button.callback('⛏️ Майнер', 'miner')
+    ],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
@@ -1276,9 +1280,9 @@ async function showBonusMenu(ctx, user) {
   const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
-    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
+    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Magnum Coins\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
     `📊 *Текущая серия:* ${bonus.streak} дней\n` +
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
@@ -1334,9 +1338,9 @@ async function updateBonusMenu(ctx, user) {
   const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
-    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
+    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Magnum Coins\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
     `📊 *Текущая серия:* ${bonus.streak} дней\n` +
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
@@ -1402,8 +1406,8 @@ async function claimBonus(ctx, user) {
       { id: user.id },
       { 
         $inc: { 
-          stars: totalReward,
-          totalEarnedStars: totalReward,
+          magnumCoins: totalReward,
+          totalEarnedMagnumCoins: totalReward,
           experience: Math.floor(totalReward * 5),
           'statistics.totalActions': 1
         },
@@ -1419,9 +1423,9 @@ async function claimBonus(ctx, user) {
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
-    log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Stars, серия: ${newStreak} дней`);
+    log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins, серия: ${newStreak} дней`);
     await ctx.answerCbQuery(
-      `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Stars, серия: ${newStreak} дней`
+      `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Magnum Coins, серия: ${newStreak} дней`
     );
     
     log(`🔄 Обновление меню бонуса для пользователя ${user.id}`);
@@ -1451,8 +1455,8 @@ async function processMinerRewards() {
         { id: user.id },
         { 
           $inc: { 
-            stars: reward,
-            totalEarnedStars: reward,
+            magnumCoins: reward,
+            totalEarnedMagnumCoins: reward,
             experience: Math.floor(reward * 5),
             'miner.totalMined': reward
           },
@@ -1464,7 +1468,7 @@ async function processMinerRewards() {
       );
       
       userCache.delete(user.id);
-      log(`⛏️ Майнер награда: ${user.id} +${reward} Stars`);
+      log(`⛏️ Майнер награда: ${user.id} +${reward} Magnum Coins`);
     }
   } catch (error) {
     logError(error, 'Обработка наград майнера');
@@ -1639,78 +1643,78 @@ async function showAchievementsMenu(ctx, user) {
 
 function getAchievementsList(user) {
   return [
-    {
-      id: 'first_farm',
-      title: '🌾 Первый фарм',
-      description: 'Выполните первый фарм',
-      condition: user.farm?.farmCount >= 1,
-      progress: user.farm?.farmCount || 0,
-      target: 1,
-      reward: '10 Stars'
-    },
-    {
-      id: 'farm_master',
-      title: '👑 Мастер фарма',
-      description: 'Выполните 100 фармов',
-      condition: user.farm?.farmCount >= 100,
-      progress: user.farm?.farmCount || 0,
-      target: 100,
-      reward: '500 Stars'
-    },
-    {
-      id: 'magnum_collector',
-      title: '🪙 Коллекционер Magnum',
-      description: 'Накопите 1000 Magnum Coins',
-      condition: user.magnumCoins >= 1000,
-      progress: user.magnumCoins || 0,
-      target: 1000,
-      reward: '200 Stars'
-    },
-    {
-      id: 'exchange_trader',
-      title: '💱 Трейдер',
-      description: 'Выполните 50 обменов',
-      condition: user.exchange?.totalExchanges >= 50,
-      progress: user.exchange?.totalExchanges || 0,
-      target: 50,
-      reward: '300 Stars'
-    },
-    {
-      id: 'level_10',
-      title: '⭐ Уровень 10',
-      description: 'Достигните 10 уровня',
-      condition: user.level >= 10,
-      progress: user.level || 1,
-      target: 10,
-      reward: '100 Stars'
-    },
-    {
-      id: 'level_50',
-      title: '⭐⭐ Уровень 50',
-      description: 'Достигните 50 уровня',
-      condition: user.level >= 50,
-      progress: user.level || 1,
-      target: 50,
-      reward: '1000 Stars'
-    },
-    {
-      id: 'referral_king',
-      title: '👥 Король рефералов',
-      description: 'Пригласите 10 рефералов',
-      condition: user.referralsCount >= 10,
-      progress: user.referralsCount || 0,
-      target: 10,
-      reward: '400 Stars'
-    },
-    {
-      id: 'daily_streak',
-      title: '🔥 Серия дней',
-      description: 'Получите бонус 7 дней подряд',
-      condition: user.dailyBonus?.streak >= 7,
-      progress: user.dailyBonus?.streak || 0,
-      target: 7,
-      reward: '150 Stars'
-    }
+          {
+        id: 'first_farm',
+        title: '🌾 Первый фарм',
+        description: 'Выполните первый фарм',
+        condition: user.farm?.farmCount >= 1,
+        progress: user.farm?.farmCount || 0,
+        target: 1,
+        reward: '10 Magnum Coins'
+      },
+      {
+        id: 'farm_master',
+        title: '👑 Мастер фарма',
+        description: 'Выполните 100 фармов',
+        condition: user.farm?.farmCount >= 100,
+        progress: user.farm?.farmCount || 0,
+        target: 100,
+        reward: '500 Magnum Coins'
+      },
+      {
+        id: 'magnum_collector',
+        title: '🪙 Коллекционер Magnum',
+        description: 'Накопите 1000 Magnum Coins',
+        condition: user.magnumCoins >= 1000,
+        progress: user.magnumCoins || 0,
+        target: 1000,
+        reward: '200 Magnum Coins'
+      },
+      {
+        id: 'exchange_trader',
+        title: '💱 Трейдер',
+        description: 'Выполните 50 обменов',
+        condition: user.exchange?.totalExchanges >= 50,
+        progress: user.exchange?.totalExchanges || 0,
+        target: 50,
+        reward: '300 Magnum Coins'
+      },
+      {
+        id: 'level_10',
+        title: '⭐ Уровень 10',
+        description: 'Достигните 10 уровня',
+        condition: user.level >= 10,
+        progress: user.level || 1,
+        target: 10,
+        reward: '100 Magnum Coins'
+      },
+      {
+        id: 'level_50',
+        title: '⭐⭐ Уровень 50',
+        description: 'Достигните 50 уровня',
+        condition: user.level >= 50,
+        progress: user.level || 1,
+        target: 50,
+        reward: '1000 Magnum Coins'
+      },
+      {
+        id: 'referral_king',
+        title: '👥 Король рефералов',
+        description: 'Пригласите 10 рефералов',
+        condition: user.referralsCount >= 10,
+        progress: user.referralsCount || 0,
+        target: 10,
+        reward: '400 Magnum Coins'
+      },
+      {
+        id: 'daily_streak',
+        title: '🔥 Серия дней',
+        description: 'Получите бонус 7 дней подряд',
+        condition: user.dailyBonus?.streak >= 7,
+        progress: user.dailyBonus?.streak || 0,
+        target: 7,
+        reward: '150 Magnum Coins'
+      }
   ];
 }
 
@@ -1774,8 +1778,8 @@ async function showAchievementsRewards(ctx, user) {
     let message = `🎁 *Награды достижений*\n\n`;
     message += `💰 *Общая статистика:*\n`;
     message += `├ Выполнено достижений: \`${completedAchievements.length}\`\n`;
-    message += `├ Всего наград: \`${totalRewards} Stars\`\n`;
-    message += `└ Средняя награда: \`${completedAchievements.length > 0 ? Math.round(totalRewards / completedAchievements.length) : 0} Stars\`\n\n`;
+    message += `├ Всего наград: \`${totalRewards} Magnum Coins\`\n`;
+    message += `└ Средняя награда: \`${completedAchievements.length > 0 ? Math.round(totalRewards / completedAchievements.length) : 0} Magnum Coins\`\n\n`;
     
     // Показываем награды по категориям
     message += `🏆 *Награды по категориям:*\n\n`;
@@ -1799,7 +1803,7 @@ async function showAchievementsRewards(ctx, user) {
         
         message += `*${category}:*\n`;
         message += `├ Выполнено: \`${completed.length}/${categoryAchievements.length}\`\n`;
-        message += `└ Награды: \`${totalReward} Stars\`\n\n`;
+        message += `└ Награды: \`${totalReward} Magnum Coins\`\n\n`;
       }
     });
     
@@ -1861,12 +1865,12 @@ async function showReferralsMenu(ctx, user) {
       `👥 *Реферальная система*\n\n` +
       `📊 *Ваша статистика:*\n` +
       `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
-      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n` +
+      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Magnum Coins\n` +
       `└ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n\n` +
       `💰 *Награды за рефералов:*\n` +
-      `├ За каждого реферала: \`${config.REFERRAL_REWARD || 10}\` Stars\n` +
-      `├ Бонус за 5 рефералов: \`50\` Stars\n` +
-      `└ Бонус за 10 рефералов: \`100\` Stars\n\n` +
+      `├ За каждого реферала: \`${config.REFERRAL_REWARD || 10}\` Magnum Coins\n` +
+      `├ Бонус за 5 рефералов: \`50\` Magnum Coins\n` +
+      `└ Бонус за 10 рефералов: \`100\` Magnum Coins\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -1902,7 +1906,7 @@ async function showReferralLink(ctx, user) {
       `├ Отправьте эту ссылку друзьям\n` +
       `├ При переходе по ссылке они автоматически станут вашими рефералами\n` +
       `└ Вы получите награду за каждого нового реферала\n\n` +
-      `💰 *Награда:* \`${config.REFERRAL_REWARD || 10}\` Stars за каждого реферала\n\n` +
+      `💰 *Награда:* \`${config.REFERRAL_REWARD || 10}\` Magnum Coins за каждого реферала\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -1934,7 +1938,7 @@ async function showReferralStats(ctx, user) {
     // Общая статистика
     message += `📈 *Общая статистика:*\n`;
     message += `├ Всего рефералов: \`${user.referralsCount || 0}\`\n`;
-    message += `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n`;
+    message += `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Magnum Coins\n`;
     message += `├ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n`;
     message += `└ Средний уровень рефералов: \`${referrals.length > 0 ? Math.round(referrals.reduce((sum, r) => sum + (r.level || 1), 0) / referrals.length) : 0}\`\n\n`;
     
@@ -1989,10 +1993,10 @@ async function showReferralRewards(ctx, user) {
     
     // Система бонусов
     message += `🏆 *Система бонусов:*\n`;
-    message += `├ 5 рефералов: \`50\` Stars (бонус)\n`;
-    message += `├ 10 рефералов: \`100\` Stars (бонус)\n`;
-    message += `├ 25 рефералов: \`250\` Stars (бонус)\n`;
-    message += `└ 50 рефералов: \`500\` Stars (бонус)\n\n`;
+    message += `├ 5 рефералов: \`50\` Magnum Coins (бонус)\n`;
+    message += `├ 10 рефералов: \`100\` Magnum Coins (бонус)\n`;
+    message += `├ 25 рефералов: \`250\` Magnum Coins (бонус)\n`;
+    message += `└ 50 рефералов: \`500\` Magnum Coins (бонус)\n\n`;
     
     // Прогресс к бонусам
     message += `📊 *Ваш прогресс:*\n`;
@@ -2530,7 +2534,7 @@ async function showSponsorTasks(ctx, user) {
       
       message += `${status} *${task.title}*\n`;
       message += `├ ${task.description}\n`;
-      message += `├ Награда: \`${task.reward}\` Stars\n`;
+      message += `├ Награда: \`${task.reward}\` Magnum Coins\n`;
       message += `└ Сложность: ${task.difficulty}\n\n`;
     });
     
@@ -2587,7 +2591,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     let message = `🎯 *${task.title}*\n\n`;
     message += `📝 *Описание:*\n${task.description}\n\n`;
-    message += `💰 *Награда:* \`${task.reward}\` Stars\n`;
+    message += `💰 *Награда:* \`${task.reward}\` Magnum Coins\n`;
     message += `⭐ *Сложность:* ${task.difficulty}\n`;
     message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
     
@@ -2663,7 +2667,7 @@ async function verifySponsorTask(ctx, user, taskId) {
       userCache.delete(user.id);
       
       log(`✅ Спонсорское задание ${taskId} выполнено пользователем ${user.id}`);
-      await ctx.answerCbQuery(`✅ Задание выполнено! Награда: ${task.reward} Stars`);
+      await ctx.answerCbQuery(`✅ Задание выполнено! Награда: ${task.reward} Magnum Coins`);
       
       // Обновляем детали задания
       const updatedUser = await getUser(ctx.from.id);
@@ -2709,7 +2713,7 @@ async function claimSponsorTask(ctx, user, taskId) {
       { id: user.id },
       { 
         $inc: { 
-          stars: task.reward,
+          magnumCoins: task.reward,
           'tasks.completedTasks': 1,
           'tasks.totalTaskEarnings': task.reward
         },
@@ -2724,8 +2728,8 @@ async function claimSponsorTask(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
-    log(`🎁 Награда спонсорского задания ${taskId} получена пользователем ${user.id}: ${task.reward} Stars`);
-    await ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} Stars`);
+    log(`🎁 Награда спонсорского задания ${taskId} получена пользователем ${user.id}: ${task.reward} Magnum Coins`);
+    await ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} Magnum Coins`);
     
     // Обновляем детали задания
     const updatedUser = await getUser(ctx.from.id);
@@ -2762,7 +2766,7 @@ async function showDailyTasks(ctx, user) {
       message += `${status} *${task.title}*\n`;
       message += `├ ${task.description}\n`;
       message += `├ Прогресс: \`${progress}/${task.target}\`\n`;
-      message += `├ Награда: \`${task.reward}\` Stars\n`;
+      message += `├ Награда: \`${task.reward}\` Magnum Coins\n`;
       message += `└ ${isCompleted ? '✅ Выполнено' : '🔄 В процессе'}\n\n`;
     });
     
@@ -2800,8 +2804,8 @@ async function showTasksProgress(ctx, user) {
     // Общая статистика
     message += `📈 *Общая статистика:*\n`;
     message += `├ Выполнено заданий: \`${completedTasks}\`\n`;
-    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
-    message += `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Stars\n\n`;
+    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
+    message += `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Magnum Coins\n\n`;
     
     // Статистика по типам
     const sponsorTasks = tasks.sponsorTasks || {};
