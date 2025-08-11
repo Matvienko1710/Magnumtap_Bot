@@ -899,7 +899,7 @@ async function doFarm(ctx, user) {
     const bonus = Math.min(user.level * 0.1, 2);
     const totalReward = baseReward + bonus;
     
-    log(`💰 Расчет награды: базовая ${baseReward}, бонус ${bonus}, итого ${totalReward} Stars`);
+    log(`💰 Расчет награды: базовая ${baseReward}, бонус ${bonus}, итого ${totalReward} Magnum Coins`);
     
     // Обновляем пользователя
     log(`💾 Обновление базы данных для пользователя ${user.id}`);
