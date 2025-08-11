@@ -1007,7 +1007,6 @@ async function updateMinerMenu(ctx, user) {
     await showMinerMenu(ctx, user);
   }
 }
-}
 
 async function updateFarmMenu(ctx, user) {
   try {
@@ -1062,7 +1061,6 @@ async function updateFarmMenu(ctx, user) {
     log(`🔄 Fallback: показ нового меню фарма для пользователя ${user.id}`);
     await showFarmMenu(ctx, user);
   }
-}
 }
 
 async function showBonusMenu(ctx, user) {
@@ -1184,7 +1182,6 @@ async function updateBonusMenu(ctx, user) {
     log(`🔄 Fallback: показ нового меню бонуса для пользователя ${user.id}`);
     await showBonusMenu(ctx, user);
   }
-}
 }
 
 async function claimBonus(ctx, user) {
