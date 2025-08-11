@@ -190,6 +190,14 @@ function setCachedStats(key, data) {
 
 // ==================== УТИЛИТЫ ====================
 function formatNumber(num) {
+  // Проверяем, что num является числом
+  if (num === null || num === undefined || isNaN(num)) {
+    return '0.00';
+  }
+  
+  // Преобразуем в число на всякий случай
+  num = Number(num);
+  
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + 'M';
   } else if (num >= 1000) {
@@ -199,6 +207,14 @@ function formatNumber(num) {
 }
 
 function formatTime(seconds) {
+  // Проверяем, что seconds является числом
+  if (seconds === null || seconds === undefined || isNaN(seconds)) {
+    return '0с';
+  }
+  
+  // Преобразуем в число на всякий случай
+  seconds = Number(seconds);
+  
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
@@ -654,9 +670,20 @@ async function showMainMenu(ctx, user) {
 
 // ==================== МАЙНИНГ ====================
 async function showMinerMenu(ctx, user) {
+  // Убеждаемся, что все поля майнера инициализированы
+  if (!user.miner) {
+    user.miner = {
+      active: false,
+      level: 1,
+      efficiency: 1,
+      lastReward: null,
+      totalMined: 0
+    };
+  }
+  
   const miner = user.miner;
-  const isActive = miner.active;
-  const efficiency = miner.efficiency;
+  const isActive = miner.active || false;
+  const efficiency = miner.efficiency || 1;
   const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
@@ -856,9 +883,20 @@ async function doFarm(ctx, user) {
 
 // ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
 async function updateMinerMenu(ctx, user) {
+  // Убеждаемся, что все поля майнера инициализированы
+  if (!user.miner) {
+    user.miner = {
+      active: false,
+      level: 1,
+      efficiency: 1,
+      lastReward: null,
+      totalMined: 0
+    };
+  }
+  
   const miner = user.miner;
-  const isActive = miner.active;
-  const efficiency = miner.efficiency;
+  const isActive = miner.active || false;
+  const efficiency = miner.efficiency || 1;
   const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
