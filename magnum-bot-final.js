@@ -1781,6 +1781,254 @@ async function showAdminSettings(ctx, user) {
   }
 }
 
+async function showAdminFarmRewards(ctx, user) {
+  try {
+    log(`🎯 Показ настроек наград фарма для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Увеличить награду', 'admin_farm_reward_increase'),
+        Markup.button.callback('➖ Уменьшить награду', 'admin_farm_reward_decrease')
+      ],
+      [
+        Markup.button.callback('🎯 Установить точное значение', 'admin_farm_reward_set'),
+        Markup.button.callback('📊 Статистика наград', 'admin_farm_reward_stats')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_settings')]
+    ]);
+    
+    const message = 
+      `🎯 *Награды фарма*\n\n` +
+      `💰 *Текущие настройки:*\n` +
+      `├ Базовая награда: \`${config.FARM_BASE_REWARD}\` Magnum Coins\n` +
+      `├ Бонус за уровень: \`${Math.min(user.level * 0.1, 2)}\` Magnum Coins\n` +
+      `└ Максимальная награда: \`${config.FARM_BASE_REWARD + 2}\` Magnum Coins\n\n` +
+      `📊 *Статистика:*\n` +
+      `├ Всего фармов: \`${user.farm?.farmCount || 0}\`\n` +
+      `├ Заработано фармом: \`${formatNumber(user.farm?.totalFarmEarnings || 0)}\` Magnum Coins\n` +
+      `└ Средняя награда: \`${user.farm?.farmCount > 0 ? formatNumber((user.farm?.totalFarmEarnings || 0) / user.farm?.farmCount) : '0.00'}\` Magnum Coins\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Настройки наград фарма показаны для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ настроек наград фарма для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа настроек наград');
+  }
+}
+
+async function showAdminCooldowns(ctx, user) {
+  try {
+    log(`⏰ Показ настроек кулдаунов для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⏰ Кулдаун фарма', 'admin_cooldown_farm'),
+        Markup.button.callback('🎁 Кулдаун бонуса', 'admin_cooldown_bonus')
+      ],
+      [
+        Markup.button.callback('⛏️ Кулдаун майнера', 'admin_cooldown_miner'),
+        Markup.button.callback('📊 Статистика кулдаунов', 'admin_cooldown_stats')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_settings')]
+    ]);
+    
+    const message = 
+      `⏰ *Кулдауны*\n\n` +
+      `⏳ *Текущие настройки:*\n` +
+      `├ Фарм: \`${config.FARM_COOLDOWN}\` секунд (\`${Math.floor(config.FARM_COOLDOWN / 60)}\` минут)\n` +
+      `├ Ежедневный бонус: \`24\` часа\n` +
+      `└ Майнер: \`60\` минут\n\n` +
+      `📊 *Статистика использования:*\n` +
+      `├ Среднее время между фармами: \`${user.farm?.farmCount > 1 ? Math.floor(config.FARM_COOLDOWN / 60) : 'Н/Д'}\` минут\n` +
+      `├ Последний фарм: ${user.farm?.lastFarm ? user.farm.lastFarm.toLocaleString() : 'Никогда'}\n` +
+      `└ Последний бонус: ${user.dailyBonus?.lastBonus ? user.dailyBonus.lastBonus.toLocaleString() : 'Никогда'}\n\n` +
+      `🎯 Выберите кулдаун для изменения:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Настройки кулдаунов показаны для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ настроек кулдаунов для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа настроек кулдаунов');
+  }
+}
+
+async function showAdminDailyBonus(ctx, user) {
+  try {
+    log(`🎁 Показ настроек ежедневного бонуса для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('💰 Базовая награда', 'admin_bonus_base'),
+        Markup.button.callback('🔥 Бонус серии', 'admin_bonus_streak')
+      ],
+      [
+        Markup.button.callback('📊 Статистика бонусов', 'admin_bonus_stats'),
+        Markup.button.callback('🎯 Настройка серии', 'admin_bonus_series')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_settings')]
+    ]);
+    
+    const message = 
+      `🎁 *Ежедневный бонус*\n\n` +
+      `💰 *Текущие настройки:*\n` +
+      `├ Базовая награда: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
+      `├ Бонус за серию: \`+0.5\` Magnum Coins за день\n` +
+      `├ Максимальный бонус серии: \`5\` Magnum Coins\n` +
+      `└ Максимальная награда: \`${config.DAILY_BONUS_BASE + 5}\` Magnum Coins\n\n` +
+      `📊 *Статистика пользователя:*\n` +
+      `├ Текущая серия: \`${user.dailyBonus?.streak || 0}\` дней\n` +
+      `├ Максимальная серия: \`${user.dailyBonus?.maxStreak || 0}\` дней\n` +
+      `├ Получено бонусов: \`${user.dailyBonus?.claimedCount || 0}\`\n` +
+      `└ Заработано бонусами: \`${formatNumber(user.dailyBonus?.totalEarned || 0)}\` Magnum Coins\n\n` +
+      `🎯 Выберите настройку для изменения:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Настройки ежедневного бонуса показаны для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ настроек ежедневного бонуса для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа настроек бонуса');
+  }
+}
+
+async function showAdminMinerSettings(ctx, user) {
+  try {
+    log(`⛏️ Показ настроек майнера для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('💰 Награда за час', 'admin_miner_reward'),
+        Markup.button.callback('⚡ Эффективность', 'admin_miner_efficiency')
+      ],
+      [
+        Markup.button.callback('📊 Статистика майнера', 'admin_miner_stats'),
+        Markup.button.callback('🎯 Настройка уровней', 'admin_miner_levels')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_settings')]
+    ]);
+    
+    const message = 
+      `⛏️ *Настройки майнера*\n\n` +
+      `💰 *Текущие настройки:*\n` +
+      `├ Награда за час: \`${config.MINER_REWARD_PER_HOUR}\` Magnum Coins\n` +
+      `├ Базовая эффективность: \`1.0\`\n` +
+      `├ Максимальная эффективность: \`5.0\`\n` +
+      `└ Максимальная награда: \`${config.MINER_REWARD_PER_HOUR * 5}\` Magnum Coins/час\n\n` +
+      `📊 *Статистика пользователя:*\n` +
+      `├ Уровень майнера: \`${user.miner?.level || 1}\`\n` +
+      `├ Эффективность: \`${user.miner?.efficiency || 1.0}\`\n` +
+      `├ Статус: ${user.miner?.active ? '🟢 Активен' : '🔴 Неактивен'}\n` +
+      `├ Всего добыто: \`${formatNumber(user.miner?.totalMined || 0)}\` Magnum Coins\n` +
+      `└ Последняя награда: ${user.miner?.lastReward ? user.miner.lastReward.toLocaleString() : 'Никогда'}\n\n` +
+      `🎯 Выберите настройку для изменения:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Настройки майнера показаны для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ настроек майнера для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа настроек майнера');
+  }
+}
+
+async function showAdminReferralSettings(ctx, user) {
+  try {
+    log(`👥 Показ настроек реферальной системы для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('💰 Награда за реферала', 'admin_referral_reward'),
+        Markup.button.callback('🏆 Бонусы за количество', 'admin_referral_bonuses')
+      ],
+      [
+        Markup.button.callback('📊 Статистика рефералов', 'admin_referral_stats'),
+        Markup.button.callback('🎯 Настройка уровней', 'admin_referral_levels')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_settings')]
+    ]);
+    
+    const message = 
+      `👥 *Реферальная система*\n\n` +
+      `💰 *Текущие настройки:*\n` +
+      `├ Награда за реферала: \`${config.REFERRAL_REWARD}\` Magnum Coins\n` +
+      `├ Бонус за 5 рефералов: \`50\` Magnum Coins\n` +
+      `├ Бонус за 10 рефералов: \`100\` Magnum Coins\n` +
+      `├ Бонус за 25 рефералов: \`250\` Magnum Coins\n` +
+      `└ Бонус за 50 рефералов: \`500\` Magnum Coins\n\n` +
+      `📊 *Статистика пользователя:*\n` +
+      `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
+      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Magnum Coins\n` +
+      `├ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n` +
+      `└ Реферальный код: \`${user.referralCode}\`\n\n` +
+      `🎯 Выберите настройку для изменения:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Настройки реферальной системы показаны для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ настроек реферальной системы для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа настроек рефералов');
+  }
+}
+
+async function showAdminSubscriptionChannels(ctx, user) {
+  try {
+    log(`📢 Показ настроек каналов подписки для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Добавить канал', 'admin_subscription_add'),
+        Markup.button.callback('➖ Удалить канал', 'admin_subscription_remove')
+      ],
+      [
+        Markup.button.callback('📊 Статистика подписок', 'admin_subscription_stats'),
+        Markup.button.callback('🎯 Настройка проверки', 'admin_subscription_check')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_settings')]
+    ]);
+    
+    const message = 
+      `📢 *Каналы подписки*\n\n` +
+      `📺 *Текущие настройки:*\n` +
+      `├ Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n` +
+      `├ Проверка подписки: ${config.REQUIRED_CHANNEL ? '🟢 Включена' : '🔴 Отключена'}\n` +
+      `└ Автоматическая проверка: \`При каждом действии\`\n\n` +
+      `📊 *Статистика:*\n` +
+      `├ Всего пользователей: \`${await db.collection('users').countDocuments()}\`\n` +
+      `├ Активных пользователей: \`${await db.collection('users').countDocuments({ 'lastSeen': { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } })}\`\n` +
+      `└ Процент активности: \`${Math.round((await db.collection('users').countDocuments({ 'lastSeen': { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } })) / (await db.collection('users').countDocuments()) * 100)}%\`\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Настройки каналов подписки показаны для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ настроек каналов подписки для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа настроек подписки');
+  }
+}
+
 async function showAdminTopUsers(ctx, user) {
   try {
     log(`📊 Показ топ пользователей для админа ${user.id}`);
@@ -3489,6 +3737,18 @@ bot.on('text', async (ctx) => {
       await handleAdminBanUser(ctx, user, text);
     } else if (user.adminState === 'unbanning_user') {
       await handleAdminUnbanUser(ctx, user, text);
+    } else if (user.adminState === 'setting_farm_reward') {
+      await handleAdminSetFarmReward(ctx, user, text);
+    } else if (user.adminState === 'setting_farm_cooldown') {
+      await handleAdminSetFarmCooldown(ctx, user, text);
+    } else if (user.adminState === 'setting_bonus_base') {
+      await handleAdminSetBonusBase(ctx, user, text);
+    } else if (user.adminState === 'setting_miner_reward') {
+      await handleAdminSetMinerReward(ctx, user, text);
+    } else if (user.adminState === 'setting_referral_reward') {
+      await handleAdminSetReferralReward(ctx, user, text);
+    } else if (user.adminState === 'setting_subscription_channel') {
+      await handleAdminSetSubscriptionChannel(ctx, user, text);
     }
   } catch (error) {
     logError(error, 'Обработка текстового сообщения админа');
@@ -3637,6 +3897,201 @@ async function handleAdminUnbanUser(ctx, user, text) {
   } catch (error) {
     logError(error, 'Разблокировка пользователя админом');
     await ctx.reply('❌ Ошибка разблокировки пользователя');
+  }
+}
+
+// Функции для изменения настроек
+async function handleAdminSetFarmReward(ctx, user, text) {
+  try {
+    const newReward = parseFloat(text);
+    if (isNaN(newReward) || newReward < 0) {
+      await ctx.reply('❌ Неверное значение. Введите положительное число');
+      return;
+    }
+    
+    // Обновляем настройку в базе данных
+    await db.collection('config').updateOne(
+      { key: 'FARM_BASE_REWARD' },
+      { $set: { value: newReward, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    
+    // Обновляем конфиг в памяти
+    config.FARM_BASE_REWARD = newReward;
+    
+    await ctx.reply(`✅ Базовая награда фарма изменена на ${newReward} Magnum Coins`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Изменение награды фарма админом');
+    await ctx.reply('❌ Ошибка изменения награды');
+  }
+}
+
+async function handleAdminSetFarmCooldown(ctx, user, text) {
+  try {
+    const newCooldown = parseInt(text);
+    if (isNaN(newCooldown) || newCooldown < 0) {
+      await ctx.reply('❌ Неверное значение. Введите положительное число в секундах');
+      return;
+    }
+    
+    // Обновляем настройку в базе данных
+    await db.collection('config').updateOne(
+      { key: 'FARM_COOLDOWN' },
+      { $set: { value: newCooldown, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    
+    // Обновляем конфиг в памяти
+    config.FARM_COOLDOWN = newCooldown;
+    
+    await ctx.reply(`✅ Кулдаун фарма изменен на ${newCooldown} секунд (${Math.floor(newCooldown / 60)} минут)`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Изменение кулдауна фарма админом');
+    await ctx.reply('❌ Ошибка изменения кулдауна');
+  }
+}
+
+async function handleAdminSetBonusBase(ctx, user, text) {
+  try {
+    const newBonus = parseFloat(text);
+    if (isNaN(newBonus) || newBonus < 0) {
+      await ctx.reply('❌ Неверное значение. Введите положительное число');
+      return;
+    }
+    
+    // Обновляем настройку в базе данных
+    await db.collection('config').updateOne(
+      { key: 'DAILY_BONUS_BASE' },
+      { $set: { value: newBonus, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    
+    // Обновляем конфиг в памяти
+    config.DAILY_BONUS_BASE = newBonus;
+    
+    await ctx.reply(`✅ Базовая награда ежедневного бонуса изменена на ${newBonus} Magnum Coins`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Изменение базового бонуса админом');
+    await ctx.reply('❌ Ошибка изменения бонуса');
+  }
+}
+
+async function handleAdminSetMinerReward(ctx, user, text) {
+  try {
+    const newReward = parseFloat(text);
+    if (isNaN(newReward) || newReward < 0) {
+      await ctx.reply('❌ Неверное значение. Введите положительное число');
+      return;
+    }
+    
+    // Обновляем настройку в базе данных
+    await db.collection('config').updateOne(
+      { key: 'MINER_REWARD_PER_HOUR' },
+      { $set: { value: newReward, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    
+    // Обновляем конфиг в памяти
+    config.MINER_REWARD_PER_HOUR = newReward;
+    
+    await ctx.reply(`✅ Награда майнера изменена на ${newReward} Magnum Coins в час`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Изменение награды майнера админом');
+    await ctx.reply('❌ Ошибка изменения награды майнера');
+  }
+}
+
+async function handleAdminSetReferralReward(ctx, user, text) {
+  try {
+    const newReward = parseFloat(text);
+    if (isNaN(newReward) || newReward < 0) {
+      await ctx.reply('❌ Неверное значение. Введите положительное число');
+      return;
+    }
+    
+    // Обновляем настройку в базе данных
+    await db.collection('config').updateOne(
+      { key: 'REFERRAL_REWARD' },
+      { $set: { value: newReward, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    
+    // Обновляем конфиг в памяти
+    config.REFERRAL_REWARD = newReward;
+    
+    await ctx.reply(`✅ Награда за реферала изменена на ${newReward} Magnum Coins`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Изменение награды реферала админом');
+    await ctx.reply('❌ Ошибка изменения награды реферала');
+  }
+}
+
+async function handleAdminSetSubscriptionChannel(ctx, user, text) {
+  try {
+    let channel = text.trim();
+    
+    // Проверяем формат канала
+    if (!channel.startsWith('@') && !channel.startsWith('https://t.me/')) {
+      await ctx.reply('❌ Неверный формат канала. Используйте @channel или https://t.me/channel');
+      return;
+    }
+    
+    // Обновляем настройку в базе данных
+    await db.collection('config').updateOne(
+      { key: 'REQUIRED_CHANNEL' },
+      { $set: { value: channel, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    
+    // Обновляем конфиг в памяти
+    config.REQUIRED_CHANNEL = channel;
+    
+    await ctx.reply(`✅ Обязательный канал подписки изменен на ${channel}`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Изменение канала подписки админом');
+    await ctx.reply('❌ Ошибка изменения канала подписки');
   }
 }
 
@@ -4293,6 +4748,199 @@ bot.action('admin_unban_user', async (ctx) => {
     await showAdminUnbanUser(ctx, user);
   } catch (error) {
     logError(error, 'Разблокировка пользователя (обработчик)');
+  }
+});
+
+// Обработчики настроек бота
+bot.action('admin_farm_rewards', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminFarmRewards(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки наград фарма (обработчик)');
+  }
+});
+
+bot.action('admin_cooldowns', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminCooldowns(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки кулдаунов (обработчик)');
+  }
+});
+
+bot.action('admin_daily_bonus', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminDailyBonus(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки ежедневного бонуса (обработчик)');
+  }
+});
+
+bot.action('admin_miner_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminMinerSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки майнера (обработчик)');
+  }
+});
+
+bot.action('admin_referral_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminReferralSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки реферальной системы (обработчик)');
+  }
+});
+
+bot.action('admin_subscription_channels', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminSubscriptionChannels(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки каналов подписки (обработчик)');
+  }
+});
+
+// Обработчики возврата к настройкам
+bot.action('admin_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Возврат к настройкам (обработчик)');
+  }
+});
+
+bot.action('admin_users', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminUsers(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление пользователями (обработчик)');
+  }
+});
+
+// Обработчики изменения настроек
+bot.action('admin_farm_reward_set', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода награды
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_farm_reward', updatedAt: new Date() } }
+    );
+    
+    await ctx.reply('🎯 Введите новую базовую награду фарма (в Magnum Coins):');
+  } catch (error) {
+    logError(error, 'Установка награды фарма (обработчик)');
+  }
+});
+
+bot.action('admin_cooldown_farm', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода кулдауна
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_farm_cooldown', updatedAt: new Date() } }
+    );
+    
+    await ctx.reply('⏰ Введите новый кулдаун фарма (в секундах):');
+  } catch (error) {
+    logError(error, 'Установка кулдауна фарма (обработчик)');
+  }
+});
+
+bot.action('admin_bonus_base', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода базового бонуса
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_bonus_base', updatedAt: new Date() } }
+    );
+    
+    await ctx.reply('🎁 Введите новую базовую награду ежедневного бонуса (в Magnum Coins):');
+  } catch (error) {
+    logError(error, 'Установка базового бонуса (обработчик)');
+  }
+});
+
+bot.action('admin_miner_reward', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода награды майнера
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_miner_reward', updatedAt: new Date() } }
+    );
+    
+    await ctx.reply('⛏️ Введите новую награду майнера (в Magnum Coins за час):');
+  } catch (error) {
+    logError(error, 'Установка награды майнера (обработчик)');
+  }
+});
+
+bot.action('admin_referral_reward', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода награды реферала
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_referral_reward', updatedAt: new Date() } }
+    );
+    
+    await ctx.reply('👥 Введите новую награду за реферала (в Magnum Coins):');
+  } catch (error) {
+    logError(error, 'Установка награды реферала (обработчик)');
+  }
+});
+
+bot.action('admin_subscription_add', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода канала подписки
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_subscription_channel', updatedAt: new Date() } }
+    );
+    
+    await ctx.reply('📢 Введите канал для обязательной подписки (@channel или https://t.me/channel):');
+  } catch (error) {
+    logError(error, 'Добавление канала подписки (обработчик)');
   }
 });
 
