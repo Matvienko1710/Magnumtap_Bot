@@ -1840,6 +1840,631 @@ function createProgressBar(percent) {
   return '█'.repeat(filled) + '░'.repeat(empty);
 }
 
+// ==================== РЕФЕРАЛЫ ====================
+async function showReferralsMenu(ctx, user) {
+  try {
+    log(`👥 Показ меню рефералов для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🔗 Реферальная ссылка', 'referral_link'),
+        Markup.button.callback('📊 Статистика', 'referral_stats')
+      ],
+      [
+        Markup.button.callback('🎁 Награды', 'referral_rewards'),
+        Markup.button.callback('👥 Список рефералов', 'referral_list')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `👥 *Реферальная система*\n\n` +
+      `📊 *Ваша статистика:*\n` +
+      `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
+      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n` +
+      `└ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n\n` +
+      `💰 *Награды за рефералов:*\n` +
+      `├ За каждого реферала: \`${config.REFERRAL_REWARD || 10}\` Stars\n` +
+      `├ Бонус за 5 рефералов: \`50\` Stars\n` +
+      `└ Бонус за 10 рефералов: \`100\` Stars\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки меню рефералов');
+  }
+}
+
+async function showReferralLink(ctx, user) {
+  try {
+    log(`🔗 Показ реферальной ссылки для пользователя ${user.id}`);
+    
+    const botUsername = (await ctx.telegram.getMe()).username;
+    const referralLink = `https://t.me/${botUsername}?start=${user.id}`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.url('🔗 Открыть ссылку', referralLink),
+        Markup.button.callback('📋 Скопировать', 'copy_referral_link')
+      ],
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    const message = 
+      `🔗 *Ваша реферальная ссылка*\n\n` +
+      `📝 *Ссылка:*\n` +
+      `\`${referralLink}\`\n\n` +
+      `💡 *Как использовать:*\n` +
+      `├ Отправьте эту ссылку друзьям\n` +
+      `├ При переходе по ссылке они автоматически станут вашими рефералами\n` +
+      `└ Вы получите награду за каждого нового реферала\n\n` +
+      `💰 *Награда:* \`${config.REFERRAL_REWARD || 10}\` Stars за каждого реферала\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ реферальной ссылки');
+    await ctx.answerCbQuery('❌ Ошибка загрузки реферальной ссылки');
+  }
+}
+
+async function showReferralStats(ctx, user) {
+  try {
+    log(`📊 Показ статистики рефералов для пользователя ${user.id}`);
+    
+    // Получаем список рефералов из базы данных
+    const referrals = await db.collection('users').find(
+      { referrerId: user.id },
+      { projection: { id: 1, firstName: 1, username: 1, level: 1, createdAt: 1 } }
+    ).toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    let message = `📊 *Статистика рефералов*\n\n`;
+    
+    // Общая статистика
+    message += `📈 *Общая статистика:*\n`;
+    message += `├ Всего рефералов: \`${user.referralsCount || 0}\`\n`;
+    message += `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n`;
+    message += `├ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n`;
+    message += `└ Средний уровень рефералов: \`${referrals.length > 0 ? Math.round(referrals.reduce((sum, r) => sum + (r.level || 1), 0) / referrals.length) : 0}\`\n\n`;
+    
+    // Прогресс к следующим бонусам
+    const nextBonus5 = 5 - (user.referralsCount || 0);
+    const nextBonus10 = 10 - (user.referralsCount || 0);
+    
+    message += `🎯 *Прогресс к бонусам:*\n`;
+    if (nextBonus5 > 0) {
+      message += `├ До бонуса за 5 рефералов: \`${nextBonus5}\` рефералов\n`;
+    } else {
+      message += `├ ✅ Бонус за 5 рефералов получен\n`;
+    }
+    
+    if (nextBonus10 > 0) {
+      message += `└ До бонуса за 10 рефералов: \`${nextBonus10}\` рефералов\n`;
+    } else {
+      message += `└ ✅ Бонус за 10 рефералов получен\n`;
+    }
+    
+    message += `\n🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ статистики рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки статистики');
+  }
+}
+
+async function showReferralRewards(ctx, user) {
+  try {
+    log(`🎁 Показ наград рефералов для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    const referralReward = config.REFERRAL_REWARD || 10;
+    const totalEarnings = user.referralsEarnings || 0;
+    const referralsCount = user.referralsCount || 0;
+    
+    let message = `🎁 *Награды рефералов*\n\n`;
+    
+    // Текущие награды
+    message += `💰 *Текущие награды:*\n`;
+    message += `├ За каждого реферала: \`${referralReward}\` Stars\n`;
+    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
+    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Stars\n\n`;
+    
+    // Система бонусов
+    message += `🏆 *Система бонусов:*\n`;
+    message += `├ 5 рефералов: \`50\` Stars (бонус)\n`;
+    message += `├ 10 рефералов: \`100\` Stars (бонус)\n`;
+    message += `├ 25 рефералов: \`250\` Stars (бонус)\n`;
+    message += `└ 50 рефералов: \`500\` Stars (бонус)\n\n`;
+    
+    // Прогресс к бонусам
+    message += `📊 *Ваш прогресс:*\n`;
+    const bonuses = [
+      { count: 5, reward: 50, achieved: referralsCount >= 5 },
+      { count: 10, reward: 100, achieved: referralsCount >= 10 },
+      { count: 25, reward: 250, achieved: referralsCount >= 25 },
+      { count: 50, reward: 500, achieved: referralsCount >= 50 }
+    ];
+    
+    bonuses.forEach(bonus => {
+      const status = bonus.achieved ? '✅' : '🔄';
+      const progress = bonus.achieved ? 
+        `Выполнено!` : 
+        `Осталось: ${bonus.count - referralsCount} рефералов`;
+      
+      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Stars\n`;
+      message += `└ ${progress}\n\n`;
+    });
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ наград рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки наград');
+  }
+}
+
+function getReferralLevel(referralsCount) {
+  if (referralsCount >= 50) return '👑 Легенда';
+  if (referralsCount >= 25) return '⭐ Мастер';
+  if (referralsCount >= 10) return '🔥 Эксперт';
+  if (referralsCount >= 5) return '💎 Профессионал';
+  if (referralsCount >= 1) return '🌱 Новичок';
+  return '🔰 Без рефералов';
+}
+
+async function showReferralList(ctx, user) {
+  try {
+    log(`👥 Показ списка рефералов для пользователя ${user.id}`);
+    
+    // Получаем список рефералов из базы данных
+    const referrals = await db.collection('users').find(
+      { referrerId: user.id },
+      { 
+        projection: { 
+          id: 1, 
+          firstName: 1, 
+          username: 1, 
+          level: 1, 
+          createdAt: 1,
+          stars: 1,
+          magnumCoins: 1
+        },
+        sort: { createdAt: -1 }
+      }
+    ).toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    let message = `👥 *Список ваших рефералов*\n\n`;
+    
+    if (referrals.length === 0) {
+      message += `📭 *У вас пока нет рефералов*\n\n`;
+      message += `💡 *Как привлечь рефералов:*\n`;
+      message += `├ Поделитесь своей реферальной ссылкой\n`;
+      message += `├ Расскажите друзьям о боте\n`;
+      message += `└ Получайте награды за каждого реферала\n\n`;
+    } else {
+      message += `📊 *Всего рефералов:* \`${referrals.length}\`\n\n`;
+      
+      // Показываем последние 10 рефералов
+      const recentReferrals = referrals.slice(0, 10);
+      message += `👤 *Последние рефералы:*\n\n`;
+      
+      recentReferrals.forEach((referral, index) => {
+        const daysAgo = Math.floor((Date.now() - referral.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        const timeText = daysAgo === 0 ? 'сегодня' : daysAgo === 1 ? 'вчера' : `${daysAgo} дн. назад`;
+        
+        message += `${index + 1}. ${referral.firstName || 'Пользователь'}\n`;
+        message += `├ ID: \`${referral.id}\`\n`;
+        message += `├ Уровень: \`${referral.level || 1}\`\n`;
+        message += `├ Баланс: \`${formatNumber(referral.stars || 0)}\` Stars\n`;
+        message += `├ Magnum Coins: \`${formatNumber(referral.magnumCoins || 0)}\`\n`;
+        message += `└ Присоединился: ${timeText}\n\n`;
+      });
+      
+      if (referrals.length > 10) {
+        message += `... и еще \`${referrals.length - 10}\` рефералов\n\n`;
+      }
+      
+      // Статистика активности рефералов
+      const activeReferrals = referrals.filter(r => r.level > 1);
+      const totalReferralStars = referrals.reduce((sum, r) => sum + (r.stars || 0), 0);
+      const totalReferralMagnum = referrals.reduce((sum, r) => sum + (r.magnumCoins || 0), 0);
+      
+      message += `📈 *Статистика рефералов:*\n`;
+      message += `├ Активных: \`${activeReferrals.length}\`\n`;
+      message += `├ Всего Stars у рефералов: \`${formatNumber(totalReferralStars)}\`\n`;
+      message += `└ Всего Magnum Coins у рефералов: \`${formatNumber(totalReferralMagnum)}\`\n\n`;
+    }
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ списка рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки списка рефералов');
+  }
+}
+
+// ==================== НАСТРОЙКИ ====================
+async function showSettingsMenu(ctx, user) {
+  try {
+    log(`⚙️ Показ меню настроек для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🔔 Уведомления', 'settings_notifications'),
+        Markup.button.callback('🔒 Приватность', 'settings_privacy')
+      ],
+      [
+        Markup.button.callback('🌐 Язык', 'settings_language'),
+        Markup.button.callback('🔄 Сброс', 'settings_reset')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `⚙️ *Настройки*\n\n` +
+      `🔔 *Уведомления:* ${settings.notifications !== false ? '🟢 Включены' : '🔴 Выключены'}\n` +
+      `🔒 *Приватность:* ${settings.privacy !== false ? '🟢 Стандартная' : '🔴 Расширенная'}\n` +
+      `🌐 *Язык:* ${settings.language === 'en' ? '🇺🇸 English' : '🇷🇺 Русский'}\n\n` +
+      `💡 *Выберите раздел для настройки:*\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню настроек');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек');
+  }
+}
+
+async function showNotificationSettings(ctx, user) {
+  try {
+    log(`🔔 Показ настроек уведомлений для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const notificationsEnabled = settings.notifications !== false;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          notificationsEnabled ? '🔴 Отключить уведомления' : '🟢 Включить уведомления',
+          'toggle_notifications'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    const message = 
+      `🔔 *Настройки уведомлений*\n\n` +
+      `📱 *Текущий статус:* ${notificationsEnabled ? '🟢 Включены' : '🔴 Выключены'}\n\n` +
+      `📋 *Типы уведомлений:*\n` +
+      `├ Уведомления о фарме\n` +
+      `├ Уведомления о майнинге\n` +
+      `├ Уведомления о бонусах\n` +
+      `├ Уведомления о достижениях\n` +
+      `└ Уведомления о рефералах\n\n` +
+      `💡 *При отключении уведомлений вы не будете получать:*\n` +
+      `├ Уведомления о готовности фарма\n` +
+      `├ Уведомления о наградах майнера\n` +
+      `├ Уведомления о ежедневных бонусах\n` +
+      `└ Другие системные уведомления\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек уведомлений');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек уведомлений');
+  }
+}
+
+async function showPrivacySettings(ctx, user) {
+  try {
+    log(`🔒 Показ настроек приватности для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const privacyEnabled = settings.privacy !== false;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          privacyEnabled ? '🔴 Расширенная приватность' : '🟢 Стандартная приватность',
+          'toggle_privacy'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    const message = 
+      `🔒 *Настройки приватности*\n\n` +
+      `🛡️ *Текущий режим:* ${privacyEnabled ? '🟢 Стандартная' : '🔴 Расширенная'}\n\n` +
+      `📊 *Стандартная приватность:*\n` +
+      `├ Ваш ID виден в статистике\n` +
+      `├ Имя отображается в списках\n` +
+      `├ Уровень виден другим игрокам\n` +
+      `└ Балансы скрыты\n\n` +
+      `🔒 *Расширенная приватность:*\n` +
+      `├ ID скрыт в статистике\n` +
+      `├ Имя скрыто в списках\n` +
+      `├ Уровень скрыт\n` +
+      `└ Все данные приватны\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек приватности');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек приватности');
+  }
+}
+
+async function showLanguageSettings(ctx, user) {
+  try {
+    log(`🌐 Показ настроек языка для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const currentLanguage = settings.language || 'ru';
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          currentLanguage === 'ru' ? '✅ 🇷🇺 Русский' : '🇷🇺 Русский',
+          'set_language_ru'
+        ),
+        Markup.button.callback(
+          currentLanguage === 'en' ? '✅ 🇺🇸 English' : '🇺🇸 English',
+          'set_language_en'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    const message = 
+      `🌐 *Настройки языка*\n\n` +
+      `🗣️ *Текущий язык:* ${currentLanguage === 'ru' ? '🇷🇺 Русский' : '🇺🇸 English'}\n\n` +
+      `📝 *Выберите язык интерфейса:*\n\n` +
+      `🇷🇺 *Русский:*\n` +
+      `├ Полная поддержка русского языка\n` +
+      `├ Все меню и сообщения на русском\n` +
+      `└ Рекомендуется для русскоязычных пользователей\n\n` +
+      `🇺🇸 *English:*\n` +
+      `├ Full English language support\n` +
+      `├ All menus and messages in English\n` +
+      `└ Recommended for English-speaking users\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек языка');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек языка');
+  }
+}
+
+async function showResetSettings(ctx, user) {
+  try {
+    log(`🔄 Показ настроек сброса для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⚠️ Сбросить настройки', 'confirm_reset'),
+        Markup.button.callback('🔙 Назад', 'settings')
+      ]
+    ]);
+    
+    const message = 
+      `🔄 *Сброс настроек*\n\n` +
+      `⚠️ *Внимание!* Это действие нельзя отменить.\n\n` +
+      `🗑️ *Что будет сброшено:*\n` +
+      `├ Все настройки уведомлений\n` +
+      `├ Настройки приватности\n` +
+      `├ Языковые настройки\n` +
+      `└ Другие пользовательские настройки\n\n` +
+      `✅ *Что НЕ будет затронуто:*\n` +
+      `├ Ваш прогресс в игре\n` +
+      `├ Балансы (Stars, Magnum Coins)\n` +
+      `├ Достижения и рефералы\n` +
+      `└ Статистика и уровень\n\n` +
+      `💡 *После сброса:*\n` +
+      `├ Уведомления будут включены\n` +
+      `├ Приватность будет стандартной\n` +
+      `└ Язык будет русский\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек сброса');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек сброса');
+  }
+}
+
+async function toggleNotificationSetting(ctx, user) {
+  try {
+    log(`🔔 Переключение настроек уведомлений для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const newNotificationState = settings.notifications === false ? true : false;
+    
+    // Обновляем настройки в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings.notifications': newNotificationState,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    const status = newNotificationState ? 'включены' : 'выключены';
+    log(`✅ Уведомления ${status} для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery(`✅ Уведомления ${status}!`);
+    
+    // Обновляем меню настроек уведомлений
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showNotificationSettings(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Переключение уведомлений');
+    await ctx.answerCbQuery('❌ Ошибка изменения настроек');
+  }
+}
+
+async function togglePrivacySetting(ctx, user) {
+  try {
+    log(`🔒 Переключение настроек приватности для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const newPrivacyState = settings.privacy === false ? true : false;
+    
+    // Обновляем настройки в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings.privacy': newPrivacyState,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    const status = newPrivacyState ? 'стандартная' : 'расширенная';
+    log(`✅ Приватность изменена на ${status} для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery(`✅ Приватность: ${status}!`);
+    
+    // Обновляем меню настроек приватности
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showPrivacySettings(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Переключение приватности');
+    await ctx.answerCbQuery('❌ Ошибка изменения настроек');
+  }
+}
+
+async function setLanguage(ctx, user, language) {
+  try {
+    log(`🌐 Установка языка ${language} для пользователя ${user.id}`);
+    
+    // Обновляем настройки в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings.language': language,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    const langName = language === 'ru' ? 'русский' : 'English';
+    log(`✅ Язык изменен на ${langName} для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery(`✅ Язык изменен на ${langName}!`);
+    
+    // Обновляем меню настроек языка
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showLanguageSettings(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Установка языка');
+    await ctx.answerCbQuery('❌ Ошибка изменения языка');
+  }
+}
+
+async function resetUserSettings(ctx, user) {
+  try {
+    log(`🔄 Сброс настроек для пользователя ${user.id}`);
+    
+    // Сбрасываем все настройки к значениям по умолчанию
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings': {
+            notifications: true,
+            privacy: true,
+            language: 'ru'
+          },
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    log(`✅ Настройки сброшены для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery('✅ Настройки сброшены!');
+    
+    // Возвращаемся в главное меню настроек
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showSettingsMenu(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Сброс настроек');
+    await ctx.answerCbQuery('❌ Ошибка сброса настроек');
+  }
+}
+
 // ==================== СОЗДАНИЕ БОТА ====================
 const bot = new Telegraf(config.BOT_TOKEN);
 
@@ -2035,6 +2660,190 @@ bot.action('achievements_rewards', async (ctx) => {
     await showAchievementsRewards(ctx, user);
   } catch (error) {
     logError(error, 'Награды достижений');
+  }
+});
+
+// Рефералы
+bot.action('referrals', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralsMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню рефералов');
+  }
+});
+
+bot.action('referral_link', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralLink(ctx, user);
+  } catch (error) {
+    logError(error, 'Реферальная ссылка');
+  }
+});
+
+bot.action('referral_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика рефералов');
+  }
+});
+
+bot.action('referral_rewards', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralRewards(ctx, user);
+  } catch (error) {
+    logError(error, 'Награды рефералов');
+  }
+});
+
+bot.action('referral_list', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralList(ctx, user);
+  } catch (error) {
+    logError(error, 'Список рефералов');
+  }
+});
+
+bot.action('copy_referral_link', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const botUsername = (await ctx.telegram.getMe()).username;
+    const referralLink = `https://t.me/${botUsername}?start=${user.id}`;
+    
+    await ctx.answerCbQuery('📋 Ссылка скопирована в буфер обмена!');
+    await ctx.reply(`🔗 Ваша реферальная ссылка:\n\`${referralLink}\``, { parse_mode: 'Markdown' });
+  } catch (error) {
+    logError(error, 'Копирование реферальной ссылки');
+    await ctx.answerCbQuery('❌ Ошибка копирования ссылки');
+  }
+});
+
+// Настройки
+bot.action('settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showSettingsMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню настроек');
+  }
+});
+
+bot.action('settings_notifications', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showNotificationSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки уведомлений');
+  }
+});
+
+bot.action('settings_privacy', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showPrivacySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки приватности');
+  }
+});
+
+bot.action('settings_language', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showLanguageSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки языка');
+  }
+});
+
+bot.action('settings_reset', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showResetSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Сброс настроек');
+  }
+});
+
+// Переключатели настроек
+bot.action('toggle_notifications', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await toggleNotificationSetting(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение уведомлений');
+  }
+});
+
+bot.action('toggle_privacy', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await togglePrivacySetting(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение приватности');
+  }
+});
+
+bot.action('set_language_ru', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await setLanguage(ctx, user, 'ru');
+  } catch (error) {
+    logError(error, 'Установка языка RU');
+  }
+});
+
+bot.action('set_language_en', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await setLanguage(ctx, user, 'en');
+  } catch (error) {
+    logError(error, 'Установка языка EN');
+  }
+});
+
+bot.action('confirm_reset', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await resetUserSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Сброс настроек пользователя');
   }
 });
 
