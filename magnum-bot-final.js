@@ -6,21 +6,21 @@ const http = require('http');
 // Импорт модулей удален - все функции перенесены в основной файл
 
 // ==================== КОНФИГУРАЦИЯ ====================
-log('🚀 Запуск Magnum Stars Bot...');
-log('📋 Проверка переменных окружения...');
+console.log('🚀 Запуск Magnum Stars Bot...');
+console.log('📋 Проверка переменных окружения...');
 
 // Проверяем обязательные переменные окружения
 if (!process.env.BOT_TOKEN) {
-  logError(new Error('BOT_TOKEN не найден'), 'Переменные окружения');
+  console.error('❌ BOT_TOKEN не найден');
   process.exit(1);
 }
 
 if (!process.env.MONGODB_URI) {
-  logError(new Error('MONGODB_URI не найден'), 'Переменные окружения');
+  console.error('❌ MONGODB_URI не найден');
   process.exit(1);
 }
 
-log('✅ Все обязательные переменные окружения найдены');
+console.log('✅ Все обязательные переменные окружения найдены');
 
 const config = {
   BOT_TOKEN: process.env.BOT_TOKEN,
@@ -67,10 +67,10 @@ let server;
 const PORT = process.env.PORT || 3000;
 
 function startHttpServer() {
-  log(`🔧 Создание HTTP сервера на порту ${PORT}...`);
+  console.log(`🔧 Создание HTTP сервера на порту ${PORT}...`);
   
   server = http.createServer((req, res) => {
-    log(`📡 HTTP запрос: ${req.method} ${req.url}`);
+    console.log(`📡 HTTP запрос: ${req.method} ${req.url}`);
     
     if (req.url === '/' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -79,20 +79,20 @@ function startHttpServer() {
         message: 'Magnum Stars Bot is running',
         timestamp: new Date().toISOString()
       }));
-      log('✅ Health check ответ отправлен');
+      console.log('✅ Health check ответ отправлен');
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
-      log('❌ 404 ответ отправлен');
+      console.log('❌ 404 ответ отправлен');
     }
   });
 
   server.listen(PORT, () => {
-    log(`🌐 HTTP сервер запущен на порту ${PORT}`);
+    console.log(`🌐 HTTP сервер запущен на порту ${PORT}`);
   });
   
   server.on('error', (error) => {
-    logError(error, 'HTTP сервер');
+    console.error('❌ Ошибка HTTP сервера:', error);
   });
 }
 
@@ -102,109 +102,108 @@ let client;
 
 async function connectDB() {
   try {
-    logFunction('connectDB');
-    log('🔌 Подключение к MongoDB...');
+    console.log('🔌 Подключение к MongoDB...');
     
-    logDebug('Параметры подключения к MongoDB', {
+    console.log('Параметры подключения к MongoDB:', {
       uri: config.MONGODB_URI ? 'установлен' : 'отсутствует',
       uriLength: config.MONGODB_URI?.length || 0
     });
     
     client = new MongoClient(config.MONGODB_URI);
     await client.connect();
-    log('🔌 MongoDB клиент подключен');
+    console.log('🔌 MongoDB клиент подключен');
     
     db = client.db();
-    log('📊 База данных получена');
+    console.log('📊 База данных получена');
     
-    logDebug('Информация о базе данных', {
+    console.log('Информация о базе данных:', {
       databaseName: db.databaseName,
       collections: await db.listCollections().toArray().then(cols => cols.map(c => c.name))
     });
     
-    log('📋 Создание индексов для оптимизации...');
+    console.log('📋 Создание индексов для оптимизации...');
     
     // Создаем индексы для оптимизации
-    log('📋 Создание индексов для коллекции users...');
+    console.log('📋 Создание индексов для коллекции users...');
     await db.collection('users').createIndex({ id: 1 }, { unique: true });
     await db.collection('users').createIndex({ username: 1 });
     await db.collection('users').createIndex({ 'miner.active': 1 });
     await db.collection('users').createIndex({ lastSeen: -1 });
     await db.collection('users').createIndex({ referrerId: 1 });
-    log('✅ Индексы для users созданы');
+    console.log('✅ Индексы для users созданы');
     
-    log('📋 Создание индексов для коллекции promocodes...');
+    console.log('📋 Создание индексов для коллекции promocodes...');
     await db.collection('promocodes').createIndex({ code: 1 }, { unique: true });
     await db.collection('promocodes').createIndex({ isActive: 1 });
     await db.collection('promocodes').createIndex({ expiresAt: 1 });
-    log('✅ Индексы для promocodes созданы');
+    console.log('✅ Индексы для promocodes созданы');
     
-    log('📋 Создание индексов для коллекции withdrawalRequests...');
+    console.log('📋 Создание индексов для коллекции withdrawalRequests...');
     await db.collection('withdrawalRequests').createIndex({ userId: 1 });
     await db.collection('withdrawalRequests').createIndex({ status: 1 });
     await db.collection('withdrawalRequests').createIndex({ createdAt: -1 });
-    log('✅ Индексы для withdrawalRequests созданы');
+    console.log('✅ Индексы для withdrawalRequests созданы');
     
-    log('📋 Создание индексов для коллекции supportTickets...');
+    console.log('📋 Создание индексов для коллекции supportTickets...');
     await db.collection('supportTickets').createIndex({ userId: 1 });
     await db.collection('supportTickets').createIndex({ status: 1 });
     await db.collection('supportTickets').createIndex({ createdAt: -1 });
     await db.collection('supportTickets').createIndex({ id: 1 }, { unique: true });
     await db.collection('supportTickets').createIndex({ adminId: 1 });
     await db.collection('supportTickets').createIndex({ updatedAt: -1 });
-    log('✅ Индексы для supportTickets созданы');
+    console.log('✅ Индексы для supportTickets созданы');
     
-    log('📋 Создание индексов для коллекции taskChecks...');
+    console.log('📋 Создание индексов для коллекции taskChecks...');
     await db.collection('taskChecks').createIndex({ userId: 1 });
     await db.collection('taskChecks').createIndex({ status: 1 });
     await db.collection('taskChecks').createIndex({ createdAt: -1 });
-    log('✅ Индексы для taskChecks созданы');
+    console.log('✅ Индексы для taskChecks созданы');
     
-    log('📋 Создание индексов для коллекции dailyTasks...');
+    console.log('📋 Создание индексов для коллекции dailyTasks...');
     await db.collection('dailyTasks').createIndex({ userId: 1 });
     await db.collection('dailyTasks').createIndex({ date: 1 });
     await db.collection('dailyTasks').createIndex({ completed: 1 });
-    log('✅ Индексы для dailyTasks созданы');
+    console.log('✅ Индексы для dailyTasks созданы');
     
-    log('📋 Создание индексов для коллекции exchangeHistory...');
+    console.log('📋 Создание индексов для коллекции exchangeHistory...');
     await db.collection('exchangeHistory').createIndex({ userId: 1 });
     await db.collection('exchangeHistory').createIndex({ timestamp: -1 });
-    log('✅ Индексы для exchangeHistory созданы');
+    console.log('✅ Индексы для exchangeHistory созданы');
     
     // Создаем индекс для резерва с проверкой на существующие записи
-    log('📋 Создание индекса для коллекции reserve...');
+    console.log('📋 Создание индекса для коллекции reserve...');
     try {
       await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
-      log('✅ Индекс для reserve создан');
+      console.log('✅ Индекс для reserve создан');
     } catch (error) {
       if (error.code === 11000) {
         // Если есть дублирующиеся записи, удаляем их и создаем индекс заново
-        log('🔄 Исправляем дублирующиеся записи в резерве...');
+        console.log('🔄 Исправляем дублирующиеся записи в резерве...');
         const deleteResult = await db.collection('reserve').deleteMany({ currency: null });
-        logDebug('Удаление дублирующихся записей', { deletedCount: deleteResult.deletedCount });
+        console.log('Удаление дублирующихся записей:', { deletedCount: deleteResult.deletedCount });
         await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
-        log('✅ Индекс для reserve пересоздан');
+        console.log('✅ Индекс для reserve пересоздан');
       } else {
         throw error;
       }
     }
     
-    log('✅ Все индексы созданы успешно');
-    log('✅ База данных подключена');
+    console.log('✅ Все индексы созданы успешно');
+    console.log('✅ База данных подключена');
     
-    log('💰 Инициализация резерва...');
+    console.log('💰 Инициализация резерва...');
     // Инициализируем резерв
     await initializeReserve();
-    log('✅ Резерв инициализирован');
+    console.log('✅ Резерв инициализирован');
     
-    logDebug('Подключение к БД завершено', {
+    console.log('Подключение к БД завершено:', {
       databaseName: db.databaseName,
       collectionsCount: (await db.listCollections().toArray()).length
     });
     
   } catch (error) {
-    logError(error, 'Подключение к MongoDB');
-    logDebug('Ошибка подключения к БД', {
+    console.error('❌ Ошибка подключения к MongoDB:', error);
+    console.log('Ошибка подключения к БД:', {
       error: error.message,
       stack: error.stack,
       mongoUri: config.MONGODB_URI ? 'установлен' : 'отсутствует'
@@ -231,12 +230,12 @@ async function initializeReserve() {
       };
       
       await db.collection('reserve').insertOne(reserve);
-      log('💰 Резерв валют инициализирован');
+      console.log('💰 Резерв валют инициализирован');
           } else {
-        log('💰 Резерв валют уже существует');
+        console.log('💰 Резерв валют уже существует');
       }
   } catch (error) {
-    logError(error, 'Инициализация резерва');
+    console.error('❌ Ошибка инициализации резерва:', error);
   }
 }
 
@@ -7063,8 +7062,8 @@ bot.action('admin_subscription_add', async (ctx) => {
 
 // Обработка ошибок
 bot.catch((err, ctx) => {
-  logError(err, `Обработка ${ctx.updateType}`);
-  logDebug('Ошибка в боте', {
+  console.error('❌ Ошибка в боте:', err);
+  console.log('Ошибка в боте:', {
     updateType: ctx.updateType,
     userId: ctx.from?.id,
     chatId: ctx.chat?.id,
@@ -7078,27 +7077,26 @@ bot.catch((err, ctx) => {
 // ==================== ЗАПУСК БОТА ====================
 async function startBot() {
   try {
-    logFunction('startBot');
-    log('🚀 Начинаем запуск Magnum Stars Bot...');
+    console.log('🚀 Начинаем запуск Magnum Stars Bot...');
     
-    logDebug('Проверка переменных окружения', {
+    console.log('Проверка переменных окружения:', {
       BOT_TOKEN: process.env.BOT_TOKEN ? 'установлен' : 'отсутствует',
       MONGODB_URI: process.env.MONGODB_URI ? 'установлен' : 'отсутствует',
       PORT: process.env.PORT || 3000,
       NODE_ENV: process.env.NODE_ENV || 'development'
     });
     
-    log('🔗 Подключение к базе данных...');
+    console.log('🔗 Подключение к базе данных...');
     await connectDB();
-    log('✅ База данных подключена успешно');
+    console.log('✅ База данных подключена успешно');
     
-    log('🌐 Запуск HTTP сервера...');
+    console.log('🌐 Запуск HTTP сервера...');
     // Запускаем HTTP сервер для health check
     startHttpServer();
-    log('✅ HTTP сервер запущен');
+    console.log('✅ HTTP сервер запущен');
     
-    log('⏰ Настройка интервалов...');
-    logDebug('Настройка интервалов', {
+    console.log('⏰ Настройка интервалов...');
+    console.log('Настройка интервалов:', {
       minerRewardsInterval: '30 минут',
       cacheCleanupInterval: '5 минут',
       userCacheTTL: config.USER_CACHE_TTL,
@@ -7107,13 +7105,13 @@ async function startBot() {
     
     // Запускаем обработку майнера каждые 30 минут
     setInterval(() => {
-      log('⛏️ Запуск обработки наград майнера по расписанию');
+      console.log('⛏️ Запуск обработки наград майнера по расписанию');
       processMinerRewards();
     }, 30 * 60 * 1000);
     
     // Очистка кеша каждые 5 минут
     setInterval(() => {
-      log('🧹 Запуск очистки кеша по расписанию');
+      console.log('🧹 Запуск очистки кеша по расписанию');
       const now = Date.now();
       let userCacheCleared = 0;
       let statsCacheCleared = 0;
@@ -7133,15 +7131,15 @@ async function startBot() {
       }
       
       if (userCacheCleared > 0 || statsCacheCleared > 0) {
-        log(`🧹 Очистка кеша завершена: пользователей ${userCacheCleared}, статистики ${statsCacheCleared}`);
+        console.log(`🧹 Очистка кеша завершена: пользователей ${userCacheCleared}, статистики ${statsCacheCleared}`);
       }
     }, 5 * 60 * 1000);
     
-    log('🤖 Запуск Telegram бота...');
+    console.log('🤖 Запуск Telegram бота...');
     await bot.launch();
-    log('🚀 Magnum Stars Bot запущен успешно!');
+    console.log('🚀 Magnum Stars Bot запущен успешно!');
     
-    logDebug('Бот запущен', {
+    console.log('Бот запущен:', {
       botInfo: await bot.telegram.getMe(),
       config: {
         farmCooldown: config.FARM_COOLDOWN,
@@ -7154,10 +7152,10 @@ async function startBot() {
     
     // Graceful stop
     process.once('SIGINT', () => {
-      log('🛑 Получен сигнал SIGINT, останавливаем бота...');
+      console.log('🛑 Получен сигнал SIGINT, останавливаем бота...');
       if (server) {
         server.close(() => {
-          log('🌐 HTTP сервер остановлен');
+          console.log('🌐 HTTP сервер остановлен');
           bot.stop('SIGINT');
         });
       } else {
@@ -7166,10 +7164,10 @@ async function startBot() {
     });
     
     process.once('SIGTERM', () => {
-      log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
+      console.log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
       if (server) {
         server.close(() => {
-          log('🌐 HTTP сервер остановлен');
+          console.log('🌐 HTTP сервер остановлен');
           bot.stop('SIGTERM');
         });
       } else {
@@ -7177,11 +7175,11 @@ async function startBot() {
       }
     });
     
-    log('✅ Все обработчики сигналов настроены');
+    console.log('✅ Все обработчики сигналов настроены');
     
   } catch (error) {
-    logError(error, 'Запуск бота');
-    logDebug('Критическая ошибка при запуске', {
+    console.error('❌ Критическая ошибка запуска бота:', error);
+    console.log('Критическая ошибка при запуске:', {
       error: error.message,
       stack: error.stack,
       config: {
@@ -7195,8 +7193,8 @@ async function startBot() {
 
 // Обработчики необработанных ошибок
 process.on('uncaughtException', (error) => {
-  logError(error, 'Необработанная ошибка (uncaughtException)');
-  logDebug('Критическая ошибка uncaughtException', {
+  console.error('❌ Необработанная ошибка (uncaughtException):', error);
+  console.log('Критическая ошибка uncaughtException:', {
     error: error.message,
     stack: error.stack,
     timestamp: new Date().toISOString(),
@@ -7207,8 +7205,8 @@ process.on('uncaughtException', (error) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logError(new Error(`Необработанное отклонение промиса: ${reason}`), 'unhandledRejection');
-  logDebug('Критическая ошибка unhandledRejection', {
+  console.error('❌ Необработанное отклонение промиса:', reason);
+  console.log('Критическая ошибка unhandledRejection:', {
     reason: reason,
     promise: promise,
     timestamp: new Date().toISOString(),
