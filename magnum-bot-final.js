@@ -4957,11 +4957,11 @@ async function handleCreateSupportTicket(ctx, user, text) {
 // Обработка ответа админа на тикет
 async function handleAdminAnswerTicket(ctx, user, text) {
   try {
-    logFunction('handleAdminAnswerTicket', user.id, { textLength: text.length });
+    console.log(`✅ Админ ${user.id} отвечает на тикет, длина текста: ${text.length}`);
     
     // Извлекаем ID тикета из adminState
     const ticketId = user.adminState.replace('answering_ticket_', '');
-    log(`✅ Админ ${user.id} отвечает на тикет ${ticketId}`);
+    console.log(`✅ Админ ${user.id} отвечает на тикет ${ticketId}`);
     
     if (text.length < 5) {
       await ctx.reply('❌ Ответ слишком короткий. Пожалуйста, напишите более подробный ответ.');
@@ -4995,7 +4995,7 @@ async function handleAdminAnswerTicket(ctx, user, text) {
       }
     );
     
-    logDebug(`Ответ админа сохранен в БД`, {
+    console.log(`Ответ админа сохранен в БД:`, {
       ticketId: ticketId,
       adminId: user.id,
       responseLength: text.length,
@@ -5016,14 +5016,9 @@ async function handleAdminAnswerTicket(ctx, user, text) {
         parse_mode: 'Markdown'
       });
       
-      log(`✅ Ответ отправлен пользователю ${ticket.userId}`);
+      console.log(`✅ Ответ отправлен пользователю ${ticket.userId}`);
     } catch (error) {
-      logError(error, `Отправка ответа пользователю ${ticket.userId}`);
-      logDebug(`Ошибка отправки ответа`, {
-        userId: ticket.userId,
-        ticketId: ticketId,
-        error: error.message
-      });
+      console.error(`❌ Ошибка отправки ответа пользователю ${ticket.userId}:`, error);
     }
     
     // Обновляем сообщение в канале поддержки
@@ -5045,9 +5040,9 @@ async function handleAdminAnswerTicket(ctx, user, text) {
       await ctx.telegram.sendMessage(supportChannel, message, {
         parse_mode: 'Markdown'
       });
-      log(`✅ Обновленное сообщение отправлено в канал поддержки`);
+      console.log(`✅ Обновленное сообщение отправлено в канал поддержки`);
     } catch (error) {
-      logError(error, `Отправка обновленного сообщения в канал поддержки`);
+      console.error(`❌ Ошибка отправки обновленного сообщения в канал поддержки:`, error);
     }
     
     // Сбрасываем состояние админа
@@ -5055,6 +5050,9 @@ async function handleAdminAnswerTicket(ctx, user, text) {
       { id: user.id },
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
     
     // Отправляем подтверждение админу
     const adminKeyboard = Markup.inlineKeyboard([
@@ -5074,17 +5072,10 @@ async function handleAdminAnswerTicket(ctx, user, text) {
       reply_markup: adminKeyboard.reply_markup
     });
     
-    log(`✅ Ответ на тикет ${ticketId} успешно обработан админом ${user.id}`);
+    console.log(`✅ Ответ на тикет ${ticketId} успешно обработан админом ${user.id}`);
     
   } catch (error) {
-    logError(error, `Ответ админа ${user.id} на тикет`);
-    logDebug(`Ошибка ответа админа`, {
-      adminId: user.id,
-      adminState: user.adminState,
-      text: text,
-      error: error.message,
-      stack: error.stack
-    });
+    console.error(`❌ Ошибка ответа админа ${user.id} на тикет:`, error);
     await ctx.reply('❌ Ошибка отправки ответа. Попробуйте позже.');
   }
 }
@@ -5450,14 +5441,13 @@ bot.action('contact_support', async (ctx) => {
 // Обработчик для ответа на тикет
 bot.action(/^support_answer_(.+)$/, async (ctx) => {
   try {
-    logFunction('bot.action.support_answer', ctx.from.id, { ticketId: ctx.match[1] });
-    log(`✅ Админ ${ctx.from.id} отвечает на тикет ${ctx.match[1]}`);
+    console.log(`✅ Админ ${ctx.from.id} отвечает на тикет ${ctx.match[1]}`);
     
     const ticketId = ctx.match[1];
     const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
-      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
@@ -5467,6 +5457,9 @@ bot.action(/^support_answer_(.+)$/, async (ctx) => {
       { id: admin.id },
       { $set: { adminState: `answering_ticket_${ticketId}`, updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя, чтобы adminState обновился
+    userCache.delete(admin.id);
     
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', `support_cancel_${ticketId}`)]
@@ -5486,10 +5479,10 @@ bot.action(/^support_answer_(.+)$/, async (ctx) => {
       reply_markup: keyboard.reply_markup
     });
     
-    log(`✅ Админу ${ctx.from.id} показана форма ответа на тикет ${ticketId}`);
+    console.log(`✅ Админу ${ctx.from.id} показана форма ответа на тикет ${ticketId}`);
     
   } catch (error) {
-    logError(error, `Ответ на тикет ${ctx.match[1]} админом ${ctx.from.id}`);
+    console.error(`❌ Ошибка ответа на тикет ${ctx.match[1]} админом ${ctx.from.id}:`, error);
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
@@ -5497,14 +5490,13 @@ bot.action(/^support_answer_(.+)$/, async (ctx) => {
 // Обработчик для установки статуса "В обработке"
 bot.action(/^support_progress_(.+)$/, async (ctx) => {
   try {
-    logFunction('bot.action.support_progress', ctx.from.id, { ticketId: ctx.match[1] });
-    log(`⏳ Админ ${ctx.from.id} устанавливает статус "В обработке" для тикета ${ctx.match[1]}`);
+    console.log(`⏳ Админ ${ctx.from.id} устанавливает статус "В обработке" для тикета ${ctx.match[1]}`);
     
     const ticketId = ctx.match[1];
     const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
-      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
@@ -5532,9 +5524,9 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
           `⏰ Мы работаем над решением вашей проблемы.\n` +
           `📧 Ответим в ближайшее время!`
         );
-        log(`✅ Уведомление отправлено пользователю ${ticket.userId}`);
+        console.log(`✅ Уведомление отправлено пользователю ${ticket.userId}`);
       } catch (error) {
-        logError(error, `Отправка уведомления пользователю ${ticket.userId}`);
+        console.error(`❌ Ошибка отправки уведомления пользователю ${ticket.userId}:`, error);
       }
     }
     
@@ -5566,10 +5558,10 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
     });
     
     await ctx.answerCbQuery('✅ Статус обновлен');
-    log(`✅ Статус тикета ${ticketId} обновлен на "В обработке"`);
+    console.log(`✅ Статус тикета ${ticketId} обновлен на "В обработке"`);
     
   } catch (error) {
-    logError(error, `Установка статуса "В обработке" для тикета ${ctx.match[1]}`);
+    console.error(`❌ Ошибка установки статуса "В обработке" для тикета ${ctx.match[1]}:`, error);
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
@@ -5577,14 +5569,13 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
 // Обработчик для отклонения тикета
 bot.action(/^support_reject_(.+)$/, async (ctx) => {
   try {
-    logFunction('bot.action.support_reject', ctx.from.id, { ticketId: ctx.match[1] });
-    log(`❌ Админ ${ctx.from.id} отклоняет тикет ${ctx.match[1]}`);
+    console.log(`❌ Админ ${ctx.from.id} отклоняет тикет ${ctx.match[1]}`);
     
     const ticketId = ctx.match[1];
     const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
-      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
@@ -5612,9 +5603,9 @@ bot.action(/^support_reject_(.+)$/, async (ctx) => {
           `⚠️ Ваш тикет был отклонен.\n` +
           `💡 Попробуйте создать новый тикет с более подробным описанием проблемы.`
         );
-        log(`✅ Уведомление об отклонении отправлено пользователю ${ticket.userId}`);
+        console.log(`✅ Уведомление об отклонении отправлено пользователю ${ticket.userId}`);
       } catch (error) {
-        logError(error, `Отправка уведомления об отклонении пользователю ${ticket.userId}`);
+        console.error(`❌ Ошибка отправки уведомления об отклонении пользователю ${ticket.userId}:`, error);
       }
     }
     
@@ -5635,10 +5626,10 @@ bot.action(/^support_reject_(.+)$/, async (ctx) => {
     });
     
     await ctx.answerCbQuery('✅ Тикет отклонен');
-    log(`✅ Тикет ${ticketId} отклонен админом ${ctx.from.id}`);
+    console.log(`✅ Тикет ${ticketId} отклонен админом ${ctx.from.id}`);
     
   } catch (error) {
-    logError(error, `Отклонение тикета ${ctx.match[1]}`);
+    console.error(`❌ Ошибка отклонения тикета ${ctx.match[1]}:`, error);
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
@@ -5646,14 +5637,13 @@ bot.action(/^support_reject_(.+)$/, async (ctx) => {
 // Обработчик для закрытия тикета
 bot.action(/^support_close_(.+)$/, async (ctx) => {
   try {
-    logFunction('bot.action.support_close', ctx.from.id, { ticketId: ctx.match[1] });
-    log(`🔒 Админ ${ctx.from.id} закрывает тикет ${ctx.match[1]}`);
+    console.log(`🔒 Админ ${ctx.from.id} закрывает тикет ${ctx.match[1]}`);
     
     const ticketId = ctx.match[1];
     const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
-      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
@@ -5681,9 +5671,9 @@ bot.action(/^support_close_(.+)$/, async (ctx) => {
           `✅ Ваш тикет был закрыт.\n` +
           `💡 Если у вас есть новые вопросы, создайте новый тикет.`
         );
-        log(`✅ Уведомление о закрытии отправлено пользователю ${ticket.userId}`);
+        console.log(`✅ Уведомление о закрытии отправлено пользователю ${ticket.userId}`);
       } catch (error) {
-        logError(error, `Отправка уведомления о закрытии пользователю ${ticket.userId}`);
+        console.error(`❌ Ошибка отправки уведомления о закрытии пользователю ${ticket.userId}:`, error);
       }
     }
     
@@ -5704,10 +5694,10 @@ bot.action(/^support_close_(.+)$/, async (ctx) => {
     });
     
     await ctx.answerCbQuery('✅ Тикет закрыт');
-    log(`✅ Тикет ${ticketId} закрыт админом ${ctx.from.id}`);
+    console.log(`✅ Тикет ${ticketId} закрыт админом ${ctx.from.id}`);
     
   } catch (error) {
-    logError(error, `Закрытие тикета ${ctx.match[1]}`);
+    console.error(`❌ Ошибка закрытия тикета ${ctx.match[1]}:`, error);
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
@@ -5715,14 +5705,13 @@ bot.action(/^support_close_(.+)$/, async (ctx) => {
 // Обработчик для отмены ответа на тикет
 bot.action(/^support_cancel_(.+)$/, async (ctx) => {
   try {
-    logFunction('bot.action.support_cancel', ctx.from.id, { ticketId: ctx.match[1] });
-    log(`🔙 Админ ${ctx.from.id} отменяет ответ на тикет ${ctx.match[1]}`);
+    console.log(`🔙 Админ ${ctx.from.id} отменяет ответ на тикет ${ctx.match[1]}`);
     
     const ticketId = ctx.match[1];
     const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
-      log(`❌ Пользователь ${ctx.from.id} не является админом`);
+      console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
@@ -5732,6 +5721,9 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
       { id: admin.id },
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(admin.id);
     
     // Возвращаемся к исходному сообщению тикета
     const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
@@ -5767,10 +5759,10 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
     }
     
     await ctx.answerCbQuery('✅ Отменено');
-    log(`✅ Ответ на тикет ${ticketId} отменен админом ${ctx.from.id}`);
+    console.log(`✅ Ответ на тикет ${ticketId} отменен админом ${ctx.from.id}`);
     
   } catch (error) {
-    logError(error, `Отмена ответа на тикет ${ctx.match[1]}`);
+    console.error(`❌ Ошибка отмены ответа на тикет ${ctx.match[1]}:`, error);
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
