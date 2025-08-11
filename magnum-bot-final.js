@@ -456,7 +456,8 @@ async function getUser(id, ctx = null) {
         level: cached.level,
         magnumCoins: cached.magnumCoins,
         stars: cached.stars,
-        banned: cached.banned
+        banned: cached.banned,
+        adminState: cached.adminState
       });
       
       // Проверяем, не заблокирован ли пользователь
@@ -623,6 +624,11 @@ async function getUser(id, ctx = null) {
     setCachedUser(id, user);
     
     console.log(`✅ Пользователь ${id} успешно загружен`);
+    console.log(`📊 Данные пользователя ${id}:`, {
+      adminState: user.adminState,
+      level: user.level,
+      isAdmin: isAdmin(user.id)
+    });
     return user;
   } catch (error) {
     console.error(`❌ Ошибка получения пользователя ${id}:`, error);
@@ -4215,6 +4221,12 @@ bot.on('text', async (ctx) => {
     
     const text = ctx.message.text;
     
+    console.log(`🔍 Проверка adminState для пользователя ${ctx.from.id}:`, {
+      adminState: user.adminState,
+      isAdmin: isAdmin(user.id),
+      textLength: text.length
+    });
+    
     // Проверяем, есть ли у пользователя adminState
     if (user.adminState) {
       console.log(`Обработка текста пользователя ${ctx.from.id} с adminState:`, {
@@ -5458,8 +5470,11 @@ bot.action(/^support_answer_(.+)$/, async (ctx) => {
       { $set: { adminState: `answering_ticket_${ticketId}`, updatedAt: new Date() } }
     );
     
+    console.log(`💾 adminState установлен в БД для админа ${admin.id}: answering_ticket_${ticketId}`);
+    
     // Очищаем кеш пользователя, чтобы adminState обновился
     userCache.delete(admin.id);
+    console.log(`🗑️ Кеш пользователя ${admin.id} очищен`);
     
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', `support_cancel_${ticketId}`)]
