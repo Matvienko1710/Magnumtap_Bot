@@ -863,11 +863,11 @@ async function showFarmMenu(ctx, user) {
   const message = 
     `🌾 *Фарм*\n\n` +
     `⏰ *Статус:* ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
-    `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Stars\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
+    `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Magnum Coins\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
     `📊 *Всего фармов:* ${farm.farmCount}\n` +
-    `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Stars\n\n` +
+    `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Magnum Coins\n\n` +
     `🎯 Выберите действие:`;
   
   await ctx.editMessageText(message, {
@@ -974,13 +974,13 @@ async function showFarmStats(ctx, user) {
       `🌾 *Статистика фарма*\n\n` +
       `📊 *Общая статистика:*\n` +
       `├ Всего фармов: \`${farm.farmCount || 0}\`\n` +
-      `├ Всего заработано: \`${formatNumber(farm.totalFarmEarnings || 0)}\` Stars\n` +
-      `└ Средняя награда: \`${farm.farmCount > 0 ? formatNumber((farm.totalFarmEarnings || 0) / farm.farmCount) : '0.00'}\` Stars\n\n` +
+      `├ Всего заработано: \`${formatNumber(farm.totalFarmEarnings || 0)}\` Magnum Coins\n` +
+      `└ Средняя награда: \`${farm.farmCount > 0 ? formatNumber((farm.totalFarmEarnings || 0) / farm.farmCount) : '0.00'}\` Magnum Coins\n\n` +
       `⏰ *Текущий статус:*\n` +
       `├ Статус: ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-      `├ Базовая награда: \`${formatNumber(baseReward)}\` Stars\n` +
-      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Stars\n` +
-      `└ Итого награда: \`${formatNumber(totalReward)}\` Stars\n\n` +
+      `├ Базовая награда: \`${formatNumber(baseReward)}\` Magnum Coins\n` +
+      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Magnum Coins\n` +
+      `└ Итого награда: \`${formatNumber(totalReward)}\` Magnum Coins\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -1028,12 +1028,12 @@ async function showFarmBonuses(ctx, user) {
     const message = 
       `🎯 *Бонусы фарма*\n\n` +
       `💰 *Система бонусов:*\n` +
-      `├ Базовая награда: \`${formatNumber(baseReward)}\` Stars\n` +
-      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Stars\n` +
-      `└ Итого награда: \`${formatNumber(totalReward)}\` Stars\n\n` +
+      `├ Базовая награда: \`${formatNumber(baseReward)}\` Magnum Coins\n` +
+      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Magnum Coins\n` +
+      `└ Итого награда: \`${formatNumber(totalReward)}\` Magnum Coins\n\n` +
       `📈 *Как увеличить бонусы:*\n` +
       `├ Повышайте уровень для увеличения бонуса\n` +
-      `├ Максимальный бонус: \`+2.00\` Stars\n` +
+      `├ Максимальный бонус: \`+2.00\` Magnum Coins\n` +
       `└ Текущий уровень: \`${user.level || 1}\`\n\n` +
       `⏰ *Текущий статус:*\n` +
       `├ Статус: ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
@@ -1154,11 +1154,11 @@ async function updateFarmMenu(ctx, user) {
   const message = 
     `🌾 *Фарм*\n\n` +
     `⏰ *Статус:* ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
-    `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Stars\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
+    `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Magnum Coins\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
     `📊 *Всего фармов:* ${farm.farmCount}\n` +
-    `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Stars\n\n` +
+    `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Magnum Coins\n\n` +
     `🎯 Выберите действие:`;
   
     log(`📝 Отправка обновленного меню фарма для пользователя ${user.id}`);
@@ -1429,6 +1429,212 @@ function logError(error, context = '') {
   }
 }
 
+// ==================== ОБМЕН ====================
+async function showExchangeMenu(ctx, user) {
+  try {
+    log(`💱 Показ меню обмена для пользователя ${user.id}`);
+    
+    const exchangeRate = 1; // 1 Magnum Coin = 1 Star
+    const maxExchange = Math.floor(user.magnumCoins);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🪙 10 Magnum Coins → 10 Stars', 'exchange_10'),
+        Markup.button.callback('🪙 50 Magnum Coins → 50 Stars', 'exchange_50')
+      ],
+      [
+        Markup.button.callback('🪙 100 Magnum Coins → 100 Stars', 'exchange_100'),
+        Markup.button.callback('🪙 500 Magnum Coins → 500 Stars', 'exchange_500')
+      ],
+      [
+        Markup.button.callback('🪙 Все Magnum Coins', 'exchange_all'),
+        Markup.button.callback('📊 Статистика обменов', 'exchange_stats')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `💱 *Обмен валют*\n\n` +
+      `💰 *Ваши балансы:*\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n` +
+      `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
+      `💱 *Курс обмена:*\n` +
+      `├ 1 Magnum Coin = 1 Star\n` +
+      `└ Комиссия: 0%\n\n` +
+      `📊 *Статистика обменов:*\n` +
+      `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
+      `└ Всего обменено: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` Magnum Coins\n\n` +
+      `🎯 Выберите сумму для обмена:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню обмена');
+    await ctx.answerCbQuery('❌ Ошибка загрузки меню обмена');
+  }
+}
+
+async function performExchange(ctx, user, amount) {
+  try {
+    log(`💱 Попытка обмена ${amount} Magnum Coins для пользователя ${user.id}`);
+    
+    if (amount > user.magnumCoins) {
+      log(`❌ Недостаточно Magnum Coins для пользователя ${user.id}`);
+      await ctx.answerCbQuery('❌ Недостаточно Magnum Coins для обмена!');
+      return;
+    }
+    
+    if (amount <= 0) {
+      log(`❌ Некорректная сумма обмена для пользователя ${user.id}`);
+      await ctx.answerCbQuery('❌ Некорректная сумма обмена!');
+      return;
+    }
+    
+    // Обновляем пользователя
+    log(`💾 Обновление базы данных для пользователя ${user.id}`);
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: -amount,
+          stars: amount,
+          'exchange.totalExchanges': 1,
+          'exchange.totalExchanged': amount,
+          'statistics.totalActions': 1
+        },
+        $set: { 
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
+    userCache.delete(user.id);
+    
+    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${amount} Stars`);
+    await ctx.answerCbQuery(
+      `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(amount)} Stars`
+    );
+    
+    // Обновляем меню обмена
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showExchangeMenu(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Обмен валют');
+    await ctx.answerCbQuery('❌ Ошибка обмена');
+  }
+}
+
+// ==================== ДОСТИЖЕНИЯ ====================
+async function showAchievementsMenu(ctx, user) {
+  try {
+    log(`🏆 Показ меню достижений для пользователя ${user.id}`);
+    
+    // Определяем достижения
+    const achievements = [
+      {
+        id: 'first_farm',
+        title: '🌾 Первый фарм',
+        description: 'Выполните первый фарм',
+        condition: user.farm?.farmCount >= 1,
+        reward: '10 Stars'
+      },
+      {
+        id: 'farm_master',
+        title: '👑 Мастер фарма',
+        description: 'Выполните 100 фармов',
+        condition: user.farm?.farmCount >= 100,
+        reward: '500 Stars'
+      },
+      {
+        id: 'magnum_collector',
+        title: '🪙 Коллекционер Magnum',
+        description: 'Накопите 1000 Magnum Coins',
+        condition: user.magnumCoins >= 1000,
+        reward: '200 Stars'
+      },
+      {
+        id: 'exchange_trader',
+        title: '💱 Трейдер',
+        description: 'Выполните 50 обменов',
+        condition: user.exchange?.totalExchanges >= 50,
+        reward: '300 Stars'
+      },
+      {
+        id: 'level_10',
+        title: '⭐ Уровень 10',
+        description: 'Достигните 10 уровня',
+        condition: user.level >= 10,
+        reward: '100 Stars'
+      },
+      {
+        id: 'level_50',
+        title: '⭐⭐ Уровень 50',
+        description: 'Достигните 50 уровня',
+        condition: user.level >= 50,
+        reward: '1000 Stars'
+      },
+      {
+        id: 'referral_king',
+        title: '👥 Король рефералов',
+        description: 'Пригласите 10 рефералов',
+        condition: user.referralsCount >= 10,
+        reward: '400 Stars'
+      },
+      {
+        id: 'daily_streak',
+        title: '🔥 Серия дней',
+        description: 'Получите бонус 7 дней подряд',
+        condition: user.dailyBonus?.streak >= 7,
+        reward: '150 Stars'
+      }
+    ];
+    
+    const completedAchievements = achievements.filter(a => a.condition);
+    const totalAchievements = achievements.length;
+    const completionRate = Math.round((completedAchievements.length / totalAchievements) * 100);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📊 Прогресс', 'achievements_progress'),
+        Markup.button.callback('🎁 Награды', 'achievements_rewards')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    let message = `🏆 *Достижения*\n\n`;
+    message += `📊 *Прогресс:* ${completedAchievements.length}/${totalAchievements} (${completionRate}%)\n\n`;
+    
+    // Показываем последние 5 достижений
+    const recentAchievements = achievements.slice(0, 5);
+    message += `🎯 *Достижения:*\n`;
+    
+    recentAchievements.forEach((achievement, index) => {
+      const status = achievement.condition ? '✅' : '❌';
+      message += `${status} ${achievement.title}\n`;
+      if (index < 4) message += `└ ${achievement.description}\n\n`;
+    });
+    
+    if (achievements.length > 5) {
+      message += `\n... и еще ${achievements.length - 5} достижений\n`;
+    }
+    
+    message += `\n🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню достижений');
+    await ctx.answerCbQuery('❌ Ошибка загрузки достижений');
+  }
+}
+
 // ==================== СОЗДАНИЕ БОТА ====================
 const bot = new Telegraf(config.BOT_TOKEN);
 
@@ -1516,6 +1722,91 @@ bot.action('farm', async (ctx) => {
     await showFarmMenu(ctx, user);
   } catch (error) {
     logError(error, 'Меню фарма');
+  }
+});
+
+// Обмен
+bot.action('exchange', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню обмена');
+  }
+});
+
+bot.action('exchange_10', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await performExchange(ctx, user, 10);
+  } catch (error) {
+    logError(error, 'Обмен 10 Magnum Coins');
+  }
+});
+
+bot.action('exchange_50', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await performExchange(ctx, user, 50);
+  } catch (error) {
+    logError(error, 'Обмен 50 Magnum Coins');
+  }
+});
+
+bot.action('exchange_100', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await performExchange(ctx, user, 100);
+  } catch (error) {
+    logError(error, 'Обмен 100 Magnum Coins');
+  }
+});
+
+bot.action('exchange_500', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await performExchange(ctx, user, 500);
+  } catch (error) {
+    logError(error, 'Обмен 500 Magnum Coins');
+  }
+});
+
+bot.action('exchange_all', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const amount = Math.floor(user.magnumCoins);
+    if (amount <= 0) {
+      await ctx.answerCbQuery('❌ У вас нет Magnum Coins для обмена!');
+      return;
+    }
+    
+    await performExchange(ctx, user, amount);
+  } catch (error) {
+    logError(error, 'Обмен всех Magnum Coins');
+  }
+});
+
+// Достижения
+bot.action('achievements', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAchievementsMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню достижений');
   }
 });
 
