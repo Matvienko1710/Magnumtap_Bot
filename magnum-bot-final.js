@@ -720,7 +720,6 @@ async function startMiner(ctx, user) {
     userCache.delete(user.id);
     
     await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Stars каждый час.');
-    await showMinerMenu(ctx, { ...user, miner: { ...user.miner, active: true } });
   } catch (error) {
     console.error('Ошибка запуска майнера:', error);
     await ctx.answerCbQuery('❌ Ошибка запуска майнера');
@@ -747,7 +746,6 @@ async function stopMiner(ctx, user) {
     userCache.delete(user.id);
     
     await ctx.answerCbQuery('⏹️ Майнер остановлен!');
-    await showMinerMenu(ctx, { ...user, miner: { ...user.miner, active: false } });
   } catch (error) {
     console.error('Ошибка остановки майнера:', error);
     await ctx.answerCbQuery('❌ Ошибка остановки майнера');
@@ -841,9 +839,6 @@ async function doFarm(ctx, user) {
     await ctx.answerCbQuery(
       `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Stars`
     );
-    
-    // Обновляем текущее сообщение вместо создания нового
-    await updateFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
   } catch (error) {
     console.error('Ошибка фарма:', error);
     await ctx.answerCbQuery('❌ Ошибка фарма');
@@ -1070,9 +1065,6 @@ async function claimBonus(ctx, user) {
     await ctx.answerCbQuery(
       `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Stars, серия: ${newStreak} дней`
     );
-    
-    // Обновляем текущее сообщение вместо создания нового
-    await updateBonusMenu(ctx, { ...user, dailyBonus: { ...bonus, lastBonus: now, streak: newStreak } });
   } catch (error) {
     console.error('Ошибка получения бонуса:', error);
     await ctx.answerCbQuery('❌ Ошибка получения бонуса');
