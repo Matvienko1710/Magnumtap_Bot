@@ -102,65 +102,110 @@ let client;
 
 async function connectDB() {
   try {
+    logFunction('connectDB');
     log('🔌 Подключение к MongoDB...');
+    
+    logDebug('Параметры подключения к MongoDB', {
+      uri: config.MONGODB_URI ? 'установлен' : 'отсутствует',
+      uriLength: config.MONGODB_URI?.length || 0
+    });
+    
     client = new MongoClient(config.MONGODB_URI);
     await client.connect();
     log('🔌 MongoDB клиент подключен');
+    
     db = client.db();
     log('📊 База данных получена');
     
+    logDebug('Информация о базе данных', {
+      databaseName: db.databaseName,
+      collections: await db.listCollections().toArray().then(cols => cols.map(c => c.name))
+    });
+    
+    log('📋 Создание индексов для оптимизации...');
+    
     // Создаем индексы для оптимизации
+    log('📋 Создание индексов для коллекции users...');
     await db.collection('users').createIndex({ id: 1 }, { unique: true });
     await db.collection('users').createIndex({ username: 1 });
     await db.collection('users').createIndex({ 'miner.active': 1 });
     await db.collection('users').createIndex({ lastSeen: -1 });
     await db.collection('users').createIndex({ referrerId: 1 });
+    log('✅ Индексы для users созданы');
     
+    log('📋 Создание индексов для коллекции promocodes...');
     await db.collection('promocodes').createIndex({ code: 1 }, { unique: true });
     await db.collection('promocodes').createIndex({ isActive: 1 });
     await db.collection('promocodes').createIndex({ expiresAt: 1 });
+    log('✅ Индексы для promocodes созданы');
     
+    log('📋 Создание индексов для коллекции withdrawalRequests...');
     await db.collection('withdrawalRequests').createIndex({ userId: 1 });
     await db.collection('withdrawalRequests').createIndex({ status: 1 });
     await db.collection('withdrawalRequests').createIndex({ createdAt: -1 });
+    log('✅ Индексы для withdrawalRequests созданы');
     
+    log('📋 Создание индексов для коллекции supportTickets...');
     await db.collection('supportTickets').createIndex({ userId: 1 });
     await db.collection('supportTickets').createIndex({ status: 1 });
     await db.collection('supportTickets').createIndex({ createdAt: -1 });
+    log('✅ Индексы для supportTickets созданы');
     
+    log('📋 Создание индексов для коллекции taskChecks...');
     await db.collection('taskChecks').createIndex({ userId: 1 });
     await db.collection('taskChecks').createIndex({ status: 1 });
     await db.collection('taskChecks').createIndex({ createdAt: -1 });
+    log('✅ Индексы для taskChecks созданы');
     
+    log('📋 Создание индексов для коллекции dailyTasks...');
     await db.collection('dailyTasks').createIndex({ userId: 1 });
     await db.collection('dailyTasks').createIndex({ date: 1 });
     await db.collection('dailyTasks').createIndex({ completed: 1 });
+    log('✅ Индексы для dailyTasks созданы');
     
+    log('📋 Создание индексов для коллекции exchangeHistory...');
     await db.collection('exchangeHistory').createIndex({ userId: 1 });
     await db.collection('exchangeHistory').createIndex({ timestamp: -1 });
+    log('✅ Индексы для exchangeHistory созданы');
     
     // Создаем индекс для резерва с проверкой на существующие записи
+    log('📋 Создание индекса для коллекции reserve...');
     try {
       await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+      log('✅ Индекс для reserve создан');
     } catch (error) {
       if (error.code === 11000) {
         // Если есть дублирующиеся записи, удаляем их и создаем индекс заново
         log('🔄 Исправляем дублирующиеся записи в резерве...');
-        await db.collection('reserve').deleteMany({ currency: null });
+        const deleteResult = await db.collection('reserve').deleteMany({ currency: null });
+        logDebug('Удаление дублирующихся записей', { deletedCount: deleteResult.deletedCount });
         await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+        log('✅ Индекс для reserve пересоздан');
       } else {
         throw error;
       }
     }
     
+    log('✅ Все индексы созданы успешно');
     log('✅ База данных подключена');
     
     log('💰 Инициализация резерва...');
     // Инициализируем резерв
     await initializeReserve();
     log('✅ Резерв инициализирован');
+    
+    logDebug('Подключение к БД завершено', {
+      databaseName: db.databaseName,
+      collectionsCount: (await db.listCollections().toArray()).length
+    });
+    
   } catch (error) {
     logError(error, 'Подключение к MongoDB');
+    logDebug('Ошибка подключения к БД', {
+      error: error.message,
+      stack: error.stack,
+      mongoUri: config.MONGODB_URI ? 'установлен' : 'отсутствует'
+    });
     process.exit(1);
   }
 }
@@ -431,12 +476,25 @@ function ensureUserFields(user) {
 
 async function getUser(id, ctx = null) {
   try {
+    logFunction('getUser', id, { ctx: ctx ? 'present' : 'null' });
+    
     // Проверяем кеш
+    logDebug(`Проверка кеша для пользователя ${id}`);
     const cached = getCachedUser(id);
     if (cached) {
+      log(`✅ Пользователь ${id} найден в кеше`);
+      logDebug(`Кешированный пользователь ${id}`, {
+        level: cached.level,
+        magnumCoins: cached.magnumCoins,
+        stars: cached.stars,
+        banned: cached.banned
+      });
+      
       // Проверяем, не заблокирован ли пользователь
       if (cached.banned) {
+        log(`🚫 Пользователь ${id} заблокирован (из кеша)`);
         if (ctx) {
+          log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
@@ -444,9 +502,18 @@ async function getUser(id, ctx = null) {
       return cached;
     }
 
+    log(`📊 Поиск пользователя ${id} в базе данных`);
     let user = await db.collection('users').findOne({ id: id });
     
     if (!user) {
+      log(`🆕 Создание нового пользователя ${id}`);
+      logDebug(`Данные для нового пользователя ${id}`, {
+        username: ctx?.from?.username || null,
+        firstName: ctx?.from?.first_name || null,
+        lastName: ctx?.from?.last_name || null,
+        hasContext: !!ctx
+      });
+      
       // Создаем нового пользователя
       user = {
         id: id,
@@ -524,26 +591,50 @@ async function getUser(id, ctx = null) {
         updatedAt: new Date()
       };
       
-      await db.collection('users').insertOne(user);
-      log(`👤 Создан новый пользователь: ${user.username || user.id}`);
+      log(`💾 Сохранение нового пользователя ${id} в базу данных`);
+      const insertResult = await db.collection('users').insertOne(user);
+      logDebug(`Результат вставки пользователя ${id}`, { insertedId: insertResult.insertedId });
+      log(`✅ Новый пользователь ${id} успешно создан: ${user.username || user.id}`);
     } else {
+      log(`✅ Пользователь ${id} найден в базе данных`);
+      logDebug(`Существующий пользователь ${id}`, {
+        level: user.level,
+        magnumCoins: user.magnumCoins,
+        stars: user.stars,
+        banned: user.banned,
+        lastSeen: user.statistics?.lastSeen
+      });
+      
       // Проверяем, не заблокирован ли пользователь
       if (user.banned) {
+        log(`🚫 Пользователь ${id} заблокирован (из БД)`);
         if (ctx) {
+          log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
       }
       
       // Проверяем и инициализируем все недостающие поля
+      logDebug(`Инициализация полей для существующего пользователя ${id}`);
       user = ensureUserFields(user);
       
       // Обновляем статистику
+      const oldLastSeen = user.statistics?.lastSeen;
+      const oldSessions = user.statistics?.totalSessions || 0;
       user.statistics.lastSeen = new Date();
-      user.statistics.totalSessions = (user.statistics.totalSessions || 0) + 1;
+      user.statistics.totalSessions = oldSessions + 1;
+      
+      logDebug(`Обновление статистики пользователя ${id}`, {
+        oldLastSeen,
+        newLastSeen: user.statistics.lastSeen,
+        oldSessions,
+        newSessions: user.statistics.totalSessions
+      });
       
       // Обновляем пользователя в базе данных
-      await db.collection('users').updateOne(
+      log(`💾 Обновление пользователя ${id} в базе данных`);
+      const updateResult = await db.collection('users').updateOne(
         { id: id },
         { 
           $set: { 
@@ -552,13 +643,24 @@ async function getUser(id, ctx = null) {
           }
         }
       );
+      logDebug(`Результат обновления пользователя ${id}`, { 
+        matchedCount: updateResult.matchedCount,
+        modifiedCount: updateResult.modifiedCount 
+      });
     }
     
     // Сохраняем в кеш
+    logDebug(`Сохранение пользователя ${id} в кеш`);
     setCachedUser(id, user);
+    
+    log(`✅ Пользователь ${id} успешно загружен`);
     return user;
   } catch (error) {
-    logError(error, 'Получение пользователя');
+    logError(error, `Получение пользователя ${id}`);
+    logDebug(`Ошибка при получении пользователя ${id}`, {
+      error: error.message,
+      stack: error.stack
+    });
     return null;
   }
 }
@@ -2547,16 +2649,64 @@ function log(message, type = 'INFO') {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] [${type}] ${message}`;
   console.log(logMessage);
+  
+  // Также записываем в файл для Railway
+  if (process.env.NODE_ENV === 'production') {
+    console.log(logMessage);
+  }
 }
 
-// Логирование ошибок
 function logError(error, context = '') {
   const timestamp = new Date().toISOString();
-  const errorMessage = `[${timestamp}] [ERROR] ${context}: ${error.message}`;
-  console.error(errorMessage);
-  if (error.stack) {
-    console.error(`[${timestamp}] [ERROR] Stack: ${error.stack}`);
+  const errorMessage = error.message || error;
+  const stack = error.stack || '';
+  const logMessage = `[${timestamp}] [ERROR] ${context}: ${errorMessage}`;
+  console.error(logMessage);
+  
+  if (stack) {
+    const stackMessage = `[${timestamp}] [ERROR] Stack: ${stack}`;
+    console.error(stackMessage);
   }
+  
+  // Также записываем в файл для Railway
+  if (process.env.NODE_ENV === 'production') {
+    console.error(logMessage);
+    if (stack) {
+      console.error(stackMessage);
+    }
+  }
+}
+
+function logDebug(message, data = null) {
+  const timestamp = new Date().toISOString();
+  let logMessage = `[${timestamp}] [DEBUG] ${message}`;
+  
+  if (data) {
+    logMessage += ` | Data: ${JSON.stringify(data, null, 2)}`;
+  }
+  
+  console.log(logMessage);
+}
+
+function logAction(userId, action, details = '') {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [ACTION] User ${userId} | Action: ${action} | Details: ${details}`;
+  console.log(logMessage);
+}
+
+function logFunction(functionName, userId = null, params = null) {
+  const timestamp = new Date().toISOString();
+  let logMessage = `[${timestamp}] [FUNCTION] ${functionName}`;
+  
+  if (userId) {
+    logMessage += ` | User: ${userId}`;
+  }
+  
+  if (params) {
+    logMessage += ` | Params: ${JSON.stringify(params)}`;
+  }
+  
+  console.log(logMessage);
 }
 
 // ==================== ОБМЕН ====================
@@ -4017,15 +4167,43 @@ const bot = new Telegraf(config.BOT_TOKEN);
 // Обработка команды /start
 bot.start(async (ctx) => {
   try {
+    logFunction('bot.start', ctx.from.id, { 
+      startPayload: ctx.startPayload,
+      username: ctx.from.username,
+      firstName: ctx.from.first_name
+    });
+    
+    log(`🚀 Команда /start от пользователя ${ctx.from.id}`);
+    logDebug(`Данные пользователя /start`, {
+      id: ctx.from.id,
+      username: ctx.from.username,
+      firstName: ctx.from.first_name,
+      lastName: ctx.from.last_name,
+      startPayload: ctx.startPayload
+    });
+    
+    log(`👤 Получение пользователя ${ctx.from.id}`);
     const user = await getUser(ctx.from.id, ctx);
     if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id}`);
       await ctx.reply('❌ Ошибка создания пользователя');
       return;
     }
     
+    logDebug(`Пользователь ${ctx.from.id} получен`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      stars: user.stars,
+      banned: user.banned
+    });
+    
     // Проверяем подписку
+    log(`🔍 Проверка подписки для пользователя ${ctx.from.id}`);
     const isSubscribed = await checkSubscription(ctx);
+    logDebug(`Результат проверки подписки для ${ctx.from.id}`, { isSubscribed });
+    
     if (!isSubscribed) {
+      log(`❌ Пользователь ${ctx.from.id} не подписан на канал`);
       await showSubscriptionMessage(ctx);
       return;
     }
@@ -4033,13 +4211,30 @@ bot.start(async (ctx) => {
     // Обрабатываем реферальную ссылку
     const startPayload = ctx.startPayload;
     if (startPayload && startPayload !== user.id.toString()) {
+      log(`👥 Обработка реферала: ${ctx.from.id} от ${startPayload}`);
+      logDebug(`Реферальные данные`, {
+        userId: ctx.from.id,
+        referrerId: startPayload,
+        currentReferrer: user.referrerId
+      });
       await handleReferral(user.id, parseInt(startPayload));
+    } else {
+      log(`ℹ️ Реферальная ссылка не используется для пользователя ${ctx.from.id}`);
     }
     
     // Для команды /start используем ctx.reply вместо editMessageText
+    log(`📱 Показ главного меню для пользователя ${ctx.from.id}`);
     await showMainMenuStart(ctx, user);
+    
+    log(`✅ Команда /start успешно обработана для пользователя ${ctx.from.id}`);
+    
   } catch (error) {
-    logError(error, 'Команда /start');
+    logError(error, `Команда /start для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в /start`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
     await ctx.reply('❌ Произошла ошибка. Попробуйте позже.');
   }
 });
@@ -4047,41 +4242,85 @@ bot.start(async (ctx) => {
 // Обработка текстовых сообщений для админ функций
 bot.on('text', async (ctx) => {
   try {
+    logFunction('bot.on.text', ctx.from.id, { 
+      text: ctx.message.text,
+      messageId: ctx.message.message_id
+    });
+    
+    log(`📝 Текстовое сообщение от пользователя ${ctx.from.id}: "${ctx.message.text}"`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user || !isAdmin(user.id)) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для обработки текста`);
+      return;
+    }
+    
+    if (!isAdmin(user.id)) {
+      log(`ℹ️ Пользователь ${ctx.from.id} не является админом, пропускаем обработку текста`);
+      return;
+    }
     
     const text = ctx.message.text;
+    logDebug(`Обработка текста админа ${ctx.from.id}`, {
+      adminState: user.adminState,
+      text: text,
+      textLength: text.length
+    });
     
     // Проверяем состояние админа
     if (user.adminState === 'searching_user') {
+      log(`🔍 Админ ${ctx.from.id} ищет пользователя: "${text}"`);
       await handleAdminSearchUser(ctx, user, text);
     } else if (user.adminState === 'banning_user') {
+      log(`🚫 Админ ${ctx.from.id} блокирует пользователя: "${text}"`);
       await handleAdminBanUser(ctx, user, text);
     } else if (user.adminState === 'unbanning_user') {
+      log(`✅ Админ ${ctx.from.id} разблокирует пользователя: "${text}"`);
       await handleAdminUnbanUser(ctx, user, text);
     } else if (user.adminState === 'setting_farm_reward') {
+      log(`🌾 Админ ${ctx.from.id} устанавливает награду фарма: "${text}"`);
       await handleAdminSetFarmReward(ctx, user, text);
     } else if (user.adminState === 'setting_farm_cooldown') {
+      log(`⏰ Админ ${ctx.from.id} устанавливает кулдаун фарма: "${text}"`);
       await handleAdminSetFarmCooldown(ctx, user, text);
     } else if (user.adminState === 'setting_bonus_base') {
+      log(`🎁 Админ ${ctx.from.id} устанавливает базовый бонус: "${text}"`);
       await handleAdminSetBonusBase(ctx, user, text);
     } else if (user.adminState === 'setting_miner_reward') {
+      log(`⛏️ Админ ${ctx.from.id} устанавливает награду майнера: "${text}"`);
       await handleAdminSetMinerReward(ctx, user, text);
     } else if (user.adminState === 'setting_referral_reward') {
+      log(`👥 Админ ${ctx.from.id} устанавливает реферальную награду: "${text}"`);
       await handleAdminSetReferralReward(ctx, user, text);
     } else if (user.adminState === 'setting_subscription_channel') {
+      log(`📢 Админ ${ctx.from.id} устанавливает канал подписки: "${text}"`);
       await handleAdminSetSubscriptionChannel(ctx, user, text);
     } else if (user.adminState === 'creating_post_with_button') {
+      log(`📝 Админ ${ctx.from.id} создает пост с кнопкой: "${text}"`);
       await handleAdminCreatePostWithButton(ctx, user, text);
     } else if (user.adminState === 'creating_post_no_button') {
+      log(`📝 Админ ${ctx.from.id} создает пост без кнопки: "${text}"`);
       await handleAdminCreatePostNoButton(ctx, user, text);
     } else if (user.adminState === 'creating_promocode') {
+      log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
       await handleAdminCreatePromocode(ctx, user, text);
     } else if (user.adminState === 'entering_promocode') {
+      log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
       await handleUserEnterPromocode(ctx, user, text);
+    } else {
+      log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
     }
+    
+    log(`✅ Текстовое сообщение от ${ctx.from.id} обработано`);
+    
   } catch (error) {
-    logError(error, 'Обработка текстового сообщения админа');
+    logError(error, `Обработка текстового сообщения от ${ctx.from.id}`);
+    logDebug(`Ошибка в обработке текста`, {
+      userId: ctx.from.id,
+      text: ctx.message.text,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -5045,12 +5284,32 @@ bot.action('support_email', async (ctx) => {
 // Обработка кнопок главного меню
 bot.action('main_menu', async (ctx) => {
   try {
+    logFunction('bot.action.main_menu', ctx.from.id);
+    log(`🏠 Запрос главного меню от пользователя ${ctx.from.id}`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для главного меню`);
+      return;
+    }
+    
+    logDebug(`Показ главного меню для пользователя ${ctx.from.id}`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      stars: user.stars,
+      isAdmin: isAdmin(user.id)
+    });
     
     await showMainMenu(ctx, user);
+    log(`✅ Главное меню показано пользователю ${ctx.from.id}`);
+    
   } catch (error) {
-    logError(error, 'Главное меню');
+    logError(error, `Главное меню для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в главном меню`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -5091,12 +5350,32 @@ bot.action('stop_miner', async (ctx) => {
 // Фарм
 bot.action('farm', async (ctx) => {
   try {
+    logFunction('bot.action.farm', ctx.from.id);
+    log(`🌾 Запрос меню фарма от пользователя ${ctx.from.id}`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для меню фарма`);
+      return;
+    }
+    
+    logDebug(`Показ меню фарма для пользователя ${ctx.from.id}`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      lastFarm: user.farm?.lastFarm,
+      farmCount: user.farm?.farmCount
+    });
     
     await showFarmMenu(ctx, user);
+    log(`✅ Меню фарма показано пользователю ${ctx.from.id}`);
+    
   } catch (error) {
-    logError(error, 'Меню фарма');
+    logError(error, `Меню фарма для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в меню фарма`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -5475,12 +5754,33 @@ bot.action(/^verify_sponsor_(\d+)$/, async (ctx) => {
 
 bot.action('do_farm', async (ctx) => {
   try {
+    logFunction('bot.action.do_farm', ctx.from.id);
+    log(`🌾 Запрос действия фарма от пользователя ${ctx.from.id}`);
+    
     const user = await getUser(ctx.from.id);
-    if (!user) return;
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для действия фарма`);
+      return;
+    }
+    
+    logDebug(`Выполнение фарма для пользователя ${ctx.from.id}`, {
+      level: user.level,
+      magnumCoins: user.magnumCoins,
+      lastFarm: user.farm?.lastFarm,
+      farmCount: user.farm?.farmCount,
+      farmCooldown: config.FARM_COOLDOWN
+    });
     
     await doFarm(ctx, user);
+    log(`✅ Действие фарма выполнено для пользователя ${ctx.from.id}`);
+    
   } catch (error) {
-    logError(error, 'Фарм (обработчик)');
+    logError(error, `Действие фарма для пользователя ${ctx.from.id}`);
+    logDebug(`Ошибка в действии фарма`, {
+      userId: ctx.from.id,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -6125,11 +6425,30 @@ bot.action('admin_subscription_add', async (ctx) => {
 // Обработка ошибок
 bot.catch((err, ctx) => {
   logError(err, `Обработка ${ctx.updateType}`);
+  logDebug('Ошибка в боте', {
+    updateType: ctx.updateType,
+    userId: ctx.from?.id,
+    chatId: ctx.chat?.id,
+    messageId: ctx.message?.message_id,
+    callbackData: ctx.callbackQuery?.data,
+    error: err.message,
+    stack: err.stack
+  });
 });
 
 // ==================== ЗАПУСК БОТА ====================
 async function startBot() {
   try {
+    logFunction('startBot');
+    log('🚀 Начинаем запуск Magnum Stars Bot...');
+    
+    logDebug('Проверка переменных окружения', {
+      BOT_TOKEN: process.env.BOT_TOKEN ? 'установлен' : 'отсутствует',
+      MONGODB_URI: process.env.MONGODB_URI ? 'установлен' : 'отсутствует',
+      PORT: process.env.PORT || 3000,
+      NODE_ENV: process.env.NODE_ENV || 'development'
+    });
+    
     log('🔗 Подключение к базе данных...');
     await connectDB();
     log('✅ База данных подключена успешно');
@@ -6140,26 +6459,59 @@ async function startBot() {
     log('✅ HTTP сервер запущен');
     
     log('⏰ Настройка интервалов...');
+    logDebug('Настройка интервалов', {
+      minerRewardsInterval: '30 минут',
+      cacheCleanupInterval: '5 минут',
+      userCacheTTL: config.USER_CACHE_TTL,
+      statsCacheTTL: config.STATS_CACHE_TTL
+    });
+    
     // Запускаем обработку майнера каждые 30 минут
-    setInterval(processMinerRewards, 30 * 60 * 1000);
+    setInterval(() => {
+      log('⛏️ Запуск обработки наград майнера по расписанию');
+      processMinerRewards();
+    }, 30 * 60 * 1000);
     
     // Очистка кеша каждые 5 минут
     setInterval(() => {
+      log('🧹 Запуск очистки кеша по расписанию');
       const now = Date.now();
+      let userCacheCleared = 0;
+      let statsCacheCleared = 0;
+      
       for (const [key, value] of userCache.entries()) {
         if (now - value.timestamp > config.USER_CACHE_TTL) {
           userCache.delete(key);
+          userCacheCleared++;
         }
       }
+      
       for (const [key, value] of statsCache.entries()) {
         if (now - value.timestamp > config.STATS_CACHE_TTL) {
           statsCache.delete(key);
+          statsCacheCleared++;
         }
+      }
+      
+      if (userCacheCleared > 0 || statsCacheCleared > 0) {
+        log(`🧹 Очистка кеша завершена: пользователей ${userCacheCleared}, статистики ${statsCacheCleared}`);
       }
     }, 5 * 60 * 1000);
     
+    log('🤖 Запуск Telegram бота...');
     await bot.launch();
-    log('🚀 Magnum Stars Bot запущен!');
+    log('🚀 Magnum Stars Bot запущен успешно!');
+    
+    logDebug('Бот запущен', {
+      botInfo: await bot.telegram.getMe(),
+      config: {
+        farmCooldown: config.FARM_COOLDOWN,
+        farmReward: config.FARM_BASE_REWARD,
+        bonusBase: config.DAILY_BONUS_BASE,
+        minerReward: config.MINER_REWARD,
+        referralReward: config.REFERRAL_REWARD
+      }
+    });
     
     // Graceful stop
     process.once('SIGINT', () => {
@@ -6185,8 +6537,19 @@ async function startBot() {
         bot.stop('SIGTERM');
       }
     });
+    
+    log('✅ Все обработчики сигналов настроены');
+    
   } catch (error) {
     logError(error, 'Запуск бота');
+    logDebug('Критическая ошибка при запуске', {
+      error: error.message,
+      stack: error.stack,
+      config: {
+        hasBotToken: !!process.env.BOT_TOKEN,
+        hasMongoUri: !!process.env.MONGODB_URI
+      }
+    });
     process.exit(1);
   }
 }
@@ -6194,11 +6557,25 @@ async function startBot() {
 // Обработчики необработанных ошибок
 process.on('uncaughtException', (error) => {
   logError(error, 'Необработанная ошибка (uncaughtException)');
+  logDebug('Критическая ошибка uncaughtException', {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+    memoryUsage: process.memoryUsage(),
+    uptime: process.uptime()
+  });
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   logError(new Error(`Необработанное отклонение промиса: ${reason}`), 'unhandledRejection');
+  logDebug('Критическая ошибка unhandledRejection', {
+    reason: reason,
+    promise: promise,
+    timestamp: new Date().toISOString(),
+    memoryUsage: process.memoryUsage(),
+    uptime: process.uptime()
+  });
   process.exit(1);
 });
 
