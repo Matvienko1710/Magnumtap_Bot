@@ -507,15 +507,32 @@ async function checkSubscription(ctx) {
   try {
     if (!config.REQUIRED_CHANNEL) return true;
     
+    // Проверяем, что канал указан правильно
+    if (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/')) {
+      console.log('⚠️ Канал не настроен правильно, пропускаем проверку подписки');
+      return true;
+    }
+    
     const member = await ctx.telegram.getChatMember(config.REQUIRED_CHANNEL, ctx.from.id);
     return ['creator', 'administrator', 'member'].includes(member.status);
   } catch (error) {
     console.error('Ошибка проверки подписки:', error);
-    return false;
+    // Если канал не найден, пропускаем проверку подписки
+    return true;
   }
 }
 
 async function showSubscriptionMessage(ctx) {
+  // Проверяем, что канал указан правильно
+  if (!config.REQUIRED_CHANNEL || (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/'))) {
+    // Если канал не настроен, показываем главное меню
+    const user = await getUser(ctx.from.id);
+    if (user) {
+      await showMainMenu(ctx, user);
+    }
+    return;
+  }
+  
   const keyboard = Markup.inlineKeyboard([
     [Markup.button.url('📢 Подписаться на канал', config.REQUIRED_CHANNEL)],
     [Markup.button.callback('🔄 Проверить подписку', 'check_subscription')]
@@ -1132,6 +1149,11 @@ bot.action('check_subscription', async (ctx) => {
     }
   } catch (error) {
     console.error('Ошибка проверки подписки:', error);
+    // В случае ошибки показываем главное меню
+    const user = await getUser(ctx.from.id);
+    if (user) {
+      await showMainMenu(ctx, user);
+    }
   }
 });
 
