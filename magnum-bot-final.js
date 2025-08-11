@@ -509,7 +509,6 @@ async function checkSubscription(ctx) {
     
     // Проверяем, что канал указан правильно
     if (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/')) {
-      console.log('⚠️ Канал не настроен правильно, пропускаем проверку подписки');
       return true;
     }
     
@@ -843,7 +842,8 @@ async function doFarm(ctx, user) {
       `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Stars`
     );
     
-    await showFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
+    // Обновляем текущее сообщение вместо создания нового
+    await updateFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
   } catch (error) {
     console.error('Ошибка фарма:', error);
     await ctx.answerCbQuery('❌ Ошибка фарма');
@@ -851,6 +851,55 @@ async function doFarm(ctx, user) {
 }
 
 // ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
+async function updateFarmMenu(ctx, user) {
+  const farm = user.farm;
+  const now = Date.now();
+  const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
+  const timeSince = Math.floor((now - lastFarm) / 1000);
+  const cooldown = config.FARM_COOLDOWN;
+  
+  const canFarm = timeSince >= cooldown;
+  const remainingTime = canFarm ? 0 : cooldown - timeSince;
+  
+  const baseReward = config.FARM_BASE_REWARD;
+  const bonus = Math.min(user.level * 0.1, 2);
+  const totalReward = baseReward + bonus;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [
+      Markup.button.callback(
+        canFarm ? '🌾 Фармить' : `⏳ ${formatTime(remainingTime)}`,
+        canFarm ? 'do_farm' : 'farm_cooldown'
+      )
+    ],
+    [
+      Markup.button.callback('📊 Статистика', 'farm_stats'),
+      Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
+    ],
+    [Markup.button.callback('🔙 Назад', 'main_menu')]
+  ]);
+  
+  const message = 
+    `🌾 *Фарм*\n\n` +
+    `⏰ *Статус:* ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
+    `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Stars\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `📊 *Всего фармов:* ${farm.farmCount}\n` +
+    `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Stars\n\n` +
+    `🎯 Выберите действие:`;
+  
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    // Если не удалось обновить, показываем новое меню
+    await showFarmMenu(ctx, user);
+  }
+}
+
 async function showBonusMenu(ctx, user) {
   const bonus = user.dailyBonus;
   const now = new Date();
@@ -904,6 +953,66 @@ async function showBonusMenu(ctx, user) {
     parse_mode: 'Markdown',
     reply_markup: keyboard.reply_markup
   });
+}
+
+async function updateBonusMenu(ctx, user) {
+  const bonus = user.dailyBonus;
+  const now = new Date();
+  const lastBonus = bonus.lastBonus;
+  
+  let canClaim = false;
+  let timeUntilNext = 0;
+  
+  if (!lastBonus) {
+    canClaim = true;
+  } else {
+    const timeSince = now.getTime() - lastBonus.getTime();
+    const dayInMs = 24 * 60 * 60 * 1000;
+    
+    if (timeSince >= dayInMs) {
+      canClaim = true;
+    } else {
+      timeUntilNext = dayInMs - timeSince;
+    }
+  }
+  
+  const baseReward = config.DAILY_BONUS_BASE;
+  const streakBonus = Math.min(bonus.streak * 0.5, 5);
+  const totalReward = baseReward + streakBonus;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [
+      Markup.button.callback(
+        canClaim ? '🎁 Получить бонус' : `⏳ ${formatTime(Math.floor(timeUntilNext / 1000))}`,
+        canClaim ? 'claim_bonus' : 'bonus_cooldown'
+      )
+    ],
+    [
+      Markup.button.callback('📊 Статистика', 'bonus_stats'),
+      Markup.button.callback('🔥 Серия', 'bonus_streak')
+    ],
+    [Markup.button.callback('🔙 Назад', 'main_menu')]
+  ]);
+  
+  const message = 
+    `🎁 *Ежедневный бонус*\n\n` +
+    `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
+    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `📊 *Текущая серия:* ${bonus.streak} дней\n` +
+    `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
+    `🎯 Выберите действие:`;
+  
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    // Если не удалось обновить, показываем новое меню
+    await showBonusMenu(ctx, user);
+  }
 }
 
 async function claimBonus(ctx, user) {
@@ -962,7 +1071,8 @@ async function claimBonus(ctx, user) {
       `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Stars, серия: ${newStreak} дней`
     );
     
-    await showBonusMenu(ctx, { ...user, dailyBonus: { ...bonus, lastBonus: now, streak: newStreak } });
+    // Обновляем текущее сообщение вместо создания нового
+    await updateBonusMenu(ctx, { ...user, dailyBonus: { ...bonus, lastBonus: now, streak: newStreak } });
   } catch (error) {
     console.error('Ошибка получения бонуса:', error);
     await ctx.answerCbQuery('❌ Ошибка получения бонуса');
