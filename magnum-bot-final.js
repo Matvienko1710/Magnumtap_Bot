@@ -617,7 +617,8 @@ async function getUser(id, ctx = null) {
         { id: id },
         { 
           $set: { 
-            ...user,
+            'statistics.lastSeen': user.statistics.lastSeen,
+            'statistics.totalSessions': user.statistics.totalSessions,
             updatedAt: new Date()
           }
         }
