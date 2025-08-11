@@ -66,7 +66,7 @@ const server = http.createServer((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🌐 HTTP сервер запущен на порту ${PORT}`);
+  log(`🌐 HTTP сервер запущен на порту ${PORT}`);
 });
 
 // ==================== БАЗА ДАННЫХ ====================
@@ -115,7 +115,7 @@ async function connectDB() {
     } catch (error) {
       if (error.code === 11000) {
         // Если есть дублирующиеся записи, удаляем их и создаем индекс заново
-        console.log('🔄 Исправляем дублирующиеся записи в резерве...');
+        log('🔄 Исправляем дублирующиеся записи в резерве...');
         await db.collection('reserve').deleteMany({ currency: null });
         await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
       } else {
@@ -123,12 +123,12 @@ async function connectDB() {
       }
     }
     
-    console.log('✅ База данных подключена');
+    log('✅ База данных подключена');
     
     // Инициализируем резерв
     await initializeReserve();
   } catch (error) {
-    console.error('❌ Ошибка подключения к MongoDB:', error);
+    logError(error, 'Подключение к MongoDB');
     process.exit(1);
   }
 }
@@ -151,12 +151,12 @@ async function initializeReserve() {
       };
       
       await db.collection('reserve').insertOne(reserve);
-      console.log('💰 Резерв валют инициализирован');
-    } else {
-      console.log('💰 Резерв валют уже существует');
-    }
+      log('💰 Резерв валют инициализирован');
+          } else {
+        log('💰 Резерв валют уже существует');
+      }
   } catch (error) {
-    console.error('❌ Ошибка инициализации резерва:', error);
+    logError(error, 'Инициализация резерва');
   }
 }
 
@@ -468,7 +468,7 @@ async function getUser(id, ctx = null) {
       };
       
       await db.collection('users').insertOne(user);
-      console.log(`👤 Создан новый пользователь: ${user.username || user.id}`);
+      log(`👤 Создан новый пользователь: ${user.username || user.id}`);
     } else {
       // Проверяем и инициализируем все недостающие поля
       user = ensureUserFields(user);
@@ -493,7 +493,7 @@ async function getUser(id, ctx = null) {
     setCachedUser(id, user);
     return user;
   } catch (error) {
-    console.error('Ошибка получения пользователя:', error);
+    logError(error, 'Получение пользователя');
     return null;
   }
 }
@@ -515,7 +515,7 @@ async function checkSubscription(ctx) {
     const member = await ctx.telegram.getChatMember(config.REQUIRED_CHANNEL, ctx.from.id);
     return ['creator', 'administrator', 'member'].includes(member.status);
   } catch (error) {
-    console.error('Ошибка проверки подписки:', error);
+    logError(error, 'Проверка подписки');
     // Если канал не найден, пропускаем проверку подписки
     return true;
   }
@@ -586,9 +586,9 @@ async function handleReferral(userId, referrerId) {
     userCache.delete(userId);
     userCache.delete(referrerId);
     
-    console.log(`👥 Реферал: ${userId} -> ${referrerId}`);
+    log(`👥 Реферал: ${userId} -> ${referrerId}`);
   } catch (error) {
-    console.error('Ошибка обработки реферала:', error);
+    logError(error, 'Обработка реферала');
   }
 }
 
@@ -724,7 +724,7 @@ async function startMiner(ctx, user) {
     // Обновляем меню майнера
     await updateMinerMenu(ctx, { ...user, miner: { ...user.miner, active: true } });
   } catch (error) {
-    console.error('Ошибка запуска майнера:', error);
+    logError(error, 'Запуск майнера');
     await ctx.answerCbQuery('❌ Ошибка запуска майнера');
   }
 }
@@ -753,7 +753,7 @@ async function stopMiner(ctx, user) {
     // Обновляем меню майнера
     await updateMinerMenu(ctx, { ...user, miner: { ...user.miner, active: false } });
   } catch (error) {
-    console.error('Ошибка остановки майнера:', error);
+    logError(error, 'Остановка майнера');
     await ctx.answerCbQuery('❌ Ошибка остановки майнера');
   }
 }
@@ -849,7 +849,7 @@ async function doFarm(ctx, user) {
     // Обновляем меню фарма
     await updateFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
   } catch (error) {
-    console.error('Ошибка фарма:', error);
+    logError(error, 'Фарм');
     await ctx.answerCbQuery('❌ Ошибка фарма');
   }
 }
@@ -1129,7 +1129,7 @@ async function claimBonus(ctx, user) {
     // Обновляем меню бонуса
     await updateBonusMenu(ctx, { ...user, dailyBonus: { ...bonus, lastBonus: now, streak: newStreak } });
   } catch (error) {
-    console.error('Ошибка получения бонуса:', error);
+    logError(error, 'Получение бонуса');
     await ctx.answerCbQuery('❌ Ошибка получения бонуса');
   }
 }
@@ -1165,10 +1165,27 @@ async function processMinerRewards() {
       );
       
       userCache.delete(user.id);
-      console.log(`⛏️ Майнер награда: ${user.id} +${reward} Stars`);
+      log(`⛏️ Майнер награда: ${user.id} +${reward} Stars`);
     }
   } catch (error) {
-    console.error('Ошибка обработки наград майнера:', error);
+    logError(error, 'Обработка наград майнера');
+  }
+}
+
+// ==================== ЛОГИРОВАНИЕ ====================
+function log(message, type = 'INFO') {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [${type}] ${message}`;
+  console.log(logMessage);
+}
+
+// Логирование ошибок
+function logError(error, context = '') {
+  const timestamp = new Date().toISOString();
+  const errorMessage = `[${timestamp}] [ERROR] ${context}: ${error.message}`;
+  console.error(errorMessage);
+  if (error.stack) {
+    console.error(`[${timestamp}] [ERROR] Stack: ${error.stack}`);
   }
 }
 
@@ -1199,7 +1216,7 @@ bot.start(async (ctx) => {
     
     await showMainMenu(ctx, user);
   } catch (error) {
-    console.error('Ошибка команды /start:', error);
+    logError(error, 'Команда /start');
     await ctx.reply('❌ Произошла ошибка. Попробуйте позже.');
   }
 });
@@ -1212,7 +1229,7 @@ bot.action('main_menu', async (ctx) => {
     
     await showMainMenu(ctx, user);
   } catch (error) {
-    console.error('Ошибка главного меню:', error);
+    logError(error, 'Главное меню');
   }
 });
 
@@ -1224,7 +1241,7 @@ bot.action('miner', async (ctx) => {
     
     await showMinerMenu(ctx, user);
   } catch (error) {
-    console.error('Ошибка меню майнера:', error);
+    logError(error, 'Меню майнера');
   }
 });
 
@@ -1235,7 +1252,7 @@ bot.action('start_miner', async (ctx) => {
     
     await startMiner(ctx, user);
   } catch (error) {
-    console.error('Ошибка запуска майнера:', error);
+    logError(error, 'Запуск майнера (обработчик)');
   }
 });
 
@@ -1246,7 +1263,7 @@ bot.action('stop_miner', async (ctx) => {
     
     await stopMiner(ctx, user);
   } catch (error) {
-    console.error('Ошибка остановки майнера:', error);
+    logError(error, 'Остановка майнера (обработчик)');
   }
 });
 
@@ -1258,7 +1275,7 @@ bot.action('farm', async (ctx) => {
     
     await showFarmMenu(ctx, user);
   } catch (error) {
-    console.error('Ошибка меню фарма:', error);
+    logError(error, 'Меню фарма');
   }
 });
 
@@ -1269,7 +1286,7 @@ bot.action('do_farm', async (ctx) => {
     
     await doFarm(ctx, user);
   } catch (error) {
-    console.error('Ошибка фарма:', error);
+    logError(error, 'Фарм (обработчик)');
   }
 });
 
@@ -1281,7 +1298,7 @@ bot.action('bonus', async (ctx) => {
     
     await showBonusMenu(ctx, user);
   } catch (error) {
-    console.error('Ошибка меню бонуса:', error);
+    logError(error, 'Меню бонуса');
   }
 });
 
@@ -1292,7 +1309,7 @@ bot.action('claim_bonus', async (ctx) => {
     
     await claimBonus(ctx, user);
   } catch (error) {
-    console.error('Ошибка получения бонуса:', error);
+    logError(error, 'Получение бонуса (обработчик)');
   }
 });
 
@@ -1304,7 +1321,7 @@ bot.action('farm_cooldown', async (ctx) => {
     
     await ctx.answerCbQuery('⏳ Подождите окончания кулдауна!');
   } catch (error) {
-    console.error('Ошибка кулдауна фарма:', error);
+    logError(error, 'Кулдаун фарма');
   }
 });
 
@@ -1315,7 +1332,7 @@ bot.action('bonus_cooldown', async (ctx) => {
     
     await ctx.answerCbQuery('⏳ Подождите до следующего бонуса!');
   } catch (error) {
-    console.error('Ошибка кулдауна бонуса:', error);
+    logError(error, 'Кулдаун бонуса');
   }
 });
 
@@ -1332,7 +1349,7 @@ bot.action('check_subscription', async (ctx) => {
       await showSubscriptionMessage(ctx);
     }
   } catch (error) {
-    console.error('Ошибка проверки подписки:', error);
+    logError(error, 'Проверка подписки (обработчик)');
     // В случае ошибки показываем главное меню
     const user = await getUser(ctx.from.id);
     if (user) {
@@ -1343,7 +1360,7 @@ bot.action('check_subscription', async (ctx) => {
 
 // Обработка ошибок
 bot.catch((err, ctx) => {
-  console.error(`Ошибка для ${ctx.updateType}:`, err);
+  logError(err, `Обработка ${ctx.updateType}`);
 });
 
 // ==================== ЗАПУСК БОТА ====================
@@ -1370,13 +1387,13 @@ async function startBot() {
     }, 5 * 60 * 1000);
     
     await bot.launch();
-    console.log('🚀 Magnum Stars Bot запущен!');
+    log('🚀 Magnum Stars Bot запущен!');
     
     // Graceful stop
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
   } catch (error) {
-    console.error('❌ Ошибка запуска бота:', error);
+    logError(error, 'Запуск бота');
     process.exit(1);
   }
 }
