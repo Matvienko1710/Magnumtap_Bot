@@ -1840,6 +1840,279 @@ function createProgressBar(percent) {
   return '█'.repeat(filled) + '░'.repeat(empty);
 }
 
+// ==================== РЕФЕРАЛЫ ====================
+async function showReferralsMenu(ctx, user) {
+  try {
+    log(`👥 Показ меню рефералов для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🔗 Реферальная ссылка', 'referral_link'),
+        Markup.button.callback('📊 Статистика', 'referral_stats')
+      ],
+      [
+        Markup.button.callback('🎁 Награды', 'referral_rewards'),
+        Markup.button.callback('👥 Список рефералов', 'referral_list')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `👥 *Реферальная система*\n\n` +
+      `📊 *Ваша статистика:*\n` +
+      `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
+      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n` +
+      `└ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n\n` +
+      `💰 *Награды за рефералов:*\n` +
+      `├ За каждого реферала: \`${config.REFERRAL_REWARD || 10}\` Stars\n` +
+      `├ Бонус за 5 рефералов: \`50\` Stars\n` +
+      `└ Бонус за 10 рефералов: \`100\` Stars\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки меню рефералов');
+  }
+}
+
+async function showReferralLink(ctx, user) {
+  try {
+    log(`🔗 Показ реферальной ссылки для пользователя ${user.id}`);
+    
+    const botUsername = (await ctx.telegram.getMe()).username;
+    const referralLink = `https://t.me/${botUsername}?start=${user.id}`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.url('🔗 Открыть ссылку', referralLink),
+        Markup.button.callback('📋 Скопировать', 'copy_referral_link')
+      ],
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    const message = 
+      `🔗 *Ваша реферальная ссылка*\n\n` +
+      `📝 *Ссылка:*\n` +
+      `\`${referralLink}\`\n\n` +
+      `💡 *Как использовать:*\n` +
+      `├ Отправьте эту ссылку друзьям\n` +
+      `├ При переходе по ссылке они автоматически станут вашими рефералами\n` +
+      `└ Вы получите награду за каждого нового реферала\n\n` +
+      `💰 *Награда:* \`${config.REFERRAL_REWARD || 10}\` Stars за каждого реферала\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ реферальной ссылки');
+    await ctx.answerCbQuery('❌ Ошибка загрузки реферальной ссылки');
+  }
+}
+
+async function showReferralStats(ctx, user) {
+  try {
+    log(`📊 Показ статистики рефералов для пользователя ${user.id}`);
+    
+    // Получаем список рефералов из базы данных
+    const referrals = await db.collection('users').find(
+      { referrerId: user.id },
+      { projection: { id: 1, firstName: 1, username: 1, level: 1, createdAt: 1 } }
+    ).toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    let message = `📊 *Статистика рефералов*\n\n`;
+    
+    // Общая статистика
+    message += `📈 *Общая статистика:*\n`;
+    message += `├ Всего рефералов: \`${user.referralsCount || 0}\`\n`;
+    message += `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n`;
+    message += `├ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n`;
+    message += `└ Средний уровень рефералов: \`${referrals.length > 0 ? Math.round(referrals.reduce((sum, r) => sum + (r.level || 1), 0) / referrals.length) : 0}\`\n\n`;
+    
+    // Прогресс к следующим бонусам
+    const nextBonus5 = 5 - (user.referralsCount || 0);
+    const nextBonus10 = 10 - (user.referralsCount || 0);
+    
+    message += `🎯 *Прогресс к бонусам:*\n`;
+    if (nextBonus5 > 0) {
+      message += `├ До бонуса за 5 рефералов: \`${nextBonus5}\` рефералов\n`;
+    } else {
+      message += `├ ✅ Бонус за 5 рефералов получен\n`;
+    }
+    
+    if (nextBonus10 > 0) {
+      message += `└ До бонуса за 10 рефералов: \`${nextBonus10}\` рефералов\n`;
+    } else {
+      message += `└ ✅ Бонус за 10 рефералов получен\n`;
+    }
+    
+    message += `\n🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ статистики рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки статистики');
+  }
+}
+
+async function showReferralRewards(ctx, user) {
+  try {
+    log(`🎁 Показ наград рефералов для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    const referralReward = config.REFERRAL_REWARD || 10;
+    const totalEarnings = user.referralsEarnings || 0;
+    const referralsCount = user.referralsCount || 0;
+    
+    let message = `🎁 *Награды рефералов*\n\n`;
+    
+    // Текущие награды
+    message += `💰 *Текущие награды:*\n`;
+    message += `├ За каждого реферала: \`${referralReward}\` Stars\n`;
+    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
+    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Stars\n\n`;
+    
+    // Система бонусов
+    message += `🏆 *Система бонусов:*\n`;
+    message += `├ 5 рефералов: \`50\` Stars (бонус)\n`;
+    message += `├ 10 рефералов: \`100\` Stars (бонус)\n`;
+    message += `├ 25 рефералов: \`250\` Stars (бонус)\n`;
+    message += `└ 50 рефералов: \`500\` Stars (бонус)\n\n`;
+    
+    // Прогресс к бонусам
+    message += `📊 *Ваш прогресс:*\n`;
+    const bonuses = [
+      { count: 5, reward: 50, achieved: referralsCount >= 5 },
+      { count: 10, reward: 100, achieved: referralsCount >= 10 },
+      { count: 25, reward: 250, achieved: referralsCount >= 25 },
+      { count: 50, reward: 500, achieved: referralsCount >= 50 }
+    ];
+    
+    bonuses.forEach(bonus => {
+      const status = bonus.achieved ? '✅' : '🔄';
+      const progress = bonus.achieved ? 
+        `Выполнено!` : 
+        `Осталось: ${bonus.count - referralsCount} рефералов`;
+      
+      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Stars\n`;
+      message += `└ ${progress}\n\n`;
+    });
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ наград рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки наград');
+  }
+}
+
+function getReferralLevel(referralsCount) {
+  if (referralsCount >= 50) return '👑 Легенда';
+  if (referralsCount >= 25) return '⭐ Мастер';
+  if (referralsCount >= 10) return '🔥 Эксперт';
+  if (referralsCount >= 5) return '💎 Профессионал';
+  if (referralsCount >= 1) return '🌱 Новичок';
+  return '🔰 Без рефералов';
+}
+
+async function showReferralList(ctx, user) {
+  try {
+    log(`👥 Показ списка рефералов для пользователя ${user.id}`);
+    
+    // Получаем список рефералов из базы данных
+    const referrals = await db.collection('users').find(
+      { referrerId: user.id },
+      { 
+        projection: { 
+          id: 1, 
+          firstName: 1, 
+          username: 1, 
+          level: 1, 
+          createdAt: 1,
+          stars: 1,
+          magnumCoins: 1
+        },
+        sort: { createdAt: -1 }
+      }
+    ).toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'referrals')]
+    ]);
+    
+    let message = `👥 *Список ваших рефералов*\n\n`;
+    
+    if (referrals.length === 0) {
+      message += `📭 *У вас пока нет рефералов*\n\n`;
+      message += `💡 *Как привлечь рефералов:*\n`;
+      message += `├ Поделитесь своей реферальной ссылкой\n`;
+      message += `├ Расскажите друзьям о боте\n`;
+      message += `└ Получайте награды за каждого реферала\n\n`;
+    } else {
+      message += `📊 *Всего рефералов:* \`${referrals.length}\`\n\n`;
+      
+      // Показываем последние 10 рефералов
+      const recentReferrals = referrals.slice(0, 10);
+      message += `👤 *Последние рефералы:*\n\n`;
+      
+      recentReferrals.forEach((referral, index) => {
+        const daysAgo = Math.floor((Date.now() - referral.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        const timeText = daysAgo === 0 ? 'сегодня' : daysAgo === 1 ? 'вчера' : `${daysAgo} дн. назад`;
+        
+        message += `${index + 1}. ${referral.firstName || 'Пользователь'}\n`;
+        message += `├ ID: \`${referral.id}\`\n`;
+        message += `├ Уровень: \`${referral.level || 1}\`\n`;
+        message += `├ Баланс: \`${formatNumber(referral.stars || 0)}\` Stars\n`;
+        message += `├ Magnum Coins: \`${formatNumber(referral.magnumCoins || 0)}\`\n`;
+        message += `└ Присоединился: ${timeText}\n\n`;
+      });
+      
+      if (referrals.length > 10) {
+        message += `... и еще \`${referrals.length - 10}\` рефералов\n\n`;
+      }
+      
+      // Статистика активности рефералов
+      const activeReferrals = referrals.filter(r => r.level > 1);
+      const totalReferralStars = referrals.reduce((sum, r) => sum + (r.stars || 0), 0);
+      const totalReferralMagnum = referrals.reduce((sum, r) => sum + (r.magnumCoins || 0), 0);
+      
+      message += `📈 *Статистика рефералов:*\n`;
+      message += `├ Активных: \`${activeReferrals.length}\`\n`;
+      message += `├ Всего Stars у рефералов: \`${formatNumber(totalReferralStars)}\`\n`;
+      message += `└ Всего Magnum Coins у рефералов: \`${formatNumber(totalReferralMagnum)}\`\n\n`;
+    }
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ списка рефералов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки списка рефералов');
+  }
+}
+
 // ==================== СОЗДАНИЕ БОТА ====================
 const bot = new Telegraf(config.BOT_TOKEN);
 
@@ -2035,6 +2308,78 @@ bot.action('achievements_rewards', async (ctx) => {
     await showAchievementsRewards(ctx, user);
   } catch (error) {
     logError(error, 'Награды достижений');
+  }
+});
+
+// Рефералы
+bot.action('referrals', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralsMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню рефералов');
+  }
+});
+
+bot.action('referral_link', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralLink(ctx, user);
+  } catch (error) {
+    logError(error, 'Реферальная ссылка');
+  }
+});
+
+bot.action('referral_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика рефералов');
+  }
+});
+
+bot.action('referral_rewards', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralRewards(ctx, user);
+  } catch (error) {
+    logError(error, 'Награды рефералов');
+  }
+});
+
+bot.action('referral_list', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showReferralList(ctx, user);
+  } catch (error) {
+    logError(error, 'Список рефералов');
+  }
+});
+
+bot.action('copy_referral_link', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const botUsername = (await ctx.telegram.getMe()).username;
+    const referralLink = `https://t.me/${botUsername}?start=${user.id}`;
+    
+    await ctx.answerCbQuery('📋 Ссылка скопирована в буфер обмена!');
+    await ctx.reply(`🔗 Ваша реферальная ссылка:\n\`${referralLink}\``, { parse_mode: 'Markdown' });
+  } catch (error) {
+    logError(error, 'Копирование реферальной ссылки');
+    await ctx.answerCbQuery('❌ Ошибка копирования ссылки');
   }
 });
 
