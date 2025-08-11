@@ -703,7 +703,7 @@ async function showMinerMenu(ctx, user) {
 async function startMiner(ctx, user) {
   try {
     if (user.miner.active) {
-      await ctx.reply('⚠️ Майнер уже запущен!');
+      await ctx.answerCbQuery('⚠️ Майнер уже запущен!');
       return;
     }
     
@@ -720,18 +720,18 @@ async function startMiner(ctx, user) {
     
     userCache.delete(user.id);
     
-    await ctx.reply('✅ Майнер запущен! Теперь вы будете получать Stars каждый час.');
+    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Stars каждый час.');
     await showMinerMenu(ctx, { ...user, miner: { ...user.miner, active: true } });
   } catch (error) {
     console.error('Ошибка запуска майнера:', error);
-    await ctx.reply('❌ Ошибка запуска майнера');
+    await ctx.answerCbQuery('❌ Ошибка запуска майнера');
   }
 }
 
 async function stopMiner(ctx, user) {
   try {
     if (!user.miner.active) {
-      await ctx.reply('⚠️ Майнер уже остановлен!');
+      await ctx.answerCbQuery('⚠️ Майнер уже остановлен!');
       return;
     }
     
@@ -747,11 +747,11 @@ async function stopMiner(ctx, user) {
     
     userCache.delete(user.id);
     
-    await ctx.reply('⏹️ Майнер остановлен!');
+    await ctx.answerCbQuery('⏹️ Майнер остановлен!');
     await showMinerMenu(ctx, { ...user, miner: { ...user.miner, active: false } });
   } catch (error) {
     console.error('Ошибка остановки майнера:', error);
-    await ctx.reply('❌ Ошибка остановки майнера');
+    await ctx.answerCbQuery('❌ Ошибка остановки майнера');
   }
 }
 
@@ -810,7 +810,7 @@ async function doFarm(ctx, user) {
     
     if (timeSince < cooldown) {
       const remaining = cooldown - timeSince;
-      await ctx.reply(`⏳ Подождите ${formatTime(remaining)} перед следующим фармом!`);
+      await ctx.answerCbQuery(`⏳ Подождите ${formatTime(remaining)} перед следующим фармом!`);
       return;
     }
     
@@ -839,18 +839,14 @@ async function doFarm(ctx, user) {
     
     userCache.delete(user.id);
     
-    await ctx.reply(
-      `🌾 *Фарм завершен!*\n\n` +
-      `💰 *Заработано:* ${formatNumber(totalReward)} Stars\n` +
-      `📈 *Опыт:* +${Math.floor(totalReward * 10)}\n` +
-      `⏰ *Следующий фарм через:* ${formatTime(cooldown)}`,
-      { parse_mode: 'Markdown' }
+    await ctx.answerCbQuery(
+      `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Stars`
     );
     
     await showFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
   } catch (error) {
     console.error('Ошибка фарма:', error);
-    await ctx.reply('❌ Ошибка фарма');
+    await ctx.answerCbQuery('❌ Ошибка фарма');
   }
 }
 
@@ -922,7 +918,7 @@ async function claimBonus(ctx, user) {
       
       if (timeSince < dayInMs) {
         const remaining = dayInMs - timeSince;
-        await ctx.reply(`⏳ Подождите ${formatTime(Math.floor(remaining / 1000))} до следующего бонуса!`);
+        await ctx.answerCbQuery(`⏳ Подождите ${formatTime(Math.floor(remaining / 1000))} до следующего бонуса!`);
         return;
       }
     }
@@ -962,19 +958,14 @@ async function claimBonus(ctx, user) {
     
     userCache.delete(user.id);
     
-    await ctx.reply(
-      `🎁 *Бонус получен!*\n\n` +
-      `💰 *Заработано:* ${formatNumber(totalReward)} Stars\n` +
-      `🔥 *Серия:* ${newStreak} дней\n` +
-      `📈 *Опыт:* +${Math.floor(totalReward * 5)}\n` +
-      `⏰ *Следующий бонус через:* 24 часа`,
-      { parse_mode: 'Markdown' }
+    await ctx.answerCbQuery(
+      `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Stars, серия: ${newStreak} дней`
     );
     
     await showBonusMenu(ctx, { ...user, dailyBonus: { ...bonus, lastBonus: now, streak: newStreak } });
   } catch (error) {
     console.error('Ошибка получения бонуса:', error);
-    await ctx.reply('❌ Ошибка получения бонуса');
+    await ctx.answerCbQuery('❌ Ошибка получения бонуса');
   }
 }
 
