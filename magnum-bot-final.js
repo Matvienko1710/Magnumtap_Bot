@@ -694,7 +694,7 @@ async function showMainMenu(ctx, user) {
     `└ Достижения: \`${user.achievementsCount}\`\n\n` +
     `🎯 Выберите действие:`;
   
-  await ctx.reply(message, {
+  await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
     reply_markup: keyboard.reply_markup
   });
@@ -752,7 +752,7 @@ async function showMinerMenu(ctx, user) {
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Stars${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
   
-  await ctx.reply(message, {
+  await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
     reply_markup: keyboard.reply_markup
   });
@@ -870,7 +870,7 @@ async function showFarmMenu(ctx, user) {
     `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Stars\n\n` +
     `🎯 Выберите действие:`;
   
-  await ctx.reply(message, {
+  await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
     reply_markup: keyboard.reply_markup
   });
@@ -1112,7 +1112,7 @@ async function showBonusMenu(ctx, user) {
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
   
-  await ctx.reply(message, {
+  await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
     reply_markup: keyboard.reply_markup
   });
