@@ -433,7 +433,16 @@ async function getUser(id, ctx = null) {
   try {
     // Проверяем кеш
     const cached = getCachedUser(id);
-    if (cached) return cached;
+    if (cached) {
+      // Проверяем, не заблокирован ли пользователь
+      if (cached.banned) {
+        if (ctx) {
+          await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
+        }
+        return null;
+      }
+      return cached;
+    }
 
     let user = await db.collection('users').findOne({ id: id });
     
@@ -518,6 +527,14 @@ async function getUser(id, ctx = null) {
       await db.collection('users').insertOne(user);
       log(`👤 Создан новый пользователь: ${user.username || user.id}`);
     } else {
+      // Проверяем, не заблокирован ли пользователь
+      if (user.banned) {
+        if (ctx) {
+          await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
+        }
+        return null;
+      }
+      
       // Проверяем и инициализируем все недостающие поля
       user = ensureUserFields(user);
       
@@ -1718,6 +1735,205 @@ async function showAdminBalance(ctx, user) {
   } catch (error) {
     logError(error, `Показ управления балансами для админа ${user.id}`);
     await ctx.answerCbQuery('❌ Ошибка показа управления балансами');
+  }
+}
+
+async function showAdminSettings(ctx, user) {
+  try {
+    log(`⚙️ Показ настроек бота для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🎯 Награды фарма', 'admin_farm_rewards'),
+        Markup.button.callback('⏰ Кулдауны', 'admin_cooldowns')
+      ],
+      [
+        Markup.button.callback('🎁 Ежедневный бонус', 'admin_daily_bonus'),
+        Markup.button.callback('⛏️ Настройки майнера', 'admin_miner_settings')
+      ],
+      [
+        Markup.button.callback('👥 Реферальная система', 'admin_referral_settings'),
+        Markup.button.callback('📢 Каналы подписки', 'admin_subscription_channels')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `⚙️ *Настройки бота*\n\n` +
+      `🔧 *Текущие настройки:*\n` +
+      `├ 🎯 Базовая награда фарма: \`${config.FARM_BASE_REWARD}\` Magnum Coins\n` +
+      `├ ⏰ Кулдаун фарма: \`${config.FARM_COOLDOWN}\` секунд\n` +
+      `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
+      `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_HOUR}\` Magnum Coins/час\n` +
+      `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Magnum Coins\n` +
+      `└ 📢 Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n\n` +
+      `🎯 Выберите настройку для изменения:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Настройки бота показаны для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ настроек бота для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа настроек');
+  }
+}
+
+async function showAdminTopUsers(ctx, user) {
+  try {
+    log(`📊 Показ топ пользователей для админа ${user.id}`);
+    
+    // Получаем топ пользователей по разным критериям
+    const topByLevel = await db.collection('users').find().sort({ level: -1 }).limit(10).toArray();
+    const topByMagnumCoins = await db.collection('users').find().sort({ magnumCoins: -1 }).limit(10).toArray();
+    const topByStars = await db.collection('users').find().sort({ stars: -1 }).limit(10).toArray();
+    const topByReferrals = await db.collection('users').find().sort({ referralsCount: -1 }).limit(10).toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⭐ По уровню', 'admin_top_level'),
+        Markup.button.callback('🪙 По Magnum Coins', 'admin_top_magnum')
+      ],
+      [
+        Markup.button.callback('💎 По Stars', 'admin_top_stars'),
+        Markup.button.callback('👥 По рефералам', 'admin_top_referrals')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_users')]
+    ]);
+    
+    let message = `📊 *Топ пользователей*\n\n`;
+    
+    // Показываем топ по уровню
+    message += `⭐ *Топ по уровню:*\n`;
+    topByLevel.forEach((user, index) => {
+      message += `${index + 1}. ID: \`${user.id}\` - Уровень: \`${user.level}\`\n`;
+    });
+    
+    message += `\n🪙 *Топ по Magnum Coins:*\n`;
+    topByMagnumCoins.forEach((user, index) => {
+      message += `${index + 1}. ID: \`${user.id}\` - \`${formatNumber(user.magnumCoins)}\` MC\n`;
+    });
+    
+    message += `\n🎯 Выберите категорию для подробного просмотра:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Топ пользователей показан для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ топ пользователей для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа топ пользователей');
+  }
+}
+
+async function showAdminSearchUser(ctx, user) {
+  try {
+    log(`🔍 Показ поиска пользователя для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_users')]
+    ]);
+    
+    const message = 
+      `🔍 *Поиск пользователя*\n\n` +
+      `📝 *Инструкция:*\n` +
+      `├ Отправьте ID пользователя в чат\n` +
+      `├ ID можно найти в профиле пользователя\n` +
+      `└ Или используйте @username\n\n` +
+      `💡 *Пример:* \`123456789\` или \`@username\`\n\n` +
+      `🎯 Отправьте ID пользователя:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    // Сохраняем состояние поиска
+    user.adminState = 'searching_user';
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'searching_user', updatedAt: new Date() } }
+    );
+    
+    log(`✅ Поиск пользователя показан для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ поиска пользователя для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа поиска');
+  }
+}
+
+async function showAdminBanUser(ctx, user) {
+  try {
+    log(`🚫 Показ блокировки пользователя для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_users')]
+    ]);
+    
+    const message = 
+      `🚫 *Блокировка пользователя*\n\n` +
+      `📝 *Инструкция:*\n` +
+      `├ Отправьте ID пользователя для блокировки\n` +
+      `├ Пользователь потеряет доступ к боту\n` +
+      `└ Для разблокировки используйте соответствующую функцию\n\n` +
+      `⚠️ *Внимание:* Блокировка необратима!\n\n` +
+      `🎯 Отправьте ID пользователя для блокировки:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    // Сохраняем состояние блокировки
+    user.adminState = 'banning_user';
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'banning_user', updatedAt: new Date() } }
+    );
+    
+    log(`✅ Блокировка пользователя показана для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ блокировки пользователя для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа блокировки');
+  }
+}
+
+async function showAdminUnbanUser(ctx, user) {
+  try {
+    log(`✅ Показ разблокировки пользователя для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_users')]
+    ]);
+    
+    const message = 
+      `✅ *Разблокировка пользователя*\n\n` +
+      `📝 *Инструкция:*\n` +
+      `├ Отправьте ID пользователя для разблокировки\n` +
+      `├ Пользователь восстановит доступ к боту\n` +
+      `└ Все данные пользователя сохранятся\n\n` +
+      `🎯 Отправьте ID пользователя для разблокировки:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    // Сохраняем состояние разблокировки
+    user.adminState = 'unbanning_user';
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'unbanning_user', updatedAt: new Date() } }
+    );
+    
+    log(`✅ Разблокировка пользователя показана для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ разблокировки пользователя для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа разблокировки');
   }
 }
 
@@ -3258,6 +3474,172 @@ bot.start(async (ctx) => {
   }
 });
 
+// Обработка текстовых сообщений для админ функций
+bot.on('text', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) return;
+    
+    const text = ctx.message.text;
+    
+    // Проверяем состояние админа
+    if (user.adminState === 'searching_user') {
+      await handleAdminSearchUser(ctx, user, text);
+    } else if (user.adminState === 'banning_user') {
+      await handleAdminBanUser(ctx, user, text);
+    } else if (user.adminState === 'unbanning_user') {
+      await handleAdminUnbanUser(ctx, user, text);
+    }
+  } catch (error) {
+    logError(error, 'Обработка текстового сообщения админа');
+  }
+});
+
+// Функции обработки админ действий
+async function handleAdminSearchUser(ctx, user, text) {
+  try {
+    let targetUser;
+    
+    // Пытаемся найти пользователя по ID или username
+    if (text.startsWith('@')) {
+      const username = text.substring(1);
+      targetUser = await db.collection('users').findOne({ username: username });
+    } else {
+      const userId = parseInt(text);
+      if (isNaN(userId)) {
+        await ctx.reply('❌ Неверный формат ID. Используйте число или @username');
+        return;
+      }
+      targetUser = await db.collection('users').findOne({ id: userId });
+    }
+    
+    if (!targetUser) {
+      await ctx.reply('❌ Пользователь не найден');
+      return;
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🚫 Заблокировать', `admin_ban_${targetUser.id}`),
+        Markup.button.callback('✅ Разблокировать', `admin_unban_${targetUser.id}`)
+      ],
+      [
+        Markup.button.callback('💰 Изменить баланс', `admin_balance_${targetUser.id}`),
+        Markup.button.callback('📊 Подробная статистика', `admin_stats_${targetUser.id}`)
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_users')]
+    ]);
+    
+    const message = 
+      `👤 *Информация о пользователе*\n\n` +
+      `🆔 *ID:* \`${targetUser.id}\`\n` +
+      `👤 *Имя:* ${targetUser.firstName || 'Не указано'}\n` +
+      `📅 *Дата регистрации:* ${targetUser.createdAt ? targetUser.createdAt.toLocaleDateString() : 'Неизвестно'}\n` +
+      `⏰ *Последний вход:* ${targetUser.lastSeen ? targetUser.lastSeen.toLocaleDateString() : 'Неизвестно'}\n\n` +
+      `📊 *Статистика:*\n` +
+      `├ Уровень: \`${targetUser.level || 1}\`\n` +
+      `├ Опыт: \`${targetUser.experience || 0}\`\n` +
+      `├ Magnum Coins: \`${formatNumber(targetUser.magnumCoins || 0)}\`\n` +
+      `├ Stars: \`${formatNumber(targetUser.stars || 0)}\`\n` +
+      `├ Рефералов: \`${targetUser.referralsCount || 0}\`\n` +
+      `└ Статус: ${targetUser.banned ? '🚫 Заблокирован' : '✅ Активен'}\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.reply(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Поиск пользователя админом');
+    await ctx.reply('❌ Ошибка поиска пользователя');
+  }
+}
+
+async function handleAdminBanUser(ctx, user, text) {
+  try {
+    const userId = parseInt(text);
+    if (isNaN(userId)) {
+      await ctx.reply('❌ Неверный формат ID. Используйте число');
+      return;
+    }
+    
+    const targetUser = await db.collection('users').findOne({ id: userId });
+    if (!targetUser) {
+      await ctx.reply('❌ Пользователь не найден');
+      return;
+    }
+    
+    if (targetUser.banned) {
+      await ctx.reply('❌ Пользователь уже заблокирован');
+      return;
+    }
+    
+    // Блокируем пользователя
+    await db.collection('users').updateOne(
+      { id: userId },
+      { $set: { banned: true, bannedAt: new Date(), bannedBy: user.id, updatedAt: new Date() } }
+    );
+    
+    await ctx.reply(`✅ Пользователь ${userId} успешно заблокирован`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Блокировка пользователя админом');
+    await ctx.reply('❌ Ошибка блокировки пользователя');
+  }
+}
+
+async function handleAdminUnbanUser(ctx, user, text) {
+  try {
+    const userId = parseInt(text);
+    if (isNaN(userId)) {
+      await ctx.reply('❌ Неверный формат ID. Используйте число');
+      return;
+    }
+    
+    const targetUser = await db.collection('users').findOne({ id: userId });
+    if (!targetUser) {
+      await ctx.reply('❌ Пользователь не найден');
+      return;
+    }
+    
+    if (!targetUser.banned) {
+      await ctx.reply('❌ Пользователь не заблокирован');
+      return;
+    }
+    
+    // Разблокируем пользователя
+    await db.collection('users').updateOne(
+      { id: userId },
+      { $unset: { banned: "", bannedAt: "", bannedBy: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    await ctx.reply(`✅ Пользователь ${userId} успешно разблокирован`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+  } catch (error) {
+    logError(error, 'Разблокировка пользователя админом');
+    await ctx.reply('❌ Ошибка разблокировки пользователя');
+  }
+}
+
 // Обработка кнопок главного меню
 bot.action('main_menu', async (ctx) => {
   try {
@@ -3856,6 +4238,61 @@ bot.action('admin_balance', async (ctx) => {
     await showAdminBalance(ctx, user);
   } catch (error) {
     logError(error, 'Управление балансами (обработчик)');
+  }
+});
+
+bot.action('admin_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки бота (обработчик)');
+  }
+});
+
+bot.action('admin_search_user', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminSearchUser(ctx, user);
+  } catch (error) {
+    logError(error, 'Поиск пользователя (обработчик)');
+  }
+});
+
+bot.action('admin_top_users', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminTopUsers(ctx, user);
+  } catch (error) {
+    logError(error, 'Топ пользователей (обработчик)');
+  }
+});
+
+bot.action('admin_ban_user', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminBanUser(ctx, user);
+  } catch (error) {
+    logError(error, 'Блокировка пользователя (обработчик)');
+  }
+});
+
+bot.action('admin_unban_user', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showAdminUnbanUser(ctx, user);
+  } catch (error) {
+    logError(error, 'Разблокировка пользователя (обработчик)');
   }
 });
 
