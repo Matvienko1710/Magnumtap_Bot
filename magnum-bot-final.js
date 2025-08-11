@@ -907,8 +907,8 @@ async function doFarm(ctx, user) {
       { id: user.id },
       { 
         $inc: { 
-          stars: totalReward,
-          totalEarnedStars: totalReward,
+          magnumCoins: totalReward,
+          totalEarnedMagnumCoins: totalReward,
           experience: Math.floor(totalReward * 10),
           'farm.farmCount': 1,
           'farm.totalFarmEarnings': totalReward,
@@ -924,9 +924,9 @@ async function doFarm(ctx, user) {
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
-    log(`✅ Фарм успешно завершен для пользователя ${user.id}, заработано: ${totalReward} Stars`);
+    log(`✅ Фарм успешно завершен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins`);
     await ctx.answerCbQuery(
-      `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Stars`
+      `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Magnum Coins`
     );
     
     log(`🔄 Обновление меню фарма для пользователя ${user.id}`);
