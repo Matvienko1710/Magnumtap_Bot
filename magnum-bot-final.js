@@ -475,6 +475,15 @@ async function getUser(id, ctx = null) {
     console.log(`📊 Поиск пользователя ${id} в базе данных`);
     let user = await db.collection('users').findOne({ id: id });
     
+    if (user) {
+      console.log(`✅ Пользователь ${id} найден в базе данных`);
+      console.log(`📊 Данные из БД для пользователя ${id}:`, {
+        adminState: user.adminState,
+        level: user.level,
+        isAdmin: isAdmin(user.id)
+      });
+    }
+    
     if (!user) {
       console.log(`🆕 Создание нового пользователя ${id}`);
       console.log(`Данные для нового пользователя ${id}:`, {
@@ -4212,6 +4221,7 @@ bot.start(async (ctx) => {
 bot.on('text', async (ctx) => {
   try {
     console.log(`📝 Текстовое сообщение от пользователя ${ctx.from.id}: "${ctx.message.text}"`);
+    console.log(`🔍 Начинаем обработку текстового сообщения от ${ctx.from.id}`);
     
     const user = await getUser(ctx.from.id);
     if (!user) {
