@@ -2113,6 +2113,358 @@ async function showReferralList(ctx, user) {
   }
 }
 
+// ==================== НАСТРОЙКИ ====================
+async function showSettingsMenu(ctx, user) {
+  try {
+    log(`⚙️ Показ меню настроек для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🔔 Уведомления', 'settings_notifications'),
+        Markup.button.callback('🔒 Приватность', 'settings_privacy')
+      ],
+      [
+        Markup.button.callback('🌐 Язык', 'settings_language'),
+        Markup.button.callback('🔄 Сброс', 'settings_reset')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `⚙️ *Настройки*\n\n` +
+      `🔔 *Уведомления:* ${settings.notifications !== false ? '🟢 Включены' : '🔴 Выключены'}\n` +
+      `🔒 *Приватность:* ${settings.privacy !== false ? '🟢 Стандартная' : '🔴 Расширенная'}\n` +
+      `🌐 *Язык:* ${settings.language === 'en' ? '🇺🇸 English' : '🇷🇺 Русский'}\n\n` +
+      `💡 *Выберите раздел для настройки:*\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню настроек');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек');
+  }
+}
+
+async function showNotificationSettings(ctx, user) {
+  try {
+    log(`🔔 Показ настроек уведомлений для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const notificationsEnabled = settings.notifications !== false;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          notificationsEnabled ? '🔴 Отключить уведомления' : '🟢 Включить уведомления',
+          'toggle_notifications'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    const message = 
+      `🔔 *Настройки уведомлений*\n\n` +
+      `📱 *Текущий статус:* ${notificationsEnabled ? '🟢 Включены' : '🔴 Выключены'}\n\n` +
+      `📋 *Типы уведомлений:*\n` +
+      `├ Уведомления о фарме\n` +
+      `├ Уведомления о майнинге\n` +
+      `├ Уведомления о бонусах\n` +
+      `├ Уведомления о достижениях\n` +
+      `└ Уведомления о рефералах\n\n` +
+      `💡 *При отключении уведомлений вы не будете получать:*\n` +
+      `├ Уведомления о готовности фарма\n` +
+      `├ Уведомления о наградах майнера\n` +
+      `├ Уведомления о ежедневных бонусах\n` +
+      `└ Другие системные уведомления\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек уведомлений');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек уведомлений');
+  }
+}
+
+async function showPrivacySettings(ctx, user) {
+  try {
+    log(`🔒 Показ настроек приватности для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const privacyEnabled = settings.privacy !== false;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          privacyEnabled ? '🔴 Расширенная приватность' : '🟢 Стандартная приватность',
+          'toggle_privacy'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    const message = 
+      `🔒 *Настройки приватности*\n\n` +
+      `🛡️ *Текущий режим:* ${privacyEnabled ? '🟢 Стандартная' : '🔴 Расширенная'}\n\n` +
+      `📊 *Стандартная приватность:*\n` +
+      `├ Ваш ID виден в статистике\n` +
+      `├ Имя отображается в списках\n` +
+      `├ Уровень виден другим игрокам\n` +
+      `└ Балансы скрыты\n\n` +
+      `🔒 *Расширенная приватность:*\n` +
+      `├ ID скрыт в статистике\n` +
+      `├ Имя скрыто в списках\n` +
+      `├ Уровень скрыт\n` +
+      `└ Все данные приватны\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек приватности');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек приватности');
+  }
+}
+
+async function showLanguageSettings(ctx, user) {
+  try {
+    log(`🌐 Показ настроек языка для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const currentLanguage = settings.language || 'ru';
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          currentLanguage === 'ru' ? '✅ 🇷🇺 Русский' : '🇷🇺 Русский',
+          'set_language_ru'
+        ),
+        Markup.button.callback(
+          currentLanguage === 'en' ? '✅ 🇺🇸 English' : '🇺🇸 English',
+          'set_language_en'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    const message = 
+      `🌐 *Настройки языка*\n\n` +
+      `🗣️ *Текущий язык:* ${currentLanguage === 'ru' ? '🇷🇺 Русский' : '🇺🇸 English'}\n\n` +
+      `📝 *Выберите язык интерфейса:*\n\n` +
+      `🇷🇺 *Русский:*\n` +
+      `├ Полная поддержка русского языка\n` +
+      `├ Все меню и сообщения на русском\n` +
+      `└ Рекомендуется для русскоязычных пользователей\n\n` +
+      `🇺🇸 *English:*\n` +
+      `├ Full English language support\n` +
+      `├ All menus and messages in English\n` +
+      `└ Recommended for English-speaking users\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек языка');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек языка');
+  }
+}
+
+async function showResetSettings(ctx, user) {
+  try {
+    log(`🔄 Показ настроек сброса для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⚠️ Сбросить настройки', 'confirm_reset'),
+        Markup.button.callback('🔙 Назад', 'settings')
+      ]
+    ]);
+    
+    const message = 
+      `🔄 *Сброс настроек*\n\n` +
+      `⚠️ *Внимание!* Это действие нельзя отменить.\n\n` +
+      `🗑️ *Что будет сброшено:*\n` +
+      `├ Все настройки уведомлений\n` +
+      `├ Настройки приватности\n` +
+      `├ Языковые настройки\n` +
+      `└ Другие пользовательские настройки\n\n` +
+      `✅ *Что НЕ будет затронуто:*\n` +
+      `├ Ваш прогресс в игре\n` +
+      `├ Балансы (Stars, Magnum Coins)\n` +
+      `├ Достижения и рефералы\n` +
+      `└ Статистика и уровень\n\n` +
+      `💡 *После сброса:*\n` +
+      `├ Уведомления будут включены\n` +
+      `├ Приватность будет стандартной\n` +
+      `└ Язык будет русский\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек сброса');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек сброса');
+  }
+}
+
+async function toggleNotificationSetting(ctx, user) {
+  try {
+    log(`🔔 Переключение настроек уведомлений для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const newNotificationState = settings.notifications === false ? true : false;
+    
+    // Обновляем настройки в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings.notifications': newNotificationState,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    const status = newNotificationState ? 'включены' : 'выключены';
+    log(`✅ Уведомления ${status} для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery(`✅ Уведомления ${status}!`);
+    
+    // Обновляем меню настроек уведомлений
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showNotificationSettings(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Переключение уведомлений');
+    await ctx.answerCbQuery('❌ Ошибка изменения настроек');
+  }
+}
+
+async function togglePrivacySetting(ctx, user) {
+  try {
+    log(`🔒 Переключение настроек приватности для пользователя ${user.id}`);
+    
+    const settings = user.settings || {};
+    const newPrivacyState = settings.privacy === false ? true : false;
+    
+    // Обновляем настройки в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings.privacy': newPrivacyState,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    const status = newPrivacyState ? 'стандартная' : 'расширенная';
+    log(`✅ Приватность изменена на ${status} для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery(`✅ Приватность: ${status}!`);
+    
+    // Обновляем меню настроек приватности
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showPrivacySettings(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Переключение приватности');
+    await ctx.answerCbQuery('❌ Ошибка изменения настроек');
+  }
+}
+
+async function setLanguage(ctx, user, language) {
+  try {
+    log(`🌐 Установка языка ${language} для пользователя ${user.id}`);
+    
+    // Обновляем настройки в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings.language': language,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    const langName = language === 'ru' ? 'русский' : 'English';
+    log(`✅ Язык изменен на ${langName} для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery(`✅ Язык изменен на ${langName}!`);
+    
+    // Обновляем меню настроек языка
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showLanguageSettings(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Установка языка');
+    await ctx.answerCbQuery('❌ Ошибка изменения языка');
+  }
+}
+
+async function resetUserSettings(ctx, user) {
+  try {
+    log(`🔄 Сброс настроек для пользователя ${user.id}`);
+    
+    // Сбрасываем все настройки к значениям по умолчанию
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          'settings': {
+            notifications: true,
+            privacy: true,
+            language: 'ru'
+          },
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    log(`✅ Настройки сброшены для пользователя ${user.id}`);
+    
+    await ctx.answerCbQuery('✅ Настройки сброшены!');
+    
+    // Возвращаемся в главное меню настроек
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showSettingsMenu(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Сброс настроек');
+    await ctx.answerCbQuery('❌ Ошибка сброса настроек');
+  }
+}
+
 // ==================== СОЗДАНИЕ БОТА ====================
 const bot = new Telegraf(config.BOT_TOKEN);
 
@@ -2380,6 +2732,118 @@ bot.action('copy_referral_link', async (ctx) => {
   } catch (error) {
     logError(error, 'Копирование реферальной ссылки');
     await ctx.answerCbQuery('❌ Ошибка копирования ссылки');
+  }
+});
+
+// Настройки
+bot.action('settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showSettingsMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню настроек');
+  }
+});
+
+bot.action('settings_notifications', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showNotificationSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки уведомлений');
+  }
+});
+
+bot.action('settings_privacy', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showPrivacySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки приватности');
+  }
+});
+
+bot.action('settings_language', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showLanguageSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки языка');
+  }
+});
+
+bot.action('settings_reset', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showResetSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Сброс настроек');
+  }
+});
+
+// Переключатели настроек
+bot.action('toggle_notifications', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await toggleNotificationSetting(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение уведомлений');
+  }
+});
+
+bot.action('toggle_privacy', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await togglePrivacySetting(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение приватности');
+  }
+});
+
+bot.action('set_language_ru', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await setLanguage(ctx, user, 'ru');
+  } catch (error) {
+    logError(error, 'Установка языка RU');
+  }
+});
+
+bot.action('set_language_en', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await setLanguage(ctx, user, 'en');
+  } catch (error) {
+    logError(error, 'Установка языка EN');
+  }
+});
+
+bot.action('confirm_reset', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await resetUserSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Сброс настроек пользователя');
   }
 });
 
