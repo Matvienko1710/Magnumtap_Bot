@@ -784,7 +784,7 @@ async function showMainMenu(ctx, user) {
       Markup.button.callback('👥 Рефералы', 'referrals')
     ],
     [
-      Markup.button.callback('🆘 Поддержка', 'support'),
+      Markup.button.callback('🎫 Промокод', 'promocode'),
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
@@ -4258,19 +4258,30 @@ bot.on('text', async (ctx) => {
       return;
     }
     
-    if (!isAdmin(user.id)) {
-      log(`ℹ️ Пользователь ${ctx.from.id} не является админом, пропускаем обработку текста`);
-      return;
-    }
-    
     const text = ctx.message.text;
-    logDebug(`Обработка текста админа ${ctx.from.id}`, {
-      adminState: user.adminState,
-      text: text,
-      textLength: text.length
-    });
     
-    // Проверяем состояние админа
+    // Проверяем, есть ли у пользователя adminState (для создания тикетов поддержки)
+    if (user.adminState) {
+      logDebug(`Обработка текста пользователя ${ctx.from.id} с adminState`, {
+        adminState: user.adminState,
+        text: text,
+        textLength: text.length,
+        isAdmin: isAdmin(user.id)
+      });
+      
+      // Проверяем состояние пользователя
+      if (user.adminState === 'creating_support_ticket') {
+        log(`🆘 Пользователь ${ctx.from.id} создает тикет поддержки: "${text}"`);
+        await handleCreateSupportTicket(ctx, user, text);
+        return;
+      } else if (user.adminState && user.adminState.startsWith('answering_ticket_')) {
+        log(`📝 Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
+        await handleAdminAnswerTicket(ctx, user, text);
+        return;
+      }
+      
+      // Проверяем админские состояния (только для админов)
+      if (isAdmin(user.id)) {
     if (user.adminState === 'searching_user') {
       log(`🔍 Админ ${ctx.from.id} ищет пользователя: "${text}"`);
       await handleAdminSearchUser(ctx, user, text);
@@ -4317,7 +4328,14 @@ bot.on('text', async (ctx) => {
       log(`✅ Админ ${ctx.from.id} отвечает на тикет: "${text}"`);
       await handleAdminAnswerTicket(ctx, user, text);
     } else {
-      log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+      // Если у пользователя нет adminState, но он админ - показываем сообщение
+      if (isAdmin(user.id)) {
+        log(`ℹ️ Админ ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+        await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
+      } else {
+        log(`ℹ️ Пользователь ${ctx.from.id} отправил текст, но adminState не установлен: "${text}"`);
+        await ctx.reply('❌ Неизвестная команда. Используйте меню для навигации.');
+      }
     }
     
     log(`✅ Текстовое сообщение от ${ctx.from.id} обработано`);
@@ -5435,6 +5453,9 @@ bot.action('contact_support', async (ctx) => {
       { id: user.id },
       { $set: { adminState: 'creating_support_ticket', updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя, чтобы изменения применились
+    userCache.delete(user.id);
     
     logDebug(`Установлен adminState для пользователя ${ctx.from.id}`, { adminState: 'creating_support_ticket' });
     
