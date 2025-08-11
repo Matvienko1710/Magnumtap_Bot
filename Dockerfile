@@ -26,7 +26,7 @@ EXPOSE 3000
 
 # Проверка здоровья
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "console.log('Health check passed')" || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
 # Запускаем бота
 CMD ["npm", "start"]
