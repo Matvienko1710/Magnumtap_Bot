@@ -700,6 +700,65 @@ async function showMainMenu(ctx, user) {
   });
 }
 
+async function showMainMenuStart(ctx, user) {
+  const rank = getUserRank(user);
+  
+  // Создаем базовые кнопки
+  const buttons = [
+    [
+      Markup.button.callback('⛏️ Майнинг', 'miner'),
+      Markup.button.callback('🌾 Фарм', 'farm')
+    ],
+    [
+      Markup.button.callback('💱 Обмен', 'exchange'),
+      Markup.button.callback('💰 Вывод', 'withdrawal')
+    ],
+    [
+      Markup.button.callback('🎁 Бонус', 'bonus'),
+      Markup.button.callback('📋 Задания', 'tasks')
+    ],
+    [
+      Markup.button.callback('🏆 Достижения', 'achievements'),
+      Markup.button.callback('👥 Рефералы', 'referrals')
+    ],
+    [
+      Markup.button.callback('🆘 Поддержка', 'support'),
+      Markup.button.callback('⚙️ Настройки', 'settings')
+    ]
+  ];
+  
+  // Добавляем админ кнопку если нужно
+  if (isAdmin(user.id)) {
+    buttons.push([
+      Markup.button.callback('👨‍💼 Админ панель', 'admin')
+    ]);
+  }
+  
+  const keyboard = Markup.inlineKeyboard(buttons);
+  
+  const message = 
+    `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
+    `👤 *Профиль:*\n` +
+    `├ ID: \`${user.id}\`\n` +
+    `├ Имя: ${user.firstName || 'Не указано'}\n` +
+    `├ Уровень: ${user.level}\n` +
+    `├ Ранг: ${rank}\n` +
+    `└ Титул: ${user.mainTitle}\n\n` +
+    `💎 *Баланс:*\n` +
+    `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
+    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
+    `📊 *Статистика:*\n` +
+    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
+    `├ Рефералы: \`${user.referralsCount}\`\n` +
+    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
+    `🎯 Выберите действие:`;
+  
+  await ctx.reply(message, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard.reply_markup
+  });
+}
+
 // ==================== МАЙНИНГ ====================
 async function showMinerMenu(ctx, user) {
   // Убеждаемся, что все поля майнера инициализированы
@@ -1660,7 +1719,8 @@ bot.start(async (ctx) => {
       await handleReferral(user.id, parseInt(startPayload));
     }
     
-    await showMainMenu(ctx, user);
+    // Для команды /start используем ctx.reply вместо editMessageText
+    await showMainMenuStart(ctx, user);
   } catch (error) {
     logError(error, 'Команда /start');
     await ctx.reply('❌ Произошла ошибка. Попробуйте позже.');
