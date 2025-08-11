@@ -50,24 +50,28 @@ const config = {
 };
 
 // ==================== HTTP СЕРВЕР ДЛЯ HEALTH CHECK ====================
-const server = http.createServer((req, res) => {
-  if (req.url === '/' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ 
-      status: 'ok', 
-      message: 'Magnum Stars Bot is running',
-      timestamp: new Date().toISOString()
-    }));
-  } else {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
-  }
-});
-
+let server;
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  log(`🌐 HTTP сервер запущен на порту ${PORT}`);
-});
+
+function startHttpServer() {
+  server = http.createServer((req, res) => {
+    if (req.url === '/' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        status: 'ok', 
+        message: 'Magnum Stars Bot is running',
+        timestamp: new Date().toISOString()
+      }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    }
+  });
+
+  server.listen(PORT, () => {
+    log(`🌐 HTTP сервер запущен на порту ${PORT}`);
+  });
+}
 
 // ==================== БАЗА ДАННЫХ ====================
 let db;
@@ -1406,6 +1410,9 @@ async function startBot() {
   try {
     await connectDB();
     
+    // Запускаем HTTP сервер для health check
+    startHttpServer();
+    
     // Запускаем обработку майнера каждые 30 минут
     setInterval(processMinerRewards, 30 * 60 * 1000);
     
@@ -1428,8 +1435,29 @@ async function startBot() {
     log('🚀 Magnum Stars Bot запущен!');
     
     // Graceful stop
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+    process.once('SIGINT', () => {
+      log('🛑 Получен сигнал SIGINT, останавливаем бота...');
+      if (server) {
+        server.close(() => {
+          log('🌐 HTTP сервер остановлен');
+          bot.stop('SIGINT');
+        });
+      } else {
+        bot.stop('SIGINT');
+      }
+    });
+    
+    process.once('SIGTERM', () => {
+      log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
+      if (server) {
+        server.close(() => {
+          log('🌐 HTTP сервер остановлен');
+          bot.stop('SIGTERM');
+        });
+      } else {
+        bot.stop('SIGTERM');
+      }
+    });
   } catch (error) {
     logError(error, 'Запуск бота');
     process.exit(1);
