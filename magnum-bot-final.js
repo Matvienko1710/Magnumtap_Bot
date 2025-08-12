@@ -43,7 +43,8 @@ const config = {
   FARM_BASE_REWARD: 0.01,
   DAILY_BONUS_BASE: 3,
   REFERRAL_BONUS: 50,
-  MINER_REWARD_PER_HOUR: 0.1,
+  MINER_REWARD_PER_MINUTE: 0.01, // Базовая награда за минуту
+  MINER_REWARD_PER_HOUR: 0.1, // Оставляем для обратной совместимости
   EXCHANGE_COMMISSION: 2.5,
   MIN_WITHDRAWAL: 100,
   MAX_WITHDRAWAL: 10000,
@@ -1142,15 +1143,19 @@ async function showMinerMenu(ctx, user) {
   const miner = user.miner;
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
-  const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+  
+  // Рассчитываем текущую награду с учетом курса и количества майнеров
+  const currentReward = await calculateMinerReward(efficiency);
+  const rewardPerMinute = currentReward;
+  const rewardPerHour = currentReward * 60; // Примерная награда за час
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
   let lastRewardText = '';
   
   if (miner.lastReward) {
     const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
-    if (timeSince < 3600) {
-      const remaining = 3600 - timeSince;
+    if (timeSince < 60) {
+      const remaining = 60 - timeSince;
       lastRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
     }
   }
@@ -1174,6 +1179,7 @@ async function showMinerMenu(ctx, user) {
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
+    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Magnum Coins${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
@@ -1209,7 +1215,7 @@ async function startMiner(ctx, user) {
     userCache.delete(user.id);
     
     log(`✅ Майнер успешно запущен для пользователя ${user.id}`);
-    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Magnum Coins каждый час.');
+    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Magnum Coins каждую минуту.');
     
     log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
     // Обновляем меню майнера
@@ -1267,7 +1273,10 @@ async function showMinerUpgrade(ctx, user) {
     // Расчет стоимости улучшения
     const upgradeCost = currentLevel * 100; // 100 Magnum Coins за уровень
     const newEfficiency = currentEfficiency + 0.1;
-    const newRewardPerHour = config.MINER_REWARD_PER_HOUR * newEfficiency;
+    
+    // Рассчитываем новую награду с учетом курса и количества майнеров
+    const newRewardPerMinute = await calculateMinerReward(newEfficiency);
+    const newRewardPerHour = newRewardPerMinute * 60;
     
     const canUpgrade = user.magnumCoins >= upgradeCost;
     
@@ -1285,7 +1294,7 @@ async function showMinerUpgrade(ctx, user) {
       `⬆️ *Улучшение майнера*\n\n` +
       `📊 *Текущий уровень:* ${currentLevel}\n` +
       `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
-      `💰 *Текущая награда/час:* ${formatNumber(config.MINER_REWARD_PER_HOUR * currentEfficiency)} Magnum Coins\n\n` +
+      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency)) * 60)} Magnum Coins\n\n` +
       `📈 *После улучшения:*\n` +
       `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
       `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Magnum Coins\n\n` +
@@ -1312,7 +1321,11 @@ async function showMinerStats(ctx, user) {
     const miner = user.miner;
     const isActive = miner.active || false;
     const efficiency = miner.efficiency || 1;
-    const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+    
+    // Рассчитываем текущую награду с учетом курса и количества майнеров
+    const currentReward = await calculateMinerReward(efficiency);
+    const rewardPerMinute = currentReward;
+    const rewardPerHour = currentReward * 60;
     
     let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
     let lastRewardText = '';
@@ -1320,8 +1333,8 @@ async function showMinerStats(ctx, user) {
     
     if (miner.lastReward) {
       const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
-      if (timeSince < 3600) {
-        const remaining = 3600 - timeSince;
+      if (timeSince < 60) {
+        const remaining = 60 - timeSince;
         nextRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
       } else {
         nextRewardText = `\n✅ Готов к получению награды!`;
@@ -1337,13 +1350,15 @@ async function showMinerStats(ctx, user) {
       `📈 *Уровень:* ${miner.level || 1}\n` +
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
       `📊 *Статус:* ${statusText}\n` +
+      `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
       `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
       `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins\n` +
       `⏰ *Последняя награда:* ${miner.lastReward ? miner.lastReward.toLocaleString('ru-RU') : 'Нет'}\n` +
       `${nextRewardText}\n\n` +
       `📈 *Информация:*\n` +
       `• Майнер работает автоматически\n` +
-      `• Награды выдаются каждый час\n` +
+      `• Награды выдаются каждую минуту\n` +
+      `• Награда зависит от курса обмена и количества майнеров\n` +
       `• Эффективность увеличивается с улучшениями\n` +
       `• Можно улучшать за Magnum Coins`;
     
@@ -1668,15 +1683,19 @@ async function updateMinerMenu(ctx, user) {
   const miner = user.miner;
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
-  const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+  
+  // Рассчитываем текущую награду с учетом курса и количества майнеров
+  const currentReward = await calculateMinerReward(efficiency);
+  const rewardPerMinute = currentReward;
+  const rewardPerHour = currentReward * 60;
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
   let lastRewardText = '';
   
   if (miner.lastReward) {
     const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
-    if (timeSince < 3600) {
-      const remaining = 3600 - timeSince;
+    if (timeSince < 60) {
+      const remaining = 60 - timeSince;
       lastRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
     }
   }
@@ -1700,6 +1719,7 @@ async function updateMinerMenu(ctx, user) {
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
+    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Magnum Coins${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
@@ -3074,7 +3094,7 @@ async function showAdminSettings(ctx, user) {
       `├ 🎯 Базовая награда фарма: \`${config.FARM_BASE_REWARD}\` Magnum Coins\n` +
       `├ ⏰ Кулдаун фарма: \`${config.FARM_COOLDOWN}\` секунд\n` +
       `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
-      `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_HOUR}\` Magnum Coins/час\n` +
+      `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins/мин\n` +
       `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Magnum Coins\n` +
       `├ 💸 Комиссия обмена: \`${config.EXCHANGE_COMMISSION}%\`\n` +
       `└ 📢 Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n\n` +
@@ -3262,7 +3282,7 @@ async function showAdminMinerSettings(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('💰 Награда за час', 'admin_miner_reward'),
+        Markup.button.callback('💰 Базовая награда', 'admin_miner_reward'),
         Markup.button.callback('⚡ Эффективность', 'admin_miner_efficiency')
       ],
       [
@@ -3275,10 +3295,10 @@ async function showAdminMinerSettings(ctx, user) {
     const message = 
       `⛏️ *Настройки майнера*\n\n` +
       `💰 *Текущие настройки:*\n` +
-      `├ Награда за час: \`${config.MINER_REWARD_PER_HOUR}\` Magnum Coins\n` +
+      `├ Базовая награда за минуту: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins\n` +
       `├ Базовая эффективность: \`1.0\`\n` +
       `├ Максимальная эффективность: \`5.0\`\n` +
-      `└ Максимальная награда: \`${config.MINER_REWARD_PER_HOUR * 5}\` Magnum Coins/час\n\n` +
+      `└ Максимальная базовая награда: \`${config.MINER_REWARD_PER_MINUTE * 5}\` Magnum Coins/мин\n\n` +
       `📊 *Статистика пользователя:*\n` +
       `├ Уровень майнера: \`${user.miner?.level || 1}\`\n` +
       `├ Эффективность: \`${user.miner?.efficiency || 1.0}\`\n` +
@@ -3535,47 +3555,94 @@ async function showAdminUnbanUser(ctx, user) {
 }
 
 // ==================== ОБРАБОТКА МАЙНЕРА ====================
+// Функция для расчета награды майнера с учетом курса и количества активных майнеров
+async function calculateMinerReward(userEfficiency = 1) {
+  try {
+    // Получаем количество активных майнеров
+    const activeMinersCount = await db.collection('users').countDocuments({
+      'miner.active': true
+    });
+    
+    // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
+    
+    // Базовая награда за минуту
+    let baseReward = config.MINER_REWARD_PER_MINUTE;
+    
+    // Множитель на основе курса обмена (чем выше курс, тем больше награда)
+    const exchangeMultiplier = Math.max(0.5, Math.min(3.0, exchangeRate / config.BASE_EXCHANGE_RATE));
+    
+    // Множитель на основе количества активных майнеров (чем больше майнеров, тем меньше награда)
+    const minersMultiplier = Math.max(0.3, Math.min(2.0, 1 / Math.sqrt(activeMinersCount + 1)));
+    
+    // Итоговая награда
+    const finalReward = baseReward * exchangeMultiplier * minersMultiplier * userEfficiency;
+    
+    console.log(`⛏️ Расчет награды майнера:`, {
+      baseReward: baseReward.toFixed(4),
+      exchangeRate: exchangeRate.toFixed(6),
+      exchangeMultiplier: exchangeMultiplier.toFixed(3),
+      activeMiners: activeMinersCount,
+      minersMultiplier: minersMultiplier.toFixed(3),
+      userEfficiency: userEfficiency.toFixed(2),
+      finalReward: finalReward.toFixed(4)
+    });
+    
+    return Math.max(0.001, finalReward); // Минимальная награда 0.001
+  } catch (error) {
+    console.error('❌ Ошибка расчета награды майнера:', error);
+    return config.MINER_REWARD_PER_MINUTE * userEfficiency;
+  }
+}
+
 async function processMinerRewards() {
   try {
     const now = new Date();
-    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const minuteAgo = new Date(now.getTime() - 60 * 1000); // 1 минута назад
     
     const activeMiners = await db.collection('users').find({
       'miner.active': true,
-      'miner.lastReward': { $lt: hourAgo }
+      'miner.lastReward': { $lt: minuteAgo }
     }).toArray();
     
+    console.log(`⛏️ Обработка наград майнера: найдено ${activeMiners.length} активных майнеров`);
+    
     for (const user of activeMiners) {
-      const reward = config.MINER_REWARD_PER_HOUR * user.miner.efficiency;
-      
-      await db.collection('users').updateOne(
-        { id: user.id },
-        { 
-          $inc: { 
-            magnumCoins: reward,
-            totalEarnedMagnumCoins: reward,
-            experience: Math.floor(reward * 5),
-            'miner.totalMined': reward
-          },
-          $set: { 
-            'miner.lastReward': now,
-            updatedAt: new Date()
+      try {
+        // Рассчитываем награду с учетом курса и количества майнеров
+        const reward = await calculateMinerReward(user.miner.efficiency);
+        
+        await db.collection('users').updateOne(
+          { id: user.id },
+          { 
+            $inc: { 
+              magnumCoins: reward,
+              totalEarnedMagnumCoins: reward,
+              experience: Math.floor(reward * 5),
+              'miner.totalMined': reward
+            },
+            $set: { 
+              'miner.lastReward': now,
+              updatedAt: new Date()
+            }
+          }
+        );
+        
+        userCache.delete(user.id);
+        
+        // Проверяем и обновляем уровень пользователя
+        const updatedUser = await getUser(user.id);
+        if (updatedUser) {
+          const levelResult = await checkAndUpdateLevel(updatedUser);
+          if (levelResult.levelUp) {
+            log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
           }
         }
-      );
-      
-      userCache.delete(user.id);
-      
-      // Проверяем и обновляем уровень пользователя
-      const updatedUser = await getUser(user.id);
-      if (updatedUser) {
-        const levelResult = await checkAndUpdateLevel(updatedUser);
-        if (levelResult.levelUp) {
-          log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
-        }
+        
+        log(`⛏️ Майнер награда: ${user.id} +${reward.toFixed(4)} Magnum Coins`);
+      } catch (error) {
+        logError(error, `Обработка награды майнера для пользователя ${user.id}`);
       }
-      
-      log(`⛏️ Майнер награда: ${user.id} +${reward} Magnum Coins`);
     }
   } catch (error) {
     logError(error, 'Обработка наград майнера');
@@ -5753,15 +5820,15 @@ async function handleAdminSetMinerReward(ctx, user, text) {
     
     // Обновляем настройку в базе данных
     await db.collection('config').updateOne(
-      { key: 'MINER_REWARD_PER_HOUR' },
+      { key: 'MINER_REWARD_PER_MINUTE' },
       { $set: { value: newReward, updatedAt: new Date() } },
       { upsert: true }
     );
     
     // Обновляем конфиг в памяти
-    config.MINER_REWARD_PER_HOUR = newReward;
+    config.MINER_REWARD_PER_MINUTE = newReward;
     
-    await ctx.reply(`✅ Награда майнера изменена на ${newReward} Magnum Coins в час`);
+    await ctx.reply(`✅ Базовая награда майнера изменена на ${newReward} Magnum Coins в минуту`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -6147,13 +6214,16 @@ bot.action('faq_miner', async (ctx) => {
     const message = 
       `⛏️ *FAQ - Майнер*\n\n` +
       `*❓ Что такое майнер?*\n` +
-      `Майнер - это автоматический способ заработка Magnum Coins. Он работает в фоновом режиме и приносит награды каждый час.\n\n` +
+      `Майнер - это автоматический способ заработка Magnum Coins. Он работает в фоновом режиме и приносит награды каждую минуту.\n\n` +
       `*❓ Как запустить майнер?*\n` +
       `Перейдите в раздел "Фарм" → "⛏️ Майнер" и нажмите "▶️ Запустить майнер".\n\n` +
       `*❓ Как часто майнер приносит награды?*\n` +
-      `Майнер приносит награды каждые 60 минут (1 час).\n\n` +
+      `Майнер приносит награды каждую минуту.\n\n` +
           `*❓ Сколько Magnum Coins я получаю от майнера?*\n` +
-    `За час работы майнер приносит ${config.MINER_REWARD_PER_HOUR || 10} Magnum Coins. Награда зависит от уровня майнера.\n\n` +
+    `Награда майнера динамическая и зависит от:\n` +
+    `• Курса обмена Magnum Coins\n` +
+    `• Количества активных майнеров\n` +
+    `• Уровня вашего майнера\n\n` +
       `*❓ Как улучшить майнер?*\n` +
       `Майнер можно улучшить, потратив Magnum Coins. Улучшения увеличивают эффективность и награды.\n\n` +
       `*❓ Что такое эффективность майнера?*\n` +
@@ -8391,7 +8461,7 @@ bot.action('admin_miner_reward', async (ctx) => {
       { $set: { adminState: 'setting_miner_reward', updatedAt: new Date() } }
     );
     
-    await ctx.reply('⛏️ Введите новую награду майнера (в Magnum Coins за час):');
+    await ctx.reply('⛏️ Введите новую базовую награду майнера (в Magnum Coins за минуту):');
   } catch (error) {
     logError(error, 'Установка награды майнера (обработчик)');
   }
@@ -8468,11 +8538,11 @@ async function startBot() {
       statsCacheTTL: config.STATS_CACHE_TTL
     });
     
-    // Запускаем обработку майнера каждые 30 минут
+    // Запускаем обработку майнера каждую минуту
     setInterval(() => {
       console.log('⛏️ Запуск обработки наград майнера по расписанию');
       processMinerRewards();
-    }, 30 * 60 * 1000);
+    }, 60 * 1000); // 1 минута
     
     // Очистка кеша каждые 5 минут
     setInterval(() => {
