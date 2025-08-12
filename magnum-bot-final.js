@@ -58,10 +58,47 @@ const config = {
   
   // Резерв биржи
   INITIAL_RESERVE_STARS: 1000000,
-  INITIAL_RESERVE_MAGNUM_COINS: 1000000
+  INITIAL_RESERVE_MAGNUM_COINS: 1000000,
+  
+  // Курс обмена (базовый)
+  BASE_EXCHANGE_RATE: 0.001, // 100 Magnum Coins = 0.001 Star
+  EXCHANGE_RATE_MULTIPLIER: 1.0 // Множитель курса в зависимости от резерва
 };
 
 // ==================== КОНФИГУРАЦИЯ ====================
+
+// Функция для расчета динамического курса обмена
+async function calculateExchangeRate() {
+  try {
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    if (!reserve) {
+      return config.BASE_EXCHANGE_RATE;
+    }
+    
+    const magnumCoinsReserve = reserve.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const starsReserve = reserve.stars || config.INITIAL_RESERVE_STARS;
+    
+    // Расчет множителя на основе соотношения резервов
+    const ratio = magnumCoinsReserve / starsReserve;
+    const multiplier = Math.max(0.1, Math.min(10, ratio)); // Ограничиваем множитель от 0.1 до 10
+    
+    const dynamicRate = config.BASE_EXCHANGE_RATE * multiplier;
+    
+    console.log(`💱 Расчет курса обмена:`, {
+      magnumCoinsReserve: formatNumber(magnumCoinsReserve),
+      starsReserve: formatNumber(starsReserve),
+      ratio: ratio.toFixed(4),
+      multiplier: multiplier.toFixed(4),
+      baseRate: config.BASE_EXCHANGE_RATE,
+      dynamicRate: dynamicRate.toFixed(6)
+    });
+    
+    return dynamicRate;
+  } catch (error) {
+    console.error('❌ Ошибка расчета курса обмена:', error);
+    return config.BASE_EXCHANGE_RATE;
+  }
+}
 
 // ==================== БАЗА ДАННЫХ ====================
 let db;
@@ -1022,10 +1059,10 @@ async function showMinerUpgrade(ctx, user) {
       `⬆️ *Улучшение майнера*\n\n` +
       `📊 *Текущий уровень:* ${currentLevel}\n` +
       `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
-      `💰 *Текущая награда/час:* ${formatNumber(config.MINER_REWARD_PER_HOUR * currentEfficiency)} Stars\n\n` +
+      `💰 *Текущая награда/час:* ${formatNumber(config.MINER_REWARD_PER_HOUR * currentEfficiency)} Magnum Coins\n\n` +
       `📈 *После улучшения:*\n` +
       `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
-      `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Stars\n\n` +
+      `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Magnum Coins\n\n` +
       `💎 *Стоимость улучшения:* ${formatNumber(upgradeCost)} Magnum Coins\n` +
       `💎 *Ваш баланс:* ${formatNumber(user.magnumCoins)} Magnum Coins\n\n` +
       `🎯 Выберите действие:`;
@@ -1074,8 +1111,8 @@ async function showMinerStats(ctx, user) {
       `📈 *Уровень:* ${miner.level || 1}\n` +
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
       `📊 *Статус:* ${statusText}\n` +
-      `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
-      `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Stars\n` +
+      `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
+      `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins\n` +
       `⏰ *Последняя награда:* ${miner.lastReward ? miner.lastReward.toLocaleString('ru-RU') : 'Нет'}\n` +
       `${nextRewardText}\n\n` +
       `📈 *Информация:*\n` +
@@ -2870,17 +2907,23 @@ async function showExchangeMenu(ctx, user) {
   try {
     log(`💱 Показ меню обмена для пользователя ${user.id}`);
     
-    const exchangeRate = 1; // 1 Magnum Coin = 1 Star
+    // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     const maxExchange = Math.floor(user.magnumCoins);
+    
+    // Получаем информацию о резерве
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🪙 10 Magnum Coins → 10 Stars', 'exchange_10'),
-        Markup.button.callback('🪙 50 Magnum Coins → 50 Stars', 'exchange_50')
+        Markup.button.callback(`🪙 10 MC → ${(10 * exchangeRate).toFixed(6)} Stars`, 'exchange_10'),
+        Markup.button.callback(`🪙 50 MC → ${(50 * exchangeRate).toFixed(6)} Stars`, 'exchange_50')
       ],
       [
-        Markup.button.callback('🪙 100 Magnum Coins → 100 Stars', 'exchange_100'),
-        Markup.button.callback('🪙 500 Magnum Coins → 500 Stars', 'exchange_500')
+        Markup.button.callback(`🪙 100 MC → ${(100 * exchangeRate).toFixed(6)} Stars`, 'exchange_100'),
+        Markup.button.callback(`🪙 500 MC → ${(500 * exchangeRate).toFixed(6)} Stars`, 'exchange_500')
       ],
       [
         Markup.button.callback('🪙 Все Magnum Coins', 'exchange_all'),
@@ -2895,8 +2938,12 @@ async function showExchangeMenu(ctx, user) {
       `├ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `💱 *Курс обмена:*\n` +
-      `├ 1 Magnum Coin = 1 Star\n` +
+      `├ 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
+      `├ 100 Magnum Coins = ${(100 * exchangeRate).toFixed(4)} Stars\n` +
       `└ Комиссия: 0%\n\n` +
+      `🏦 *Резерв биржи:*\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
+      `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `📊 *Статистика обменов:*\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
       `└ Всего обменено: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` Magnum Coins\n\n` +
@@ -2928,6 +2975,20 @@ async function performExchange(ctx, user, amount) {
       return;
     }
     
+    // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
+    const starsToReceive = amount * exchangeRate;
+    
+    // Проверяем резерв Stars
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const availableStars = reserve?.stars || config.INITIAL_RESERVE_STARS;
+    
+    if (starsToReceive > availableStars) {
+      log(`❌ Недостаточно Stars в резерве для пользователя ${user.id}`);
+      await ctx.answerCbQuery('❌ Недостаточно Stars в резерве для обмена!');
+      return;
+    }
+    
     // Обновляем пользователя
     log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
@@ -2935,7 +2996,7 @@ async function performExchange(ctx, user, amount) {
       { 
         $inc: { 
           magnumCoins: -amount,
-          stars: amount,
+          stars: starsToReceive,
           'exchange.totalExchanges': 1,
           'exchange.totalExchanged': amount,
           'statistics.totalActions': 1
@@ -2946,12 +3007,26 @@ async function performExchange(ctx, user, amount) {
       }
     );
     
+    // Обновляем резерв
+    await db.collection('reserve').updateOne(
+      { currency: 'main' },
+      { 
+        $inc: { 
+          magnumCoins: amount,
+          stars: -starsToReceive
+        },
+        $set: { 
+          updatedAt: new Date()
+        }
+      }
+    );
+    
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
-    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${amount} Stars`);
+    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate})`);
     await ctx.answerCbQuery(
-      `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(amount)} Stars`
+      `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars`
     );
     
     // Обновляем меню обмена
