@@ -804,11 +804,6 @@ async function showMainMenu(ctx, user) {
     ]
   ];
   
-  // Добавляем раздел титулов
-  buttons.push([
-    Markup.button.callback('🎖 Титулы', 'titles')
-  ]);
-  
   // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
     buttons.push([
@@ -866,11 +861,6 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
-  
-  // Добавляем раздел титулов
-  buttons.push([
-    Markup.button.callback('🎖 Титулы', 'titles')
-  ]);
   
   // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
@@ -1545,7 +1535,6 @@ async function updateFarmMenu(ctx, user) {
     await showFarmMenu(ctx, user);
   }
 }
-
 // Функция для запуска обратного отсчета фарма
 function startFarmCountdown(ctx, user, remainingSeconds) {
   const countdownKey = `farm_countdown_${user.id}`;
@@ -2307,7 +2296,6 @@ async function showAdminUsers(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления пользователями');
   }
 }
-
 async function showAdminBalance(ctx, user) {
   try {
     log(`💰 Показ управления балансами для админа ${user.id}`);
@@ -3108,7 +3096,6 @@ async function showAdminBanUser(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа блокировки');
   }
 }
-
 async function showAdminUnbanUser(ctx, user) {
   try {
     log(`✅ Показ разблокировки пользователя для админа ${user.id}`);
@@ -3936,6 +3923,9 @@ async function showSettingsMenu(ctx, user) {
         Markup.button.callback('🔄 Сброс', 'settings_reset')
       ],
       [
+        Markup.button.callback('🎖 Титулы', 'titles')
+      ],
+      [
         Markup.button.callback('🆘 Поддержка', 'support')
       ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
@@ -4586,7 +4576,6 @@ async function showDailyTasks(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки ежедневных заданий');
   }
 }
-
 async function showTasksProgress(ctx, user) {
   try {
     log(`📊 Показ прогресса заданий для пользователя ${user.id}`);
@@ -5356,7 +5345,6 @@ async function handleAdminSetSubscriptionChannel(ctx, user, text) {
     await ctx.reply('❌ Ошибка изменения канала подписки');
   }
 }
-
 // Функции для обработки постов и промокодов
 async function handleAdminCreatePostWithButton(ctx, user, text) {
   try {
@@ -6140,7 +6128,6 @@ bot.action('contact_support', async (ctx) => {
     });
   }
 });
-
 // ==================== ОБРАБОТЧИКИ КАНАЛА ПОДДЕРЖКИ ====================
 // Обработчик для ответа на тикет
 bot.action(/^support_answer_(.+)$/, async (ctx) => {
@@ -6932,7 +6919,6 @@ bot.action('settings_notifications', async (ctx) => {
     logError(error, 'Настройки уведомлений');
   }
 });
-
 bot.action('settings_privacy', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7728,7 +7714,6 @@ bot.action('promocode', async (ctx) => {
     logError(error, 'Промокоды (обработчик)');
   }
 });
-
 bot.action('enter_promocode', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
