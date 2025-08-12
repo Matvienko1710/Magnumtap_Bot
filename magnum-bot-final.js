@@ -309,17 +309,74 @@ function formatTime(seconds) {
 }
 
 function getUserRank(user) {
-  const stars = user.stars || 0;
-  if (stars >= 1000000) return '👑 Легенда';
-  if (stars >= 500000) return '💎 Алмаз';
-  if (stars >= 100000) return '🏆 Чемпион';
-  if (stars >= 50000) return '⭐ Звезда';
-  if (stars >= 10000) return '🌟 Профессионал';
-  if (stars >= 5000) return '💫 Эксперт';
-  if (stars >= 1000) return '✨ Мастер';
-  if (stars >= 500) return '🎯 Опытный';
-  if (stars >= 100) return '🚀 Начинающий';
-  return '🌱 Новичок';
+  const level = user.level || 1;
+  
+  // Система рангов на основе уровней
+  if (level >= 100) return '👑 Император';
+  if (level >= 80) return '⚜️ Король';
+  if (level >= 60) return '👑 Принц';
+  if (level >= 40) return '🛡️ Рыцарь';
+  if (level >= 30) return '⚔️ Воин';
+  if (level >= 20) return '🛡️ Страж';
+  if (level >= 15) return '🗡️ Охотник';
+  if (level >= 10) return '🏹 Лучник';
+  if (level >= 5) return '⚔️ Боец';
+  return '🛡️ Рекрут';
+}
+
+function getRankRequirements() {
+  return [
+    { level: 1, name: '🛡️ Рекрут', requirement: 'Начальный ранг' },
+    { level: 5, name: '⚔️ Боец', requirement: '5 уровень' },
+    { level: 10, name: '🏹 Лучник', requirement: '10 уровень' },
+    { level: 15, name: '🗡️ Охотник', requirement: '15 уровень' },
+    { level: 20, name: '🛡️ Страж', requirement: '20 уровень' },
+    { level: 30, name: '⚔️ Воин', requirement: '30 уровень' },
+    { level: 40, name: '🛡️ Рыцарь', requirement: '40 уровень' },
+    { level: 60, name: '👑 Принц', requirement: '60 уровень' },
+    { level: 80, name: '⚜️ Король', requirement: '80 уровень' },
+    { level: 100, name: '👑 Император', requirement: '100 уровень' }
+  ];
+}
+
+function getRankProgress(user) {
+  const level = user.level || 1;
+  const ranks = getRankRequirements();
+  
+  // Находим текущий ранг
+  let currentRank = ranks[0];
+  let nextRank = null;
+  
+  for (let i = ranks.length - 1; i >= 0; i--) {
+    if (level >= ranks[i].level) {
+      currentRank = ranks[i];
+      if (i < ranks.length - 1) {
+        nextRank = ranks[i + 1];
+      }
+      break;
+    }
+  }
+  
+  if (!nextRank) {
+    return {
+      current: currentRank,
+      next: null,
+      progress: 100,
+      remaining: 0,
+      isMax: true
+    };
+  }
+  
+  const progress = Math.min(100, Math.round(((level - currentRank.level) / (nextRank.level - currentRank.level)) * 100));
+  const remaining = nextRank.level - level;
+  
+  return {
+    current: currentRank,
+    next: nextRank,
+    progress: progress,
+    remaining: remaining,
+    isMax: false
+  };
 }
 
 function isAdmin(userId) {
@@ -777,7 +834,7 @@ async function handleReferral(userId, referrerId) {
 }
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 async function showMainMenu(ctx, user) {
-  const rank = getUserRank(user);
+  const rankProgress = getRankProgress(user);
   
   // Создаем базовые кнопки
   const buttons = [
@@ -811,13 +868,21 @@ async function showMainMenu(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
+  // Формируем информацию о ранге
+  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
+  if (!rankProgress.isMax) {
+    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
+  } else {
+    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
+  }
+  
   const message = 
     `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
     `👤 *Профиль:*\n` +
     `├ ID: \`${user.id}\`\n` +
     `├ Имя: ${user.firstName || 'Не указано'}\n` +
     `├ Уровень: ${user.level}\n` +
-    `├ Ранг: ${rank}\n` +
+    `${rankInfo}` +
     `└ Титул: ${user.mainTitle}\n\n` +
     `💎 *Баланс:*\n` +
     `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
@@ -835,7 +900,7 @@ async function showMainMenu(ctx, user) {
 }
 
 async function showMainMenuStart(ctx, user) {
-  const rank = getUserRank(user);
+  const rankProgress = getRankProgress(user);
   
   // Создаем базовые кнопки
   const buttons = [
@@ -869,13 +934,21 @@ async function showMainMenuStart(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
+  // Формируем информацию о ранге
+  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
+  if (!rankProgress.isMax) {
+    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
+  } else {
+    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
+  }
+  
   const message = 
     `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
     `👤 *Профиль:*\n` +
     `├ ID: \`${user.id}\`\n` +
     `├ Имя: ${user.firstName || 'Не указано'}\n` +
     `├ Уровень: ${user.level}\n` +
-    `├ Ранг: ${rank}\n` +
+    `${rankInfo}` +
     `└ Титул: ${user.mainTitle}\n\n` +
     `💎 *Баланс:*\n` +
     `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
@@ -3913,7 +3986,8 @@ async function showSettingsMenu(ctx, user) {
         Markup.button.callback('🔄 Сброс', 'settings_reset')
       ],
       [
-        Markup.button.callback('🎖 Титулы', 'titles')
+        Markup.button.callback('🎖 Титулы', 'titles'),
+        Markup.button.callback('⚔️ Ранги', 'ranks')
       ],
       [
         Markup.button.callback('🆘 Поддержка', 'support')
@@ -4718,6 +4792,62 @@ async function checkTaskCompletion(ctx, user, task) {
   // Для демонстрации возвращаем true (задание выполнено)
   return true;
 }
+
+// ==================== РАНГИ ====================
+async function showRanksMenu(ctx, user) {
+  try {
+    log(`⚔️ Показ меню рангов для пользователя ${user.id}`);
+    
+    const rankProgress = getRankProgress(user);
+    const ranks = getRankRequirements();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    let message = `⚔️ *Система рангов*\n\n`;
+    message += `🎯 *Ваш текущий ранг:* ${rankProgress.current.name}\n`;
+    message += `📊 *Уровень:* ${user.level}\n\n`;
+    
+    if (!rankProgress.isMax) {
+      message += `📈 *Прогресс к следующему рангу:*\n`;
+      message += `├ Текущий: ${rankProgress.current.name}\n`;
+      message += `├ Следующий: ${rankProgress.next.name}\n`;
+      message += `├ Прогресс: ${rankProgress.progress}%\n`;
+      message += `└ Осталось: ${rankProgress.remaining} уровней\n\n`;
+    } else {
+      message += `🎉 *Поздравляем! Вы достигли максимального ранга!*\n\n`;
+    }
+    
+    message += `📋 *Все ранги:*\n\n`;
+    
+    ranks.forEach((rank, index) => {
+      const isCurrent = rank.level === rankProgress.current.level;
+      const isUnlocked = user.level >= rank.level;
+      const status = isCurrent ? '🎯' : (isUnlocked ? '✅' : '🔒');
+      
+      message += `${status} *${rank.name}*\n`;
+      message += `├ Уровень: ${rank.level}\n`;
+      message += `└ Требование: ${rank.requirement}\n\n`;
+    });
+    
+    message += `💡 *Как повысить ранг:*\n`;
+    message += `├ Выполняйте фарм для получения опыта\n`;
+    message += `├ Используйте майнер для пассивного дохода\n`;
+    message += `├ Выполняйте ежедневные задания\n`;
+    message += `└ Приглашайте рефералов\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню рангов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки рангов');
+  }
+}
+
 // ==================== ТИТУЛЫ ====================
 function getTitlesList(user) {
   const farmCount = user.farm?.farmCount || 0;
@@ -4840,7 +4970,7 @@ async function showTitlesSelectMenu(ctx, user) {
   });
 }
 
-// Обработчики титулов
+// Обработчики титулов и рангов
 let afterActions = [];
 afterActions.push(() => {
   bot.action('titles', async (ctx) => {
@@ -4850,6 +4980,16 @@ afterActions.push(() => {
       await showTitlesMenu(ctx, user);
     } catch (error) {
       logError(error, 'Титулы (обработчик)');
+    }
+  });
+
+  bot.action('ranks', async (ctx) => {
+    try {
+      const user = await getUser(ctx.from.id);
+      if (!user) return;
+      await showRanksMenu(ctx, user);
+    } catch (error) {
+      logError(error, 'Ранги (обработчик)');
     }
   });
 
