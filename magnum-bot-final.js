@@ -802,11 +802,6 @@ async function showMainMenu(ctx, user) {
     ]
   ];
   
-  // Добавляем раздел титулов
-  buttons.push([
-    Markup.button.callback('🎖 Титулы', 'titles')
-  ]);
-  
   // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
     buttons.push([
@@ -864,11 +859,6 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
-  
-  // Добавляем раздел титулов
-  buttons.push([
-    Markup.button.callback('🎖 Титулы', 'titles')
-  ]);
   
   // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
