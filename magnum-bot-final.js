@@ -2390,8 +2390,7 @@ async function showAdminReserve(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления резервом');
   }
 }
-<<<<<<< HEAD
-=======
+
 // Функции обработки управления резервом
 async function handleAdminAddReserveMC(ctx, user, text) {
   try {
@@ -2544,7 +2543,6 @@ async function handleAdminAddReserveStars(ctx, user, text) {
     await ctx.reply('❌ Ошибка добавления Stars в резерв.');
   }
 }
->>>>>>> origin/main
 async function handleAdminRemoveReserveStars(ctx, user, text) {
   try {
     const amount = parseFloat(text);
@@ -4262,8 +4260,7 @@ async function resetUserSettings(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка сброса настроек');
   }
 }
-<<<<<<< HEAD
-=======
+
 // ==================== ЗАДАНИЯ ====================
 async function showTasksMenu(ctx, user) {
   try {
@@ -4349,7 +4346,6 @@ async function showSponsorTasks(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки спонсорских заданий');
   }
 }
->>>>>>> origin/main
 async function showSponsorTaskDetails(ctx, user, taskId) {
   try {
     log(`🎯 Показ деталей спонсорского задания ${taskId} для пользователя ${user.id}`);
@@ -4827,10 +4823,6 @@ async function showTitlesMenu(ctx, user) {
     reply_markup: Markup.inlineKeyboard(buttons).reply_markup
   });
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main
 async function showTitlesSelectMenu(ctx, user) {
   const definitions = getTitlesList(user);
   const ownedDefs = definitions.filter(d => (user.titles || []).includes(d.name));
@@ -5022,11 +5014,6 @@ bot.start(async (ctx) => {
   }
 });
 
-<<<<<<< HEAD
-// ... (rest of the code remains unchanged)
-=======
-
-
 // Функции обработки админ действий
 async function handleAdminSearchUser(ctx, user, text) {
   try {
@@ -5132,7 +5119,6 @@ async function handleAdminBanUser(ctx, user, text) {
     await ctx.reply('❌ Ошибка блокировки пользователя');
   }
 }
->>>>>>> origin/main
 async function handleAdminUnbanUser(ctx, user, text) {
   try {
     const userId = parseInt(text);
@@ -5363,177 +5349,6 @@ async function handleAdminSetSubscriptionChannel(ctx, user, text) {
     await ctx.reply('❌ Ошибка изменения канала подписки');
   }
 }
-<<<<<<< HEAD
-=======
-
-// Функции для обработки постов и промокодов
-async function handleAdminCreatePostWithButton(ctx, user, text) {
-  try {
-    const lines = text.split('\n');
-    const postText = lines[0];
-    const buttonData = lines[1];
-    
-    if (!postText || !buttonData) {
-      await ctx.reply('❌ Неверный формат. Отправьте текст поста, а затем кнопку в формате: Текст | Ссылка');
-      return;
-    }
-    
-    const [buttonText, buttonUrl] = buttonData.split('|').map(s => s.trim());
-    
-    if (!buttonText || !buttonUrl) {
-      await ctx.reply('❌ Неверный формат кнопки. Используйте: Текст | Ссылка');
-      return;
-    }
-    
-    // Отправляем пост в канал
-    await ctx.telegram.sendMessage('@magnumtap', postText, {
-      parse_mode: 'Markdown',
-      reply_markup: Markup.inlineKeyboard([
-        [Markup.button.url(buttonText, buttonUrl)]
-      ]).reply_markup
-    });
-    
-    await ctx.reply('✅ Пост с кнопкой успешно опубликован в канале @magnumtap!');
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Создание поста с кнопкой');
-    await ctx.reply('❌ Ошибка создания поста');
-  }
-}
-
-async function handleAdminCreatePostNoButton(ctx, user, text) {
-  try {
-    // Отправляем пост в канал
-    await ctx.telegram.sendMessage('@magnumtap', text, {
-      parse_mode: 'Markdown'
-    });
-    
-    await ctx.reply('✅ Пост без кнопки успешно опубликован в канале @magnumtap!');
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Создание поста без кнопки');
-    await ctx.reply('❌ Ошибка создания поста');
-  }
-}
-async function handleAdminCreatePromocode(ctx, user, text) {
-  try {
-    const [name, amount, activations] = text.split('|').map(s => s.trim());
-    
-    if (!name || !amount || !activations) {
-      await ctx.reply('❌ Неверный формат. Используйте: Название | Количество | Активации');
-      return;
-    }
-    
-    const magnumCoins = parseFloat(amount);
-    const maxActivations = parseInt(activations);
-    
-    if (isNaN(magnumCoins) || isNaN(maxActivations)) {
-      await ctx.reply('❌ Неверные числовые значения');
-      return;
-    }
-    
-    // Создаем промокод в базе данных
-    await db.collection('promocodes').insertOne({
-      name: name.toUpperCase(),
-      magnumCoins: magnumCoins,
-      maxActivations: maxActivations,
-      activations: maxActivations,
-      totalActivations: 0,
-      createdBy: user.id,
-      createdAt: new Date()
-    });
-    
-    await ctx.reply(`✅ Промокод "${name.toUpperCase()}" создан!\n💰 Награда: ${magnumCoins} Magnum Coins\n🎫 Активаций: ${maxActivations}`);
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Создание промокода');
-    await ctx.reply('❌ Ошибка создания промокода');
-  }
-}
-
-async function handleUserEnterPromocode(ctx, user, text) {
-  try {
-    const promocodeName = text.toUpperCase().trim();
-    
-    // Ищем промокод в базе данных
-    const promocode = await db.collection('promocodes').findOne({ name: promocodeName });
-    
-    if (!promocode) {
-      await ctx.reply('❌ Промокод не найден');
-      return;
-    }
-    
-    if (promocode.activations <= 0) {
-      await ctx.reply('❌ Промокод больше не действителен (закончились активации)');
-      return;
-    }
-    
-    // Проверяем, не использовал ли пользователь уже этот промокод
-    const usedPromocodes = user.usedPromocodes || [];
-    if (usedPromocodes.includes(promocodeName)) {
-      await ctx.reply('❌ Вы уже использовали этот промокод');
-      return;
-    }
-    
-    // Активируем промокод
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { 
-        $inc: { 
-          magnumCoins: promocode.magnumCoins,
-          totalEarnedMagnumCoins: promocode.magnumCoins
-        },
-        $push: { usedPromocodes: promocodeName },
-        $set: { updatedAt: new Date() }
-      }
-    );
-    
-    await db.collection('promocodes').updateOne(
-      { name: promocodeName },
-      { 
-        $inc: { 
-          activations: -1,
-          totalActivations: 1
-        }
-      }
-    );
-    
-    // Очищаем кеш
-    userCache.delete(user.id);
-    
-    await ctx.reply(`✅ Промокод "${promocodeName}" активирован!\n💰 Получено: ${promocode.magnumCoins} Magnum Coins`);
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Активация промокода');
-    await ctx.reply('❌ Ошибка активации промокода');
-  }
-}
-
->>>>>>> origin/main
 // ==================== СИСТЕМА ПОДДЕРЖКИ ====================
 async function handleCreateSupportTicket(ctx, user, text) {
   try {
@@ -7982,153 +7797,6 @@ bot.action('support_faq', async (ctx) => {
     logError(error, 'FAQ (обработчик)');
   }
 });
-<<<<<<< HEAD
-=======
-bot.action('admin_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки бота (обработчик)');
-  }
-});
-
-bot.action('admin_search_user', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSearchUser(ctx, user);
-  } catch (error) {
-    logError(error, 'Поиск пользователя (обработчик)');
-  }
-});
-
-bot.action('admin_top_users', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminTopUsers(ctx, user);
-  } catch (error) {
-    logError(error, 'Топ пользователей (обработчик)');
-  }
-});
-
-bot.action('admin_ban_user', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminBanUser(ctx, user);
-  } catch (error) {
-    logError(error, 'Блокировка пользователя (обработчик)');
-  }
-});
-
-bot.action('admin_unban_user', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminUnbanUser(ctx, user);
-  } catch (error) {
-    logError(error, 'Разблокировка пользователя (обработчик)');
-  }
-});
-
-// Обработчики настроек бота
-bot.action('admin_farm_rewards', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminFarmRewards(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки наград фарма (обработчик)');
-  }
-});
-
-bot.action('admin_cooldowns', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminCooldowns(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки кулдаунов (обработчик)');
-  }
-});
-
-bot.action('admin_daily_bonus', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminDailyBonus(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки ежедневного бонуса (обработчик)');
-  }
-});
-
-bot.action('admin_miner_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminMinerSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки майнера (обработчик)');
-  }
-});
-
-bot.action('admin_referral_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminReferralSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки реферальной системы (обработчик)');
-  }
-});
-
-bot.action('admin_subscription_channels', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSubscriptionChannels(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки каналов подписки (обработчик)');
-  }
-});
-
-// Обработчики возврата к настройкам
-bot.action('admin_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Возврат к настройкам (обработчик)');
-  }
-});
-
-bot.action('admin_users', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminUsers(ctx, user);
-  } catch (error) {
-    logError(error, 'Управление пользователями (обработчик)');
-  }
-});
->>>>>>> origin/main
 // Обработчики изменения настроек
 bot.action('admin_farm_reward_set', async (ctx) => {
   try {
