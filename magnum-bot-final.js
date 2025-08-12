@@ -992,6 +992,164 @@ async function stopMiner(ctx, user) {
   }
 }
 
+// ==================== УЛУЧШЕНИЕ МАЙНЕРА ====================
+async function showMinerUpgrade(ctx, user) {
+  try {
+    log(`⬆️ Показ меню улучшения майнера для пользователя ${user.id}`);
+    
+    const miner = user.miner;
+    const currentLevel = miner.level || 1;
+    const currentEfficiency = miner.efficiency || 1;
+    
+    // Расчет стоимости улучшения
+    const upgradeCost = currentLevel * 100; // 100 Magnum Coins за уровень
+    const newEfficiency = currentEfficiency + 0.1;
+    const newRewardPerHour = config.MINER_REWARD_PER_HOUR * newEfficiency;
+    
+    const canUpgrade = user.magnumCoins >= upgradeCost;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          canUpgrade ? `⬆️ Улучшить (${formatNumber(upgradeCost)} MC)` : `❌ Недостаточно MC (${formatNumber(upgradeCost)})`,
+          canUpgrade ? 'confirm_miner_upgrade' : 'insufficient_funds'
+        )
+      ],
+      [Markup.button.callback('🔙 Назад', 'miner')]
+    ]);
+    
+    const message = 
+      `⬆️ *Улучшение майнера*\n\n` +
+      `📊 *Текущий уровень:* ${currentLevel}\n` +
+      `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
+      `💰 *Текущая награда/час:* ${formatNumber(config.MINER_REWARD_PER_HOUR * currentEfficiency)} Stars\n\n` +
+      `📈 *После улучшения:*\n` +
+      `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
+      `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Stars\n\n` +
+      `💎 *Стоимость улучшения:* ${formatNumber(upgradeCost)} Magnum Coins\n` +
+      `💎 *Ваш баланс:* ${formatNumber(user.magnumCoins)} Magnum Coins\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Меню улучшения майнера показано пользователю ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ меню улучшения майнера для пользователя ${user.id}`);
+  }
+}
+
+// ==================== СТАТИСТИКА МАЙНЕРА ====================
+async function showMinerStats(ctx, user) {
+  try {
+    log(`📊 Показ статистики майнера для пользователя ${user.id}`);
+    
+    const miner = user.miner;
+    const isActive = miner.active || false;
+    const efficiency = miner.efficiency || 1;
+    const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+    
+    let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
+    let lastRewardText = '';
+    let nextRewardText = '';
+    
+    if (miner.lastReward) {
+      const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
+      if (timeSince < 3600) {
+        const remaining = 3600 - timeSince;
+        nextRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
+      } else {
+        nextRewardText = `\n✅ Готов к получению награды!`;
+      }
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'miner')]
+    ]);
+    
+    const message = 
+      `📊 *Статистика майнера*\n\n` +
+      `📈 *Уровень:* ${miner.level || 1}\n` +
+      `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
+      `📊 *Статус:* ${statusText}\n` +
+      `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
+      `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Stars\n` +
+      `⏰ *Последняя награда:* ${miner.lastReward ? miner.lastReward.toLocaleString('ru-RU') : 'Нет'}\n` +
+      `${nextRewardText}\n\n` +
+      `📈 *Информация:*\n` +
+      `• Майнер работает автоматически\n` +
+      `• Награды выдаются каждый час\n` +
+      `• Эффективность увеличивается с улучшениями\n` +
+      `• Можно улучшать за Magnum Coins`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Статистика майнера показана пользователю ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ статистики майнера для пользователя ${user.id}`);
+  }
+}
+
+// ==================== ФУНКЦИЯ УЛУЧШЕНИЯ МАЙНЕРА ====================
+async function upgradeMiner(ctx, user) {
+  try {
+    log(`⬆️ Попытка улучшения майнера для пользователя ${user.id}`);
+    
+    const miner = user.miner;
+    const currentLevel = miner.level || 1;
+    const currentEfficiency = miner.efficiency || 1;
+    const upgradeCost = currentLevel * 100;
+    
+    // Проверяем, достаточно ли средств
+    if (user.magnumCoins < upgradeCost) {
+      log(`❌ Недостаточно средств для улучшения майнера пользователя ${user.id}`);
+      await ctx.answerCbQuery('❌ Недостаточно Magnum Coins!');
+      return;
+    }
+    
+    // Обновляем майнер
+    const newLevel = currentLevel + 1;
+    const newEfficiency = currentEfficiency + 0.1;
+    
+    log(`💾 Обновление базы данных для пользователя ${user.id}`);
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: -upgradeCost,
+          totalEarnedMagnumCoins: -upgradeCost
+        },
+        $set: { 
+          'miner.level': newLevel,
+          'miner.efficiency': newEfficiency,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
+    userCache.delete(user.id);
+    
+    log(`✅ Майнер успешно улучшен для пользователя ${user.id}`);
+    await ctx.answerCbQuery(`✅ Майнер улучшен! Новый уровень: ${newLevel}, эффективность: ${newEfficiency.toFixed(1)}x`);
+    
+    log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
+    // Возвращаемся к меню майнера
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showMinerMenu(ctx, updatedUser);
+    }
+  } catch (error) {
+    logError(error, 'Улучшение майнера');
+    await ctx.answerCbQuery('❌ Ошибка улучшения майнера');
+  }
+}
+
 // ==================== ФАРМ ====================
 async function showFarmMenu(ctx, user) {
   const farm = user.farm;
@@ -5883,6 +6041,47 @@ bot.action('stop_miner', async (ctx) => {
     await stopMiner(ctx, user);
   } catch (error) {
     logError(error, 'Остановка майнера (обработчик)');
+  }
+});
+
+bot.action('upgrade_miner', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerUpgrade(ctx, user);
+  } catch (error) {
+    logError(error, 'Улучшение майнера (обработчик)');
+  }
+});
+
+bot.action('miner_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика майнера (обработчик)');
+  }
+});
+
+bot.action('confirm_miner_upgrade', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await upgradeMiner(ctx, user);
+  } catch (error) {
+    logError(error, 'Улучшение майнера (обработчик)');
+  }
+});
+
+bot.action('insufficient_funds', async (ctx) => {
+  try {
+    await ctx.answerCbQuery('❌ Недостаточно Magnum Coins для улучшения!');
+  } catch (error) {
+    logError(error, 'Недостаточно средств (обработчик)');
   }
 });
 
