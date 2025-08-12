@@ -1013,8 +1013,8 @@ async function showMinerMenu(ctx, user) {
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
-    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
-    `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Stars${lastRewardText}\n\n` +
+    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
+    `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Magnum Coins${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
   
   await ctx.editMessageText(message, {
@@ -1530,8 +1530,8 @@ async function updateMinerMenu(ctx, user) {
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
-    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
-    `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Stars${lastRewardText}\n\n` +
+    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
+    `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Magnum Coins${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
   
     log(`📝 Отправка обновленного меню майнера для пользователя ${user.id}`);
