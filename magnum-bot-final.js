@@ -191,7 +191,6 @@ async function connectDB() {
         throw error;
       }
     }
-    
     console.log('✅ Все индексы созданы успешно');
     console.log('✅ База данных подключена');
     
@@ -387,7 +386,6 @@ function ensureUserFields(user) {
       pendingAmount: 0
     };
   }
-  
   // Проверяем и инициализируем задания
   if (!user.tasks) {
     user.tasks = {
@@ -479,7 +477,6 @@ function ensureUserFields(user) {
   
   return user;
 }
-
 async function getUser(id, ctx = null) {
   try {
     logFunction('getUser', id, { ctx: ctx ? 'present' : 'null' });
@@ -780,7 +777,6 @@ async function handleReferral(userId, referrerId) {
     logError(error, 'Обработка реферала');
   }
 }
-
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 async function showMainMenu(ctx, user) {
   const rank = getUserRank(user);
@@ -807,6 +803,11 @@ async function showMainMenu(ctx, user) {
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
+  
+  // Добавляем раздел титулов
+  buttons.push([
+    Markup.button.callback('🎖 Титулы', 'titles')
+  ]);
   
   // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
@@ -865,6 +866,11 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
+  
+  // Добавляем раздел титулов
+  buttons.push([
+    Markup.button.callback('🎖 Титулы', 'titles')
+  ]);
   
   // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
@@ -955,7 +961,6 @@ async function showMinerMenu(ctx, user) {
     reply_markup: keyboard.reply_markup
   });
 }
-
 async function startMiner(ctx, user) {
   try {
     log(`⛏️ Попытка запуска майнера для пользователя ${user.id}`);
@@ -1131,7 +1136,6 @@ async function showMinerStats(ctx, user) {
     logError(error, `Показ статистики майнера для пользователя ${user.id}`);
   }
 }
-
 // ==================== ФУНКЦИЯ УЛУЧШЕНИЯ МАЙНЕРА ====================
 async function upgradeMiner(ctx, user) {
   try {
@@ -1304,7 +1308,6 @@ async function doFarm(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка фарма');
   }
 }
-
 // ==================== СТАТИСТИКА ФАРМА ====================
 async function showFarmStats(ctx, user) {
   try {
@@ -1416,7 +1419,6 @@ async function showFarmBonuses(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки бонусов');
   }
 }
-
 // ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
 async function updateMinerMenu(ctx, user) {
   try {
@@ -1486,7 +1488,6 @@ async function updateMinerMenu(ctx, user) {
     await showMinerMenu(ctx, user);
   }
 }
-
 async function updateFarmMenu(ctx, user) {
   try {
     log(`🔄 Обновление меню фарма для пользователя ${user.id}`);
@@ -1643,7 +1644,6 @@ function startFarmCountdown(ctx, user, remainingSeconds) {
   
   log(`⏰ Запущен обратный отсчет фарма для пользователя ${user.id}, осталось: ${remainingSeconds}с`);
 }
-
 // Функция для запуска обратного отсчета бонуса
 function startBonusCountdown(ctx, user, remainingSeconds) {
   const countdownKey = `bonus_countdown_${user.id}`;
@@ -1824,7 +1824,6 @@ async function showAdminPromocodes(ctx, user) {
     logError(error, 'Показ управления промокодами');
   }
 }
-
 // ==================== ПРОМОКОДЫ ====================
 async function showPromocodeMenu(ctx, user) {
   try {
@@ -1913,7 +1912,6 @@ async function showBonusMenu(ctx, user) {
     reply_markup: keyboard.reply_markup
   });
 }
-
 async function updateBonusMenu(ctx, user) {
   try {
     log(`🔄 Обновление меню бонуса для пользователя ${user.id}`);
@@ -1979,7 +1977,6 @@ async function updateBonusMenu(ctx, user) {
     await showBonusMenu(ctx, user);
   }
 }
-
 async function claimBonus(ctx, user) {
   try {
     log(`🎁 Попытка получения бонуса для пользователя ${user.id}`);
@@ -2163,7 +2160,6 @@ async function showBonusStreak(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа серии');
   }
 }
-
 // ==================== АДМИН ПАНЕЛЬ ====================
 async function showAdminPanel(ctx, user) {
   try {
@@ -2355,7 +2351,6 @@ async function showAdminBalance(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления балансами');
   }
 }
-
 // ==================== УПРАВЛЕНИЕ РЕЗЕРВОМ ====================
 async function showAdminReserve(ctx, user) {
   try {
@@ -2403,7 +2398,6 @@ async function showAdminReserve(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления резервом');
   }
 }
-
 // Функции обработки управления резервом
 async function handleAdminAddReserveMC(ctx, user, text) {
   try {
@@ -2556,7 +2550,6 @@ async function handleAdminAddReserveStars(ctx, user, text) {
     await ctx.reply('❌ Ошибка добавления Stars в резерв.');
   }
 }
-
 async function handleAdminRemoveReserveStars(ctx, user, text) {
   try {
     const amount = parseFloat(text);
@@ -2745,7 +2738,6 @@ async function showAdminFarmRewards(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа настроек наград');
   }
 }
-
 // ==================== УПРАВЛЕНИЕ КОМИССИЕЙ ====================
 async function showAdminExchangeCommission(ctx, user) {
   try {
@@ -2872,7 +2864,6 @@ async function showAdminDailyBonus(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа настроек бонуса');
   }
 }
-
 async function showAdminMinerSettings(ctx, user) {
   try {
     log(`⛏️ Показ настроек майнера для админа ${user.id}`);
@@ -2915,7 +2906,6 @@ async function showAdminMinerSettings(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа настроек майнера');
   }
 }
-
 async function showAdminReferralSettings(ctx, user) {
   try {
     log(`👥 Показ настроек реферальной системы для админа ${user.id}`);
@@ -3083,7 +3073,6 @@ async function showAdminSearchUser(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа поиска');
   }
 }
-
 async function showAdminBanUser(ctx, user) {
   try {
     log(`🚫 Показ блокировки пользователя для админа ${user.id}`);
@@ -3257,7 +3246,6 @@ function logFunction(functionName, userId = null, params = null) {
   
   console.log(logMessage);
 }
-
 // ==================== ОБМЕН ====================
 async function showExchangeMenu(ctx, user) {
   try {
@@ -3325,7 +3313,6 @@ async function showExchangeMenu(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки меню обмена');
   }
 }
-
 async function performExchange(ctx, user, amount) {
   try {
     log(`💱 Попытка обмена ${amount} Magnum Coins для пользователя ${user.id}`);
@@ -3459,7 +3446,6 @@ async function showAchievementsMenu(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки достижений');
   }
 }
-
 function getAchievementsList(user) {
   return [
           {
@@ -3656,7 +3642,6 @@ async function showAchievementsRewards(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки наград');
   }
 }
-
 function createProgressBar(percent) {
   const filled = Math.round(percent / 10);
   const empty = 10 - filled;
@@ -3789,7 +3774,6 @@ async function showReferralStats(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки статистики');
   }
 }
-
 async function showReferralRewards(ctx, user) {
   try {
     log(`🎁 Показ наград рефералов для пользователя ${user.id}`);
@@ -3856,7 +3840,6 @@ function getReferralLevel(referralsCount) {
   if (referralsCount >= 1) return '🌱 Новичок';
   return '🔰 Без рефералов';
 }
-
 async function showReferralList(ctx, user) {
   try {
     log(`👥 Показ списка рефералов для пользователя ${user.id}`);
@@ -4018,7 +4001,6 @@ async function showNotificationSettings(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки настроек уведомлений');
   }
 }
-
 async function showPrivacySettings(ctx, user) {
   try {
     log(`🔒 Показ настроек приватности для пользователя ${user.id}`);
@@ -4219,7 +4201,6 @@ async function togglePrivacySetting(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка изменения настроек');
   }
 }
-
 async function setLanguage(ctx, user, language) {
   try {
     log(`🌐 Установка языка ${language} для пользователя ${user.id}`);
@@ -4290,7 +4271,6 @@ async function resetUserSettings(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка сброса настроек');
   }
 }
-
 // ==================== ЗАДАНИЯ ====================
 async function showTasksMenu(ctx, user) {
   try {
@@ -4376,7 +4356,6 @@ async function showSponsorTasks(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки спонсорских заданий');
   }
 }
-
 async function showSponsorTaskDetails(ctx, user, taskId) {
   try {
     log(`🎯 Показ деталей спонсорского задания ${taskId} для пользователя ${user.id}`);
@@ -4563,7 +4542,6 @@ async function claimSponsorTask(ctx, user, taskId) {
     await ctx.answerCbQuery('❌ Ошибка получения награды');
   }
 }
-
 async function showDailyTasks(ctx, user) {
   try {
     log(`📅 Показ ежедневных заданий для пользователя ${user.id}`);
@@ -4762,9 +4740,213 @@ async function checkTaskCompletion(ctx, user, task) {
   // Для демонстрации возвращаем true (задание выполнено)
   return true;
 }
+// ==================== ТИТУЛЫ ====================
+function getTitlesList(user) {
+  const farmCount = user.farm?.farmCount || 0;
+  const minerTotal = user.miner?.totalMined || 0;
+  const streak = user.dailyBonus?.streak || 0;
+  const level = user.level || 1;
+  const stars = user.stars || 0;
+  const totalMC = user.totalEarnedMagnumCoins || 0;
+  const totalStars = user.totalEarnedStars || 0;
+  const referrals = user.referralsCount || 0;
+  const achievements = user.achievementsCount || 0;
 
+  const definitions = [
+    // Обычные (7)
+    { id: 'novice', name: '🌱 Новичок', rarity: 'Обычный', conditionText: 'Титул по умолчанию', unlocked: true },
+    { id: 'starter', name: '🚀 Начинающий', rarity: 'Обычный', conditionText: 'Уровень 2 или 100 Stars', unlocked: level >= 2 || stars >= 100 },
+    { id: 'skilled', name: '🎯 Опытный', rarity: 'Обычный', conditionText: 'Уровень 5 или 20 фармов', unlocked: level >= 5 || farmCount >= 20 },
+    { id: 'master', name: '✨ Мастер', rarity: 'Обычный', conditionText: 'Уровень 10 или 1 000 Stars', unlocked: level >= 10 || stars >= 1000 },
+    { id: 'expert', name: '💫 Эксперт', rarity: 'Обычный', conditionText: 'Уровень 20 или 1 000 Magnum Coins заработано', unlocked: level >= 20 || totalMC >= 1000 },
+    { id: 'pro', name: '🌟 Профессионал', rarity: 'Обычный', conditionText: '10 000 Stars или 5 рефералов', unlocked: stars >= 10000 || referrals >= 5 },
+    { id: 'champion', name: '🏆 Чемпион', rarity: 'Обычный', conditionText: 'Уровень 30 или 5 достижений', unlocked: level >= 30 || achievements >= 5 },
+
+    // Секретные (3)
+    { id: 'stealth', name: '🕵️ Скрытный', rarity: 'Секретный', conditionText: 'Серия бонусов 7 дней подряд', unlocked: streak >= 7 },
+    { id: 'tactician', name: '🧠 Тактик', rarity: 'Секретный', conditionText: '50 фармов и 3 реферала', unlocked: farmCount >= 50 && referrals >= 3 },
+    { id: 'chronos', name: '⏳ Усердный', rarity: 'Секретный', conditionText: 'Намайнить 500 Magnum Coins', unlocked: minerTotal >= 500 },
+
+    // Легендарные (3)
+    { id: 'legend', name: '👑 Легенда', rarity: 'Легендарный', conditionText: '1 000 000 Stars', unlocked: stars >= 1000000 || totalStars >= 1000000 },
+    { id: 'immortal', name: '🔥 Бессмертный', rarity: 'Легендарный', conditionText: '100 000 Magnum Coins заработано', unlocked: totalMC >= 100000 },
+    { id: 'dragon', name: '🐉 Дракон', rarity: 'Легендарный', conditionText: '50 рефералов', unlocked: referrals >= 50 }
+  ];
+
+  return definitions;
+}
+
+async function syncUserTitles(user) {
+  try {
+    const definitions = getTitlesList(user);
+    const ownedSet = new Set(user.titles || []);
+    const toAdd = definitions.filter(t => t.unlocked && !ownedSet.has(t.name)).map(t => t.name);
+
+    if (toAdd.length > 0) {
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { $addToSet: { titles: { $each: toAdd } }, $set: { updatedAt: new Date() } }
+      );
+      user.titles = Array.from(new Set([...(user.titles || []), ...toAdd]));
+      setCachedUser(user.id, user);
+    }
+
+    if (!user.mainTitle || !user.titles.includes(user.mainTitle)) {
+      user.mainTitle = '🌱 Новичок';
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { $set: { mainTitle: user.mainTitle, updatedAt: new Date() } }
+      );
+      setCachedUser(user.id, user);
+    }
+
+    return { definitions, toAdd };
+  } catch (error) {
+    logError(error, 'Синхронизация титулов пользователя');
+    return { definitions: getTitlesList(user), toAdd: [] };
+  }
+}
+
+async function showTitlesMenu(ctx, user) {
+  // Синхронизируем титулы пользователя
+  const { definitions } = await syncUserTitles(user);
+  const total = definitions.length;
+  const owned = (user.titles || []).length;
+
+  let message = `🎖 *Титулы*\n\n`;
+  message += `👑 Главный титул: ${user.mainTitle}\n`;
+  message += `📦 Доступно: \`${owned}/${total}\`\n\n`;
+  message += `📜 *Список титулов:*\n`;
+
+  for (const t of definitions) {
+    const has = (user.titles || []).includes(t.name);
+    const status = has ? '✅' : (t.rarity === 'Секретный' ? '❔' : '🔒');
+    const titleName = has ? t.name : (t.rarity === 'Секретный' ? 'Секретный титул' : t.name);
+    message += `${status} ${titleName} — ${t.rarity}${has ? '' : ` (условие: ${t.conditionText})`}\n`;
+  }
+
+  const buttons = [
+    [Markup.button.callback('🧭 Сменить титул', 'titles_select')],
+    [Markup.button.callback('🔙 Назад', 'main_menu')]
+  ];
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    reply_markup: Markup.inlineKeyboard(buttons).reply_markup
+  });
+}
+
+async function showTitlesSelectMenu(ctx, user) {
+  const definitions = getTitlesList(user);
+  const ownedDefs = definitions.filter(d => (user.titles || []).includes(d.name));
+
+  // Фоллбек для титулов, которых нет в определениях
+  const extraOwned = (user.titles || [])
+    .filter(n => !ownedDefs.some(d => d.name === n))
+    .map(n => ({ id: 'name_' + Buffer.from(n, 'utf8').toString('base64'), name: n }));
+
+  const items = [...ownedDefs.map(d => ({ id: d.id, name: d.name })), ...extraOwned];
+
+  let message = `🎖 *Выбор титула*\n\n`;
+  message += `Текущий: ${user.mainTitle}\n\n`;
+  message += `Выберите титул для установки:`;
+
+  const rows = [];
+  for (const item of items) {
+    rows.push([Markup.button.callback(item.name, `set_title_${item.id}`)]);
+  }
+  rows.push([Markup.button.callback('🔙 Назад', 'titles')]);
+
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    reply_markup: Markup.inlineKeyboard(rows).reply_markup
+  });
+}
+
+// Обработчики титулов
+let afterActions = [];
+afterActions.push(() => {
+  bot.action('titles', async (ctx) => {
+    try {
+      const user = await getUser(ctx.from.id);
+      if (!user) return;
+      await showTitlesMenu(ctx, user);
+    } catch (error) {
+      logError(error, 'Титулы (обработчик)');
+    }
+  });
+
+  bot.action('titles_select', async (ctx) => {
+    try {
+      const user = await getUser(ctx.from.id);
+      if (!user) return;
+      await showTitlesSelectMenu(ctx, user);
+    } catch (error) {
+      logError(error, 'Титулы выбор (обработчик)');
+    }
+  });
+
+  bot.action(/^(set_title_)\S+/, async (ctx) => {
+    try {
+      const data = ctx.callbackQuery?.data || '';
+      const rawId = data.replace('set_title_', '');
+
+      const user = await getUser(ctx.from.id);
+      if (!user) return;
+
+      const definitions = getTitlesList(user);
+      let selectedName = null;
+
+      const byId = definitions.find(d => d.id === rawId);
+      if (byId) {
+        selectedName = byId.name;
+      } else if (rawId.startsWith('name_')) {
+        const b64 = rawId.substring(5);
+        try {
+          selectedName = Buffer.from(b64, 'base64').toString('utf8');
+        } catch (e) {
+          selectedName = null;
+        }
+      }
+
+      if (!selectedName) {
+        await ctx.answerCbQuery('❌ Не удалось распознать титул', { show_alert: true });
+        return;
+      }
+
+      if (!(user.titles || []).includes(selectedName)) {
+        await ctx.answerCbQuery('🔒 Этот титул еще не получен', { show_alert: true });
+        return;
+      }
+
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { $set: { mainTitle: selectedName, updatedAt: new Date() } }
+      );
+      user.mainTitle = selectedName;
+      setCachedUser(user.id, user);
+
+      await ctx.answerCbQuery('✅ Титул установлен');
+      await showTitlesMenu(ctx, user);
+    } catch (error) {
+      logError(error, 'Установка титула (обработчик)');
+      await ctx.answerCbQuery('❌ Ошибка установки титула', { show_alert: true });
+    }
+  });
+});
 // ==================== СОЗДАНИЕ БОТА ====================
 const bot = new Telegraf(config.BOT_TOKEN);
+
+// Регистрация отложенных обработчиков
+if (typeof afterActions !== 'undefined' && Array.isArray(afterActions)) {
+  for (const fn of afterActions) {
+    try {
+      fn();
+    } catch (e) {
+      logError(e, 'Регистрация отложенных обработчиков');
+    }
+  }
+}
 
 // Обработка команды /start
 bot.start(async (ctx) => {
@@ -4942,7 +5124,6 @@ async function handleAdminBanUser(ctx, user, text) {
     await ctx.reply('❌ Ошибка блокировки пользователя');
   }
 }
-
 async function handleAdminUnbanUser(ctx, user, text) {
   try {
     const userId = parseInt(text);
@@ -5142,7 +5323,6 @@ async function handleAdminSetReferralReward(ctx, user, text) {
     await ctx.reply('❌ Ошибка изменения награды реферала');
   }
 }
-
 async function handleAdminSetSubscriptionChannel(ctx, user, text) {
   try {
     let channel = text.trim();
@@ -5238,7 +5418,6 @@ async function handleAdminCreatePostNoButton(ctx, user, text) {
     await ctx.reply('❌ Ошибка создания поста');
   }
 }
-
 async function handleAdminCreatePromocode(ctx, user, text) {
   try {
     const [name, amount, activations] = text.split('|').map(s => s.trim());
@@ -5529,7 +5708,6 @@ async function handleAdminAnswerTicket(ctx, user, text) {
       responseLength: text.length,
       responseTime: responseTime
     });
-    
     // Отправляем ответ пользователю
     try {
       const userMessage = 
@@ -5715,7 +5893,6 @@ bot.action('faq_bonus', async (ctx) => {
     logError(error, 'FAQ Бонусы');
   }
 });
-
 bot.action('faq_exchange', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -5912,7 +6089,6 @@ bot.action('faq_tasks', async (ctx) => {
     logError(error, 'FAQ Задания');
   }
 });
-
 // Обработчик для создания тикета поддержки
 bot.action('contact_support', async (ctx) => {
   try {
@@ -6110,10 +6286,8 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
-    
     await ctx.answerCbQuery('✅ Статус обновлен');
     console.log(`✅ Статус тикета ${ticketId} обновлен на "В обработке"`);
-    
   } catch (error) {
     console.error(`❌ Ошибка установки статуса "В обработке" для тикета ${ctx.match[1]}:`, error);
     await ctx.answerCbQuery('❌ Ошибка');
@@ -6187,7 +6361,6 @@ bot.action(/^support_reject_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
-
 // Обработчик для закрытия тикета
 bot.action(/^support_close_(.+)$/, async (ctx) => {
   try {
@@ -6311,10 +6484,8 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
         reply_markup: keyboard.reply_markup
       });
     }
-    
     await ctx.answerCbQuery('✅ Отменено');
     console.log(`✅ Ответ на тикет ${ticketId} отменен админом ${ctx.from.id}`);
-    
   } catch (error) {
     console.error(`❌ Ошибка отмены ответа на тикет ${ctx.match[1]}:`, error);
     await ctx.answerCbQuery('❌ Ошибка');
@@ -6511,7 +6682,6 @@ bot.action('miner_stats', async (ctx) => {
     logError(error, 'Статистика майнера (обработчик)');
   }
 });
-
 bot.action('confirm_miner_upgrade', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -6692,7 +6862,6 @@ bot.action('referral_link', async (ctx) => {
     logError(error, 'Реферальная ссылка');
   }
 });
-
 bot.action('referral_stats', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -6703,7 +6872,6 @@ bot.action('referral_stats', async (ctx) => {
     logError(error, 'Статистика рефералов');
   }
 });
-
 bot.action('referral_rewards', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -6898,7 +7066,6 @@ bot.action('tasks_progress', async (ctx) => {
     logError(error, 'Прогресс заданий');
   }
 });
-
 // Обработка спонсорских заданий
 bot.action(/^sponsor_task_(\d+)$/, async (ctx) => {
   try {
@@ -7089,7 +7256,6 @@ bot.action('bonus_cooldown', async (ctx) => {
     logError(error, 'Кулдаун бонуса');
   }
 });
-
 // Проверка подписки
 bot.action('check_subscription', async (ctx) => {
   try {
@@ -7178,7 +7344,6 @@ bot.action('admin_promocodes', async (ctx) => {
     logError(error, 'Управление промокодами (обработчик)');
   }
 });
-
 bot.action('admin_cache', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7283,7 +7448,6 @@ bot.action('admin_reserve_remove_mc', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
-
 bot.action('admin_reserve_add_stars', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7442,7 +7606,6 @@ bot.action('admin_commission_set', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
-
 bot.action('admin_commission_stats', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7622,7 +7785,6 @@ bot.action('support', async (ctx) => {
     logError(error, 'Поддержка (обработчик)');
   }
 });
-
 // Обработчик для FAQ
 bot.action('support_faq', async (ctx) => {
   try {
@@ -7672,7 +7834,6 @@ bot.action('support_faq', async (ctx) => {
     logError(error, 'FAQ (обработчик)');
   }
 });
-
 bot.action('admin_settings', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7817,7 +7978,6 @@ bot.action('admin_users', async (ctx) => {
     logError(error, 'Управление пользователями (обработчик)');
   }
 });
-
 // Обработчики изменения настроек
 bot.action('admin_farm_reward_set', async (ctx) => {
   try {
@@ -8016,7 +8176,6 @@ async function startBot() {
       console.log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
       bot.stop('SIGTERM');
     });
-    
     console.log('✅ Все обработчики сигналов настроены');
     
   } catch (error) {
@@ -8175,7 +8334,6 @@ process.on('uncaughtException', (error) => {
   });
   process.exit(1);
 });
-
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Необработанное отклонение промиса:', reason);
   console.log('Критическая ошибка unhandledRejection:', {
