@@ -357,30 +357,135 @@ function getRankProgress(user) {
     }
   }
   
+  // Если достигнут максимальный ранг
   if (!nextRank) {
-    return {
+    const result = {
       current: currentRank,
       next: null,
       progress: 100,
       remaining: 0,
       isMax: true
     };
+    
+    // Логируем для отладки
+    if (user.id) {
+      console.log(`🎯 Ранг прогресс для пользователя ${user.id}: Максимальный ранг достигнут`, {
+        level,
+        currentRank: currentRank.name,
+        result
+      });
+    }
+    
+    return result;
   }
   
-  const progress = Math.min(100, Math.round(((level - currentRank.level) / (nextRank.level - currentRank.level)) * 100));
-  const remaining = nextRank.level - level;
+  // Проверяем, что у нас есть валидные данные для расчета прогресса
+  if (nextRank.level <= currentRank.level) {
+    console.error('Ошибка в расчете прогресса ранга: nextRank.level <= currentRank.level', {
+      currentRank,
+      nextRank,
+      userLevel: level,
+      userId: user.id
+    });
+    return {
+      current: currentRank,
+      next: nextRank,
+      progress: 0,
+      remaining: nextRank.level - level,
+      isMax: false
+    };
+  }
   
-  return {
+  // Безопасный расчет прогресса
+  const levelDifference = nextRank.level - currentRank.level;
+  const userProgress = level - currentRank.level;
+  
+  if (levelDifference <= 0) {
+    console.error('Ошибка в расчете прогресса ранга: levelDifference <= 0', {
+      currentRank,
+      nextRank,
+      userLevel: level,
+      levelDifference,
+      userId: user.id
+    });
+    return {
+      current: currentRank,
+      next: nextRank,
+      progress: 0,
+      remaining: nextRank.level - level,
+      isMax: false
+    };
+  }
+  
+  const progress = Math.min(100, Math.max(0, Math.round((userProgress / levelDifference) * 100)));
+  const remaining = Math.max(0, nextRank.level - level);
+  
+  const result = {
     current: currentRank,
     next: nextRank,
     progress: progress,
     remaining: remaining,
     isMax: false
   };
+  
+  // Логируем для отладки прогресса ранга
+  if (user.id && (progress === 100 || progress === 0)) {
+    console.log(`🎯 Ранг прогресс для пользователя ${user.id}:`, {
+      level,
+      currentRank: currentRank.name,
+      nextRank: nextRank.name,
+      progress,
+      remaining,
+      userProgress,
+      levelDifference
+    });
+  }
+  
+  return result;
 }
 
 function isAdmin(userId) {
   return config.ADMIN_IDS.includes(userId);
+}
+
+// Функция для отладки прогресса ранга
+function debugRankProgress(user) {
+  const level = user.level || 1;
+  const ranks = getRankRequirements();
+  
+  console.log(`🔍 Отладка прогресса ранга для пользователя ${user.id}:`);
+  console.log(`├ Уровень пользователя: ${level}`);
+  console.log(`├ Все ранги:`, ranks.map(r => `${r.name} (${r.level})`));
+  
+  // Находим текущий ранг
+  let currentRank = ranks[0];
+  let nextRank = null;
+  
+  for (let i = ranks.length - 1; i >= 0; i--) {
+    if (level >= ranks[i].level) {
+      currentRank = ranks[i];
+      if (i < ranks.length - 1) {
+        nextRank = ranks[i + 1];
+      }
+      break;
+    }
+  }
+  
+  console.log(`├ Текущий ранг: ${currentRank.name} (${currentRank.level})`);
+  console.log(`├ Следующий ранг: ${nextRank ? nextRank.name + ' (' + nextRank.level + ')' : 'Нет (максимальный)'}`);
+  
+  if (nextRank) {
+    const levelDifference = nextRank.level - currentRank.level;
+    const userProgress = level - currentRank.level;
+    const progress = Math.min(100, Math.max(0, Math.round((userProgress / levelDifference) * 100)));
+    
+    console.log(`├ Разница уровней: ${levelDifference}`);
+    console.log(`├ Прогресс пользователя: ${userProgress}`);
+    console.log(`├ Процент прогресса: ${progress}%`);
+    console.log(`└ Осталось уровней: ${nextRank.level - level}`);
+  } else {
+    console.log(`└ Пользователь достиг максимального ранга`);
+  }
 }
 // ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
 // Функция для проверки и инициализации недостающих полей пользователя
@@ -785,7 +890,6 @@ async function showSubscriptionMessage(ctx) {
     keyboard
   );
 }
-
 // ==================== РЕФЕРАЛЬНАЯ СИСТЕМА ====================
 async function handleReferral(userId, referrerId) {
   try {
@@ -2239,7 +2343,8 @@ async function showAdminPanel(ctx, user) {
         Markup.button.callback('🔄 Обновление кеша', 'admin_cache')
       ],
       [
-        Markup.button.callback('🏦 Управление резервом', 'admin_reserve')
+        Markup.button.callback('🏦 Управление резервом', 'admin_reserve'),
+        Markup.button.callback('🔍 Отладка рангов', 'admin_debug_ranks')
       ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
@@ -2325,7 +2430,6 @@ async function showAdminStats(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа статистики');
   }
 }
-
 async function showAdminUsers(ctx, user) {
   try {
     log(`👥 Показ управления пользователями для админа ${user.id}`);
@@ -2451,6 +2555,52 @@ async function showAdminReserve(ctx, user) {
   } catch (error) {
     logError(error, `Показ управления резервом для админа ${user.id}`);
     await ctx.answerCbQuery('❌ Ошибка показа управления резервом');
+  }
+}
+
+// ==================== ОТЛАДКА РАНГОВ ====================
+async function showAdminDebugRanks(ctx, user) {
+  try {
+    log(`🔍 Показ отладки рангов для админа ${user.id}`);
+    
+    // Получаем статистику по рангам
+    const ranks = getRankRequirements();
+    const rankStats = [];
+    
+    for (const rank of ranks) {
+      const count = await db.collection('users').countDocuments({ level: { $gte: rank.level } });
+      rankStats.push({ ...rank, count });
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔍 Проверить пользователя', 'admin_debug_user_rank')],
+      [Markup.button.callback('📊 Статистика рангов', 'admin_rank_stats')],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    let message = `🔍 *Отладка системы рангов*\n\n`;
+    message += `📊 *Статистика по рангам:*\n`;
+    
+    rankStats.forEach((rank, index) => {
+      const percentage = rankStats[0].count > 0 ? Math.round((rank.count / rankStats[0].count) * 100) : 0;
+      message += `${index + 1}. ${rank.name} (${rank.level} ур.) - ${rank.count} пользователей (${percentage}%)\n`;
+    });
+    
+    message += `\n🔧 *Доступные действия:*\n`;
+    message += `├ 🔍 Проверить пользователя - отладка конкретного пользователя\n`;
+    message += `├ 📊 Статистика рангов - детальная статистика\n`;
+    message += `└ 🔙 Назад - вернуться в админ панель\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Отладка рангов показана для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ отладки рангов для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа отладки рангов');
   }
 }
 
@@ -4801,13 +4951,22 @@ async function showRanksMenu(ctx, user) {
     const rankProgress = getRankProgress(user);
     const ranks = getRankRequirements();
     
+    // Дополнительная проверка для отладки
+    console.log(`🎯 Показ рангов для пользователя ${user.id}:`, {
+      level: user.level,
+      rankProgress,
+      currentRank: rankProgress.current,
+      nextRank: rankProgress.next,
+      isMax: rankProgress.isMax
+    });
+    
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'settings')]
     ]);
     
     let message = `⚔️ *Система рангов*\n\n`;
     message += `🎯 *Ваш текущий ранг:* ${rankProgress.current.name}\n`;
-    message += `📊 *Уровень:* ${user.level}\n\n`;
+    message += `📊 *Уровень:* ${user.level || 1}\n\n`;
     
     if (!rankProgress.isMax) {
       message += `📈 *Прогресс к следующему рангу:*\n`;
@@ -6169,7 +6328,6 @@ bot.action(/^support_answer_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
-
 // Обработчик для установки статуса "В обработке"
 bot.action(/^support_progress_(.+)$/, async (ctx) => {
   try {
@@ -6967,7 +7125,6 @@ bot.action('confirm_reset', async (ctx) => {
     logError(error, 'Сброс настроек пользователя');
   }
 });
-
 // Задания
 bot.action('tasks', async (ctx) => {
   try {
@@ -7318,6 +7475,21 @@ bot.action('admin_reserve', async (ctx) => {
   } catch (error) {
     logError(error, 'Управление резервом');
     await ctx.answerCbQuery('❌ Ошибка управления резервом');
+  }
+});
+
+bot.action('admin_debug_ranks', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminDebugRanks(ctx, user);
+  } catch (error) {
+    logError(error, 'Отладка рангов');
+    await ctx.answerCbQuery('❌ Ошибка отладки рангов');
   }
 });
 
@@ -7749,7 +7921,6 @@ bot.action('promocode_history', async (ctx) => {
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'История промокодов (обработчик)'); }
 });
-
 // Обработчики для создания постов
 bot.action('admin_create_post_with_button', async (ctx) => {
   try {
