@@ -1100,6 +1100,10 @@ async function doFarm(ctx, user) {
     log(`🔄 Обновление меню фарма для пользователя ${user.id}`);
     // Обновляем меню фарма
     await updateFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
+    
+    // Запускаем обратный отсчет сразу после фарма
+    log(`⏰ Запуск обратного отсчета фарма для пользователя ${user.id}`);
+    startFarmCountdown(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } }, cooldown);
   } catch (error) {
     logError(error, 'Фарм');
     await ctx.answerCbQuery('❌ Ошибка фарма');
@@ -1381,6 +1385,15 @@ function startFarmCountdown(ctx, user, remainingSeconds) {
         const timeSince = Math.floor((now - lastFarm) / 1000);
         const cooldown = config.FARM_COOLDOWN;
         const canFarm = timeSince >= cooldown;
+        
+        // Если кулдаун истек, останавливаем таймер
+        if (canFarm) {
+          clearInterval(global[countdownKey]);
+          delete global[countdownKey];
+          await updateFarmMenu(ctx, updatedUser);
+          log(`🔄 Обратный отсчет фарма завершен для пользователя ${user.id}`);
+          return;
+        }
         
         const baseReward = config.FARM_BASE_REWARD;
         const bonus = Math.min(updatedUser.level * 0.1, 2);
