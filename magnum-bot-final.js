@@ -311,6 +311,8 @@ function formatTime(seconds) {
 function getUserRank(user) {
   const level = user.level || 1;
   
+  console.log(`🔍 getUserRank вызвана для пользователя ${user.id}, уровень: ${level}`);
+  
   // Система рангов на основе уровней
   if (level >= 100) return '👑 Император';
   if (level >= 80) return '⚜️ Король';
@@ -339,9 +341,13 @@ function getRankRequirements() {
   ];
 }
 
-function getRankProgress(user) {
-  const level = user.level || 1;
+async function getRankProgress(user) {
+  // Получаем актуальные данные пользователя из базы
+  const freshUser = await getUser(user.id);
+  const level = freshUser ? (freshUser.level || 1) : (user.level || 1);
   const ranks = getRankRequirements();
+  
+  console.log(`🔍 getRankProgress вызвана для пользователя ${user.id}, уровень: ${level}`);
   
   // Находим текущий ранг
   let currentRank = ranks[0];
@@ -357,6 +363,9 @@ function getRankProgress(user) {
     }
   }
   
+  console.log(`🔍 Найден текущий ранг: ${currentRank.name} (${currentRank.level})`);
+  console.log(`🔍 Следующий ранг: ${nextRank ? nextRank.name + ' (' + nextRank.level + ')' : 'Нет'}`);
+  
   // Если достигнут максимальный ранг
   if (!nextRank) {
     const result = {
@@ -367,15 +376,7 @@ function getRankProgress(user) {
       isMax: true
     };
     
-    // Логируем для отладки
-    if (user.id) {
-      console.log(`🎯 Ранг прогресс для пользователя ${user.id}: Максимальный ранг достигнут`, {
-        level,
-        currentRank: currentRank.name,
-        result
-      });
-    }
-    
+    console.log(`🎯 Пользователь ${user.id} достиг максимального ранга:`, result);
     return result;
   }
   
@@ -399,6 +400,8 @@ function getRankProgress(user) {
   // Безопасный расчет прогресса
   const levelDifference = nextRank.level - currentRank.level;
   const userProgress = level - currentRank.level;
+  
+  console.log(`🔍 Расчет прогресса: levelDifference=${levelDifference}, userProgress=${userProgress}`);
   
   if (levelDifference <= 0) {
     console.error('Ошибка в расчете прогресса ранга: levelDifference <= 0', {
@@ -428,18 +431,16 @@ function getRankProgress(user) {
     isMax: false
   };
   
-  // Логируем для отладки прогресса ранга
-  if (user.id && (progress === 100 || progress === 0)) {
-    console.log(`🎯 Ранг прогресс для пользователя ${user.id}:`, {
-      level,
-      currentRank: currentRank.name,
-      nextRank: nextRank.name,
-      progress,
-      remaining,
-      userProgress,
-      levelDifference
-    });
-  }
+  console.log(`🎯 Результат расчета прогресса для пользователя ${user.id}:`, {
+    level,
+    currentRank: currentRank.name,
+    nextRank: nextRank.name,
+    progress,
+    remaining,
+    userProgress,
+    levelDifference,
+    calculation: `(${userProgress} / ${levelDifference}) * 100 = ${progress}%`
+  });
   
   return result;
 }
@@ -448,8 +449,60 @@ function isAdmin(userId) {
   return config.ADMIN_IDS.includes(userId);
 }
 
+// Функция для проверки и повышения уровня пользователя
+async function checkAndUpdateLevel(user) {
+  try {
+    console.log(`🔍 Проверка уровня для пользователя ${user.id}: опыт ${user.experience}/${user.experienceToNextLevel}, уровень ${user.level}`);
+    
+    let levelUp = false;
+    let newLevel = user.level || 1;
+    let newExperience = user.experience || 0;
+    let newExperienceToNextLevel = user.experienceToNextLevel || 100;
+    
+    // Проверяем, достиг ли пользователь следующего уровня
+    while (newExperience >= newExperienceToNextLevel) {
+      levelUp = true;
+      newExperience -= newExperienceToNextLevel;
+      newLevel++;
+      
+      // Увеличиваем требуемый опыт для следующего уровня
+      newExperienceToNextLevel = Math.floor(newExperienceToNextLevel * 1.2);
+      
+      console.log(`🎉 Пользователь ${user.id} повысил уровень до ${newLevel}! Осталось опыта: ${newExperience}/${newExperienceToNextLevel}`);
+    }
+    
+    // Если уровень повысился, обновляем в базе данных
+    if (levelUp) {
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { 
+          $set: { 
+            level: newLevel,
+            experience: newExperience,
+            experienceToNextLevel: newExperienceToNextLevel,
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      // Обновляем кеш
+      user.level = newLevel;
+      user.experience = newExperience;
+      user.experienceToNextLevel = newExperienceToNextLevel;
+      setCachedUser(user.id, user);
+      
+      console.log(`✅ Уровень пользователя ${user.id} обновлен: ${newLevel}, опыт: ${newExperience}/${newExperienceToNextLevel}`);
+    }
+    
+    return { levelUp, newLevel, newExperience, newExperienceToNextLevel };
+  } catch (error) {
+    console.error(`❌ Ошибка при проверке уровня пользователя ${user.id}:`, error);
+    return { levelUp: false, newLevel: user.level, newExperience: user.experience, newExperienceToNextLevel: user.experienceToNextLevel };
+  }
+}
+
 // Функция для отладки прогресса ранга
-function debugRankProgress(user) {
+async function debugRankProgress(user) {
   const level = user.level || 1;
   const ranks = getRankRequirements();
   
@@ -486,6 +539,10 @@ function debugRankProgress(user) {
   } else {
     console.log(`└ Пользователь достиг максимального ранга`);
   }
+  
+  // Тестируем функцию getRankProgress
+  const rankProgress = await getRankProgress(user);
+  console.log(`🔍 Результат getRankProgress:`, rankProgress);
 }
 // ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
 // Функция для проверки и инициализации недостающих полей пользователя
@@ -938,7 +995,7 @@ async function handleReferral(userId, referrerId) {
 }
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 async function showMainMenu(ctx, user) {
-  const rankProgress = getRankProgress(user);
+  const rankProgress = await getRankProgress(user);
   
   // Создаем базовые кнопки
   const buttons = [
@@ -1004,7 +1061,7 @@ async function showMainMenu(ctx, user) {
 }
 
 async function showMainMenuStart(ctx, user) {
-  const rankProgress = getRankProgress(user);
+  const rankProgress = await getRankProgress(user);
   
   // Создаем базовые кнопки
   const buttons = [
@@ -1454,6 +1511,15 @@ async function doFarm(ctx, user) {
     
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
+    
+    // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
+      if (levelResult.levelUp) {
+        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+      }
+    }
     
     log(`✅ Фарм успешно завершен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins`);
     await ctx.answerCbQuery(
@@ -2205,6 +2271,15 @@ async function claimBonus(ctx, user) {
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
+      if (levelResult.levelUp) {
+        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+      }
+    }
+    
     log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins, серия: ${newStreak} дней`);
     await ctx.answerCbQuery(
       `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Magnum Coins, серия: ${newStreak} дней`
@@ -2575,6 +2650,8 @@ async function showAdminDebugRanks(ctx, user) {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔍 Проверить пользователя', 'admin_debug_user_rank')],
       [Markup.button.callback('📊 Статистика рангов', 'admin_rank_stats')],
+      [Markup.button.callback('🧪 Тест прогресса', 'admin_test_progress')],
+      [Markup.button.callback('⚡ Принудительная проверка уровня', 'admin_force_level_check')],
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
@@ -2589,6 +2666,8 @@ async function showAdminDebugRanks(ctx, user) {
     message += `\n🔧 *Доступные действия:*\n`;
     message += `├ 🔍 Проверить пользователя - отладка конкретного пользователя\n`;
     message += `├ 📊 Статистика рангов - детальная статистика\n`;
+    message += `├ 🧪 Тест прогресса - тестирование расчета прогресса\n`;
+    message += `├ ⚡ Принудительная проверка уровня - обновить уровни всех пользователей\n`;
     message += `└ 🔙 Назад - вернуться в админ панель\n\n`;
     message += `🎯 Выберите действие:`;
     
@@ -2601,6 +2680,114 @@ async function showAdminDebugRanks(ctx, user) {
   } catch (error) {
     logError(error, `Показ отладки рангов для админа ${user.id}`);
     await ctx.answerCbQuery('❌ Ошибка показа отладки рангов');
+  }
+}
+
+// Функция для тестирования прогресса рангов
+async function showAdminTestProgress(ctx, user) {
+  try {
+    log(`🧪 Показ теста прогресса рангов для админа ${user.id}`);
+    
+    const ranks = getRankRequirements();
+    let message = `🧪 *Тест расчета прогресса рангов*\n\n`;
+    
+    // Тестируем разные уровни
+    const testLevels = [1, 3, 7, 12, 18, 25, 35, 50, 70, 90, 100];
+    
+    message += `📊 *Тестовые уровни:*\n`;
+    
+    for (const level of testLevels) {
+      const testUser = { id: 'test', level: level };
+      const rankProgress = await getRankProgress(testUser);
+      
+      if (rankProgress.isMax) {
+        message += `├ Уровень ${level}: ${rankProgress.current.name} (Максимальный ранг)\n`;
+      } else {
+        message += `├ Уровень ${level}: ${rankProgress.current.name} → ${rankProgress.next.name} (${rankProgress.progress}%)\n`;
+      }
+    }
+    
+    message += `\n🔍 *Детальный расчет для уровня 7:*\n`;
+    const testUser7 = { id: 'test', level: 7 };
+    const rankProgress7 = await getRankProgress(testUser7);
+    message += `├ Текущий ранг: ${rankProgress7.current.name} (${rankProgress7.current.level})\n`;
+    message += `├ Следующий ранг: ${rankProgress7.next.name} (${rankProgress7.next.level})\n`;
+    message += `├ Прогресс: ${rankProgress7.progress}%\n`;
+    message += `└ Осталось: ${rankProgress7.remaining} уровней\n\n`;
+    
+    message += `🎯 Выберите действие:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+  } catch (error) {
+    logError(error, `Показ теста прогресса рангов для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа теста прогресса');
+  }
+}
+
+// Функция для принудительной проверки уровня всех пользователей
+async function showAdminForceLevelCheck(ctx, user) {
+  try {
+    log(`⚡ Принудительная проверка уровня для админа ${user.id}`);
+    
+    // Получаем всех пользователей
+    const allUsers = await db.collection('users').find({}).toArray();
+    let updatedCount = 0;
+    let levelUpCount = 0;
+    
+    message = `⚡ *Принудительная проверка уровня*\n\n`;
+    message += `🔍 Проверяем ${allUsers.length} пользователей...\n\n`;
+    
+    await ctx.editMessageText(message, { parse_mode: 'Markdown' });
+    
+    for (const dbUser of allUsers) {
+      try {
+        const levelResult = await checkAndUpdateLevel(dbUser);
+        if (levelResult.levelUp) {
+          levelUpCount++;
+          log(`🎉 Пользователь ${dbUser.id} повысил уровень до ${levelResult.newLevel}!`);
+        }
+        updatedCount++;
+        
+        // Обновляем сообщение каждые 10 пользователей
+        if (updatedCount % 10 === 0) {
+          message = `⚡ *Принудительная проверка уровня*\n\n`;
+          message += `🔍 Проверено: ${updatedCount}/${allUsers.length} пользователей\n`;
+          message += `🎉 Повысили уровень: ${levelUpCount} пользователей\n\n`;
+          message += `⏳ Продолжаем проверку...`;
+          
+          await ctx.editMessageText(message, { parse_mode: 'Markdown' });
+        }
+      } catch (error) {
+        logError(error, `Проверка уровня пользователя ${dbUser.id}`);
+      }
+    }
+    
+    message = `⚡ *Принудительная проверка уровня завершена*\n\n`;
+    message += `✅ Проверено: ${updatedCount} пользователей\n`;
+    message += `🎉 Повысили уровень: ${levelUpCount} пользователей\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Принудительная проверка уровня завершена: ${updatedCount} пользователей, ${levelUpCount} повышений`);
+  } catch (error) {
+    logError(error, `Принудительная проверка уровня для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка принудительной проверки уровня');
   }
 }
 
@@ -3378,6 +3565,16 @@ async function processMinerRewards() {
       );
       
       userCache.delete(user.id);
+      
+      // Проверяем и обновляем уровень пользователя
+      const updatedUser = await getUser(user.id);
+      if (updatedUser) {
+        const levelResult = await checkAndUpdateLevel(updatedUser);
+        if (levelResult.levelUp) {
+          log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+        }
+      }
+      
       log(`⛏️ Майнер награда: ${user.id} +${reward} Magnum Coins`);
     }
   } catch (error) {
@@ -4948,7 +5145,10 @@ async function showRanksMenu(ctx, user) {
   try {
     log(`⚔️ Показ меню рангов для пользователя ${user.id}`);
     
-    const rankProgress = getRankProgress(user);
+    // Отладка прогресса ранга
+    await debugRankProgress(user);
+    
+    const rankProgress = await getRankProgress(user);
     const ranks = getRankRequirements();
     
     // Дополнительная проверка для отладки
@@ -7490,6 +7690,36 @@ bot.action('admin_debug_ranks', async (ctx) => {
   } catch (error) {
     logError(error, 'Отладка рангов');
     await ctx.answerCbQuery('❌ Ошибка отладки рангов');
+  }
+});
+
+bot.action('admin_test_progress', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminTestProgress(ctx, user);
+  } catch (error) {
+    logError(error, 'Тест прогресса рангов');
+    await ctx.answerCbQuery('❌ Ошибка теста прогресса');
+  }
+});
+
+bot.action('admin_force_level_check', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminForceLevelCheck(ctx, user);
+  } catch (error) {
+    logError(error, 'Принудительная проверка уровня');
+    await ctx.answerCbQuery('❌ Ошибка проверки уровня');
   }
 });
 
