@@ -982,7 +982,7 @@ async function startMiner(ctx, user) {
     userCache.delete(user.id);
     
     log(`✅ Майнер успешно запущен для пользователя ${user.id}`);
-    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Stars каждый час.');
+    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Magnum Coins каждый час.');
     
     log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
     // Обновляем меню майнера
@@ -2186,6 +2186,9 @@ async function showAdminPanel(ctx, user) {
         Markup.button.callback('📢 Рассылка', 'admin_broadcast'),
         Markup.button.callback('🔄 Обновление кеша', 'admin_cache')
       ],
+      [
+        Markup.button.callback('🏦 Управление резервом', 'admin_reserve')
+      ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
@@ -2200,7 +2203,8 @@ async function showAdminPanel(ctx, user) {
       `├ 📝 Управление постами - создание постов в канал\n` +
       `├ 🎫 Управление промокодами - создание промокодов\n` +
       `├ 📢 Рассылка - отправка сообщений\n` +
-      `└ 🔄 Обновление кеша - очистка кеша\n\n` +
+      `├ 🔄 Обновление кеша - очистка кеша\n` +
+      `└ 🏦 Управление резервом - управление резервом биржи\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -2349,6 +2353,263 @@ async function showAdminBalance(ctx, user) {
   } catch (error) {
     logError(error, `Показ управления балансами для админа ${user.id}`);
     await ctx.answerCbQuery('❌ Ошибка показа управления балансами');
+  }
+}
+
+// ==================== УПРАВЛЕНИЕ РЕЗЕРВОМ ====================
+async function showAdminReserve(ctx, user) {
+  try {
+    log(`🏦 Показ управления резервом для админа ${user.id}`);
+    
+    // Получаем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
+    
+    // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Добавить Magnum Coins', 'admin_reserve_add_mc'),
+        Markup.button.callback('➖ Убрать Magnum Coins', 'admin_reserve_remove_mc')
+      ],
+      [
+        Markup.button.callback('➕ Добавить Stars', 'admin_reserve_add_stars'),
+        Markup.button.callback('➖ Убрать Stars', 'admin_reserve_remove_stars')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `🏦 *Управление резервом биржи*\n\n` +
+      `💰 *Текущий резерв:*\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
+      `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
+      `💱 *Текущий курс обмена:*\n` +
+      `├ 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
+      `├ 100 Magnum Coins = ${(100 * exchangeRate).toFixed(4)} Stars\n` +
+      `└ Соотношение резервов: ${(magnumCoinsReserve / starsReserve).toFixed(4)}\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Управление резервом показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления резервом для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления резервом');
+  }
+}
+
+// Функции обработки управления резервом
+async function handleAdminAddReserveMC(ctx, user, text) {
+  try {
+    const amount = parseFloat(text);
+    
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
+      return;
+    }
+    
+    // Обновляем резерв
+    await db.collection('reserve').updateOne(
+      { currency: 'main' },
+      { 
+        $inc: { magnumCoins: amount },
+        $set: { updatedAt: new Date() }
+      },
+      { upsert: true }
+    );
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Magnum Coins добавлены в резерв!*\n\n` +
+      `💰 Добавлено: \`${formatNumber(amount)}\` Magnum Coins\n\n` +
+      `💱 Курс обмена автоматически пересчитан.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    console.log(`✅ Админ ${user.id} добавил ${amount} Magnum Coins в резерв`);
+  } catch (error) {
+    logError(error, `Добавление Magnum Coins в резерв админом ${user.id}`);
+    await ctx.reply('❌ Ошибка добавления Magnum Coins в резерв.');
+  }
+}
+
+async function handleAdminRemoveReserveMC(ctx, user, text) {
+  try {
+    const amount = parseFloat(text);
+    
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
+      return;
+    }
+    
+    // Проверяем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const currentReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    
+    if (amount > currentReserve) {
+      await ctx.reply(`❌ Недостаточно Magnum Coins в резерве. Доступно: ${formatNumber(currentReserve)}`);
+      return;
+    }
+    
+    // Обновляем резерв
+    await db.collection('reserve').updateOne(
+      { currency: 'main' },
+      { 
+        $inc: { magnumCoins: -amount },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Magnum Coins удалены из резерва!*\n\n` +
+      `💰 Удалено: \`${formatNumber(amount)}\` Magnum Coins\n\n` +
+      `💱 Курс обмена автоматически пересчитан.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    console.log(`✅ Админ ${user.id} удалил ${amount} Magnum Coins из резерва`);
+  } catch (error) {
+    logError(error, `Удаление Magnum Coins из резерва админом ${user.id}`);
+    await ctx.reply('❌ Ошибка удаления Magnum Coins из резерва.');
+  }
+}
+
+async function handleAdminAddReserveStars(ctx, user, text) {
+  try {
+    const amount = parseFloat(text);
+    
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
+      return;
+    }
+    
+    // Обновляем резерв
+    await db.collection('reserve').updateOne(
+      { currency: 'main' },
+      { 
+        $inc: { stars: amount },
+        $set: { updatedAt: new Date() }
+      },
+      { upsert: true }
+    );
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Stars добавлены в резерв!*\n\n` +
+      `⭐ Добавлено: \`${formatNumber(amount)}\` Stars\n\n` +
+      `💱 Курс обмена автоматически пересчитан.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    console.log(`✅ Админ ${user.id} добавил ${amount} Stars в резерв`);
+  } catch (error) {
+    logError(error, `Добавление Stars в резерв админом ${user.id}`);
+    await ctx.reply('❌ Ошибка добавления Stars в резерв.');
+  }
+}
+
+async function handleAdminRemoveReserveStars(ctx, user, text) {
+  try {
+    const amount = parseFloat(text);
+    
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
+      return;
+    }
+    
+    // Проверяем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const currentReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
+    
+    if (amount > currentReserve) {
+      await ctx.reply(`❌ Недостаточно Stars в резерве. Доступно: ${formatNumber(currentReserve)}`);
+      return;
+    }
+    
+    // Обновляем резерв
+    await db.collection('reserve').updateOne(
+      { currency: 'main' },
+      { 
+        $inc: { stars: -amount },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Stars удалены из резерва!*\n\n` +
+      `⭐ Удалено: \`${formatNumber(amount)}\` Stars\n\n` +
+      `💱 Курс обмена автоматически пересчитан.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    console.log(`✅ Админ ${user.id} удалил ${amount} Stars из резерва`);
+  } catch (error) {
+    logError(error, `Удаление Stars из резерва админом ${user.id}`);
+    await ctx.reply('❌ Ошибка удаления Stars из резерва.');
   }
 }
 
@@ -5285,13 +5546,13 @@ bot.action('faq_miner', async (ctx) => {
     const message = 
       `⛏️ *FAQ - Майнер*\n\n` +
       `*❓ Что такое майнер?*\n` +
-      `Майнер - это автоматический способ заработка Stars. Он работает в фоновом режиме и приносит награды каждый час.\n\n` +
+      `Майнер - это автоматический способ заработка Magnum Coins. Он работает в фоновом режиме и приносит награды каждый час.\n\n` +
       `*❓ Как запустить майнер?*\n` +
       `Перейдите в раздел "Фарм" → "⛏️ Майнер" и нажмите "▶️ Запустить майнер".\n\n` +
       `*❓ Как часто майнер приносит награды?*\n` +
       `Майнер приносит награды каждые 60 минут (1 час).\n\n` +
-      `*❓ Сколько Stars я получаю от майнера?*\n` +
-      `За час работы майнер приносит ${config.MINER_REWARD_PER_HOUR || 10} Stars. Награда зависит от уровня майнера.\n\n` +
+          `*❓ Сколько Magnum Coins я получаю от майнера?*\n` +
+    `За час работы майнер приносит ${config.MINER_REWARD_PER_HOUR || 10} Magnum Coins. Награда зависит от уровня майнера.\n\n` +
       `*❓ Как улучшить майнер?*\n` +
       `Майнер можно улучшить, потратив Magnum Coins. Улучшения увеличивают эффективность и награды.\n\n` +
       `*❓ Что такое эффективность майнера?*\n` +
@@ -6808,6 +7069,181 @@ bot.action('admin_promocodes', async (ctx) => {
   }
 });
 
+bot.action('admin_cache', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Очищаем кеши
+    userCache.clear();
+    statsCache.clear();
+    
+    await ctx.answerCbQuery('✅ Кеш очищен!');
+    await showAdminPanel(ctx, user);
+  } catch (error) {
+    logError(error, 'Очистка кеша');
+    await ctx.answerCbQuery('❌ Ошибка очистки кеша');
+  }
+});
+
+bot.action('admin_reserve', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminReserve(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление резервом');
+    await ctx.answerCbQuery('❌ Ошибка управления резервом');
+  }
+});
+
+bot.action('admin_reserve_add_mc', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'adding_reserve_mc', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➕ *Добавление Magnum Coins в резерв*\n\n` +
+      `Введите количество Magnum Coins для добавления в резерв:\n\n` +
+      `💡 *Пример:* 1000, 5000, 10000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Добавление Magnum Coins в резерв');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_reserve_remove_mc', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'removing_reserve_mc', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➖ *Удаление Magnum Coins из резерва*\n\n` +
+      `Введите количество Magnum Coins для удаления из резерва:\n\n` +
+      `💡 *Пример:* 1000, 5000, 10000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Удаление Magnum Coins из резерва');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_reserve_add_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'adding_reserve_stars', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➕ *Добавление Stars в резерв*\n\n` +
+      `Введите количество Stars для добавления в резерв:\n\n` +
+      `💡 *Пример:* 1000, 5000, 10000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Добавление Stars в резерв');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_reserve_remove_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'removing_reserve_stars', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➖ *Удаление Stars из резерва*\n\n` +
+      `Введите количество Stars для удаления из резерва:\n\n` +
+      `💡 *Пример:* 1000, 5000, 10000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Удаление Stars из резерва');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
 // Обработчики для создания постов
 bot.action('admin_create_post_with_button', async (ctx) => {
   try {
@@ -7430,6 +7866,18 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'creating_promocode') {
           console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
           await handleAdminCreatePromocode(ctx, user, text);
+        } else if (user.adminState === 'adding_reserve_mc') {
+          console.log(`➕ Админ ${ctx.from.id} добавляет Magnum Coins в резерв: "${text}"`);
+          await handleAdminAddReserveMC(ctx, user, text);
+        } else if (user.adminState === 'removing_reserve_mc') {
+          console.log(`➖ Админ ${ctx.from.id} убирает Magnum Coins из резерва: "${text}"`);
+          await handleAdminRemoveReserveMC(ctx, user, text);
+        } else if (user.adminState === 'adding_reserve_stars') {
+          console.log(`➕ Админ ${ctx.from.id} добавляет Stars в резерв: "${text}"`);
+          await handleAdminAddReserveStars(ctx, user, text);
+        } else if (user.adminState === 'removing_reserve_stars') {
+          console.log(`➖ Админ ${ctx.from.id} убирает Stars из резерва: "${text}"`);
+          await handleAdminRemoveReserveStars(ctx, user, text);
         } else {
           console.log(`ℹ️ Админ ${ctx.from.id} отправил текст с неизвестным adminState: "${text}"`);
           await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
