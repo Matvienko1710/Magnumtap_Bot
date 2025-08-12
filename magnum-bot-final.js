@@ -2613,6 +2613,52 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
   }
 }
 
+// Функция установки комиссии
+async function handleAdminSetCommission(ctx, user, text) {
+  try {
+    const commission = parseFloat(text);
+    
+    if (isNaN(commission) || commission < 0 || commission > 10) {
+      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 10.');
+      return;
+    }
+    
+    // Обновляем комиссию в конфигурации
+    config.EXCHANGE_COMMISSION = commission;
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в управление комиссией', 'admin_exchange_commission')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Комиссия обмена обновлена!*\n\n` +
+      `💸 Новая комиссия: \`${commission}%\`\n\n` +
+      `📊 *Примеры обмена:*\n` +
+      `├ 100 MC → ${((100 - (100 * commission / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `├ 500 MC → ${((500 - (500 * commission / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `└ 1000 MC → ${((1000 - (1000 * commission / 100)) * 0.001).toFixed(4)} Stars\n\n` +
+      `💡 Комиссия будет применяться ко всем новым обменам.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    console.log(`✅ Админ ${user.id} установил комиссию ${commission}%`);
+  } catch (error) {
+    logError(error, `Установка комиссии админом ${user.id}`);
+    await ctx.reply('❌ Ошибка установки комиссии.');
+  }
+}
+
 async function showAdminSettings(ctx, user) {
   try {
     log(`⚙️ Показ настроек бота для админа ${user.id}`);
@@ -2630,6 +2676,9 @@ async function showAdminSettings(ctx, user) {
         Markup.button.callback('👥 Реферальная система', 'admin_referral_settings'),
         Markup.button.callback('📢 Каналы подписки', 'admin_subscription_channels')
       ],
+      [
+        Markup.button.callback('💸 Комиссия обмена', 'admin_exchange_commission')
+      ],
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
@@ -2641,6 +2690,7 @@ async function showAdminSettings(ctx, user) {
       `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
       `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_HOUR}\` Magnum Coins/час\n` +
       `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Magnum Coins\n` +
+      `├ 💸 Комиссия обмена: \`${config.EXCHANGE_COMMISSION}%\`\n` +
       `└ 📢 Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n\n` +
       `🎯 Выберите настройку для изменения:`;
     
@@ -2693,6 +2743,51 @@ async function showAdminFarmRewards(ctx, user) {
   } catch (error) {
     logError(error, `Показ настроек наград фарма для админа ${user.id}`);
     await ctx.answerCbQuery('❌ Ошибка показа настроек наград');
+  }
+}
+
+// ==================== УПРАВЛЕНИЕ КОМИССИЕЙ ====================
+async function showAdminExchangeCommission(ctx, user) {
+  try {
+    log(`💸 Показ управления комиссией обмена для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Увеличить комиссию', 'admin_commission_increase'),
+        Markup.button.callback('➖ Уменьшить комиссию', 'admin_commission_decrease')
+      ],
+      [
+        Markup.button.callback('🎯 Установить точное значение', 'admin_commission_set'),
+        Markup.button.callback('📊 Статистика комиссий', 'admin_commission_stats')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_settings')]
+    ]);
+    
+    const message = 
+      `💸 *Комиссия обмена*\n\n` +
+      `💰 *Текущие настройки:*\n` +
+      `├ Текущая комиссия: \`${config.EXCHANGE_COMMISSION}%\`\n` +
+      `├ Комиссия с 100 MC: \`${(100 * config.EXCHANGE_COMMISSION / 100).toFixed(2)}\` Magnum Coins\n` +
+      `└ Комиссия с 1000 MC: \`${(1000 * config.EXCHANGE_COMMISSION / 100).toFixed(2)}\` Magnum Coins\n\n` +
+      `📊 *Примеры обмена:*\n` +
+      `├ 100 MC → ${((100 - (100 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `├ 500 MC → ${((500 - (500 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `└ 1000 MC → ${((1000 - (1000 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n\n` +
+      `💡 *Информация:*\n` +
+      `├ Комиссия взимается с каждой операции обмена\n` +
+      `├ Комиссия остается в резерве Magnum Coins\n` +
+      `└ Комиссия влияет на курс обмена для пользователей\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Управление комиссией показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления комиссией для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления комиссией');
   }
 }
 
@@ -3177,14 +3272,25 @@ async function showExchangeMenu(ctx, user) {
     const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
+    // Рассчитываем примеры с комиссией
+    const commission10 = (10 * config.EXCHANGE_COMMISSION) / 100;
+    const commission50 = (50 * config.EXCHANGE_COMMISSION) / 100;
+    const commission100 = (100 * config.EXCHANGE_COMMISSION) / 100;
+    const commission500 = (500 * config.EXCHANGE_COMMISSION) / 100;
+    
+    const stars10 = ((10 - commission10) * exchangeRate).toFixed(6);
+    const stars50 = ((50 - commission50) * exchangeRate).toFixed(6);
+    const stars100 = ((100 - commission100) * exchangeRate).toFixed(6);
+    const stars500 = ((500 - commission500) * exchangeRate).toFixed(6);
+    
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback(`🪙 10 MC → ${(10 * exchangeRate).toFixed(6)} Stars`, 'exchange_10'),
-        Markup.button.callback(`🪙 50 MC → ${(50 * exchangeRate).toFixed(6)} Stars`, 'exchange_50')
+        Markup.button.callback(`🪙 10 MC → ${stars10} Stars`, 'exchange_10'),
+        Markup.button.callback(`🪙 50 MC → ${stars50} Stars`, 'exchange_50')
       ],
       [
-        Markup.button.callback(`🪙 100 MC → ${(100 * exchangeRate).toFixed(6)} Stars`, 'exchange_100'),
-        Markup.button.callback(`🪙 500 MC → ${(500 * exchangeRate).toFixed(6)} Stars`, 'exchange_500')
+        Markup.button.callback(`🪙 100 MC → ${stars100} Stars`, 'exchange_100'),
+        Markup.button.callback(`🪙 500 MC → ${stars500} Stars`, 'exchange_500')
       ],
       [
         Markup.button.callback('🪙 Все Magnum Coins', 'exchange_all'),
@@ -3200,8 +3306,8 @@ async function showExchangeMenu(ctx, user) {
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `💱 *Курс обмена:*\n` +
       `├ 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ 100 Magnum Coins = ${(100 * exchangeRate).toFixed(4)} Stars\n` +
-      `└ Комиссия: 0%\n\n` +
+      `├ 100 Magnum Coins = ${((100 - (100 * config.EXCHANGE_COMMISSION / 100)) * exchangeRate).toFixed(4)} Stars\n` +
+      `└ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n\n` +
       `🏦 *Резерв биржи:*\n` +
       `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
@@ -3238,7 +3344,11 @@ async function performExchange(ctx, user, amount) {
     
     // Получаем текущий курс обмена
     const exchangeRate = await calculateExchangeRate();
-    const starsToReceive = amount * exchangeRate;
+    
+    // Рассчитываем комиссию
+    const commission = (amount * config.EXCHANGE_COMMISSION) / 100;
+    const amountAfterCommission = amount - commission;
+    const starsToReceive = amountAfterCommission * exchangeRate;
     
     // Проверяем резерв Stars
     const reserve = await db.collection('reserve').findOne({ currency: 'main' });
@@ -3268,12 +3378,12 @@ async function performExchange(ctx, user, amount) {
       }
     );
     
-    // Обновляем резерв
+    // Обновляем резерв (комиссия остается в резерве Magnum Coins)
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
         $inc: { 
-          magnumCoins: amount,
+          magnumCoins: amount, // Полная сумма идет в резерв
           stars: -starsToReceive
         },
         $set: { 
@@ -3285,9 +3395,9 @@ async function performExchange(ctx, user, amount) {
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
-    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate})`);
+    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission})`);
     await ctx.answerCbQuery(
-      `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars`
+      `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
     
     // Обновляем меню обмена
@@ -7244,6 +7354,146 @@ bot.action('admin_reserve_remove_stars', async (ctx) => {
   }
 });
 
+// Обработчики для управления комиссией
+bot.action('admin_exchange_commission', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminExchangeCommission(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление комиссией');
+    await ctx.answerCbQuery('❌ Ошибка управления комиссией');
+  }
+});
+
+bot.action('admin_commission_increase', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const newCommission = Math.min(config.EXCHANGE_COMMISSION + 0.5, 10); // Максимум 10%
+    config.EXCHANGE_COMMISSION = newCommission;
+    
+    await ctx.answerCbQuery(`✅ Комиссия увеличена до ${newCommission}%`);
+    await showAdminExchangeCommission(ctx, user);
+  } catch (error) {
+    logError(error, 'Увеличение комиссии');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_commission_decrease', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const newCommission = Math.max(config.EXCHANGE_COMMISSION - 0.5, 0); // Минимум 0%
+    config.EXCHANGE_COMMISSION = newCommission;
+    
+    await ctx.answerCbQuery(`✅ Комиссия уменьшена до ${newCommission}%`);
+    await showAdminExchangeCommission(ctx, user);
+  } catch (error) {
+    logError(error, 'Уменьшение комиссии');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_commission_set', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_commission', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_exchange_commission')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎯 *Установка комиссии обмена*\n\n` +
+      `Введите новое значение комиссии (от 0 до 10):\n\n` +
+      `💡 *Пример:* 2.5, 5.0, 7.5\n\n` +
+      `⚠️ *Внимание:* Комиссия влияет на все операции обмена!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Установка комиссии');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_commission_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Получаем статистику обменов
+    const totalExchanges = await db.collection('users').aggregate([
+      { $group: { _id: null, total: { $sum: '$exchange.totalExchanges' } } }
+    ]).toArray();
+    
+    const totalExchanged = await db.collection('users').aggregate([
+      { $group: { _id: null, total: { $sum: '$exchange.totalExchanged' } } }
+    ]).toArray();
+    
+    const totalExchangesCount = totalExchanges.length > 0 ? totalExchanges[0].total : 0;
+    const totalExchangedAmount = totalExchanged.length > 0 ? totalExchanged[0].total : 0;
+    const totalCommission = (totalExchangedAmount * config.EXCHANGE_COMMISSION) / 100;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_exchange_commission')]
+    ]);
+    
+    const message = 
+      `📊 *Статистика комиссий*\n\n` +
+      `💰 *Общая статистика:*\n` +
+      `├ Всего обменов: \`${totalExchangesCount}\`\n` +
+      `├ Всего обменено: \`${formatNumber(totalExchangedAmount)}\` Magnum Coins\n` +
+      `├ Текущая комиссия: \`${config.EXCHANGE_COMMISSION}%\`\n` +
+      `└ Всего комиссий: \`${formatNumber(totalCommission)}\` Magnum Coins\n\n` +
+      `📈 *Средние показатели:*\n` +
+      `├ Средний обмен: \`${totalExchangesCount > 0 ? formatNumber(totalExchangedAmount / totalExchangesCount) : '0.00'}\` Magnum Coins\n` +
+      `├ Средняя комиссия: \`${totalExchangesCount > 0 ? formatNumber(totalCommission / totalExchangesCount) : '0.00'}\` Magnum Coins\n` +
+      `└ Процент комиссии: \`${config.EXCHANGE_COMMISSION}%\`\n\n` +
+      `💡 *Информация:*\n` +
+      `├ Все комиссии остаются в резерве\n` +
+      `├ Комиссия влияет на курс обмена\n` +
+      `└ Статистика обновляется в реальном времени`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Статистика комиссий');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
 // Обработчики для создания постов
 bot.action('admin_create_post_with_button', async (ctx) => {
   try {
@@ -7878,6 +8128,9 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'removing_reserve_stars') {
           console.log(`➖ Админ ${ctx.from.id} убирает Stars из резерва: "${text}"`);
           await handleAdminRemoveReserveStars(ctx, user, text);
+        } else if (user.adminState === 'setting_commission') {
+          console.log(`💸 Админ ${ctx.from.id} устанавливает комиссию: "${text}"`);
+          await handleAdminSetCommission(ctx, user, text);
         } else {
           console.log(`ℹ️ Админ ${ctx.from.id} отправил текст с неизвестным adminState: "${text}"`);
           await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
