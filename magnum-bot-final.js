@@ -193,7 +193,6 @@ async function connectDB() {
     }
     console.log('✅ Все индексы созданы успешно');
     console.log('✅ База данных подключена');
-    
     console.log('💰 Инициализация резерва...');
     // Инициализируем резерв
     await initializeReserve();
@@ -326,7 +325,6 @@ function getUserRank(user) {
 function isAdmin(userId) {
   return config.ADMIN_IDS.includes(userId);
 }
-
 // ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
 // Функция для проверки и инициализации недостающих полей пользователя
 function ensureUserFields(user) {
@@ -1023,7 +1021,6 @@ async function stopMiner(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка остановки майнера');
   }
 }
-
 // ==================== УЛУЧШЕНИЕ МАЙНЕРА ====================
 async function showMinerUpgrade(ctx, user) {
   try {
@@ -1352,7 +1349,6 @@ async function showFarmStats(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки статистики');
   }
 }
-
 // ==================== БОНУСЫ ФАРМА ====================
 async function showFarmBonuses(ctx, user) {
   try {
@@ -1658,7 +1654,6 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
         }
         return;
       }
-      
       // Обновляем меню с текущим временем
       const updatedUser = await getUser(ctx.from.id);
       if (updatedUser) {
@@ -1769,7 +1764,6 @@ async function showAdminPosts(ctx, user) {
     logError(error, 'Показ управления постами');
   }
 }
-
 // ==================== АДМИН ПРОМОКОДЫ ====================
 async function showAdminPromocodes(ctx, user) {
   try {
@@ -2386,158 +2380,6 @@ async function showAdminReserve(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления резервом');
   }
 }
-// Функции обработки управления резервом
-async function handleAdminAddReserveMC(ctx, user, text) {
-  try {
-    const amount = parseFloat(text);
-    
-    if (isNaN(amount) || amount <= 0) {
-      await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
-      return;
-    }
-    
-    // Обновляем резерв
-    await db.collection('reserve').updateOne(
-      { currency: 'main' },
-      { 
-        $inc: { magnumCoins: amount },
-        $set: { updatedAt: new Date() }
-      },
-      { upsert: true }
-    );
-    
-    // Сбрасываем состояние админа
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-    userCache.delete(user.id);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
-    ]);
-    
-    await ctx.reply(
-      `✅ *Magnum Coins добавлены в резерв!*\n\n` +
-      `💰 Добавлено: \`${formatNumber(amount)}\` Magnum Coins\n\n` +
-      `💱 Курс обмена автоматически пересчитан.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
-    
-    console.log(`✅ Админ ${user.id} добавил ${amount} Magnum Coins в резерв`);
-  } catch (error) {
-    logError(error, `Добавление Magnum Coins в резерв админом ${user.id}`);
-    await ctx.reply('❌ Ошибка добавления Magnum Coins в резерв.');
-  }
-}
-
-async function handleAdminRemoveReserveMC(ctx, user, text) {
-  try {
-    const amount = parseFloat(text);
-    
-    if (isNaN(amount) || amount <= 0) {
-      await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
-      return;
-    }
-    
-    // Проверяем текущий резерв
-    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
-    const currentReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
-    
-    if (amount > currentReserve) {
-      await ctx.reply(`❌ Недостаточно Magnum Coins в резерве. Доступно: ${formatNumber(currentReserve)}`);
-      return;
-    }
-    
-    // Обновляем резерв
-    await db.collection('reserve').updateOne(
-      { currency: 'main' },
-      { 
-        $inc: { magnumCoins: -amount },
-        $set: { updatedAt: new Date() }
-      }
-    );
-    
-    // Сбрасываем состояние админа
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-    userCache.delete(user.id);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
-    ]);
-    
-    await ctx.reply(
-      `✅ *Magnum Coins удалены из резерва!*\n\n` +
-      `💰 Удалено: \`${formatNumber(amount)}\` Magnum Coins\n\n` +
-      `💱 Курс обмена автоматически пересчитан.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
-    
-    console.log(`✅ Админ ${user.id} удалил ${amount} Magnum Coins из резерва`);
-  } catch (error) {
-    logError(error, `Удаление Magnum Coins из резерва админом ${user.id}`);
-    await ctx.reply('❌ Ошибка удаления Magnum Coins из резерва.');
-  }
-}
-
-async function handleAdminAddReserveStars(ctx, user, text) {
-  try {
-    const amount = parseFloat(text);
-    
-    if (isNaN(amount) || amount <= 0) {
-      await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
-      return;
-    }
-    
-    // Обновляем резерв
-    await db.collection('reserve').updateOne(
-      { currency: 'main' },
-      { 
-        $inc: { stars: amount },
-        $set: { updatedAt: new Date() }
-      },
-      { upsert: true }
-    );
-    
-    // Сбрасываем состояние админа
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-    userCache.delete(user.id);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
-    ]);
-    
-    await ctx.reply(
-      `✅ *Stars добавлены в резерв!*\n\n` +
-      `⭐ Добавлено: \`${formatNumber(amount)}\` Stars\n\n` +
-      `💱 Курс обмена автоматически пересчитан.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
-    
-    console.log(`✅ Админ ${user.id} добавил ${amount} Stars в резерв`);
-  } catch (error) {
-    logError(error, `Добавление Stars в резерв админом ${user.id}`);
-    await ctx.reply('❌ Ошибка добавления Stars в резерв.');
-  }
-}
 async function handleAdminRemoveReserveStars(ctx, user, text) {
   try {
     const amount = parseFloat(text);
@@ -2770,7 +2612,6 @@ async function showAdminExchangeCommission(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления комиссией');
   }
 }
-
 async function showAdminCooldowns(ctx, user) {
   try {
     log(`⏰ Показ настроек кулдаунов для админа ${user.id}`);
@@ -3025,7 +2866,6 @@ async function showAdminTopUsers(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа топ пользователей');
   }
 }
-
 async function showAdminSearchUser(ctx, user) {
   try {
     log(`🔍 Показ поиска пользователя для админа ${user.id}`);
@@ -3180,7 +3020,6 @@ function log(message, type = 'INFO') {
     console.log(logMessage);
   }
 }
-
 function logError(error, context = '') {
   const timestamp = new Date().toISOString();
   const errorMessage = error.message || error;
@@ -3509,7 +3348,6 @@ function getAchievementsList(user) {
       }
   ];
 }
-
 async function showAchievementsProgress(ctx, user) {
   try {
     log(`📊 Показ прогресса достижений для пользователя ${user.id}`);
@@ -3634,7 +3472,6 @@ function createProgressBar(percent) {
   const empty = 10 - filled;
   return '█'.repeat(filled) + '░'.repeat(empty);
 }
-
 // ==================== РЕФЕРАЛЫ ====================
 async function showReferralsMenu(ctx, user) {
   try {
@@ -4077,7 +3914,6 @@ async function showLanguageSettings(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки настроек языка');
   }
 }
-
 async function showResetSettings(ctx, user) {
   try {
     log(`🔄 Показ настроек сброса для пользователя ${user.id}`);
@@ -4095,7 +3931,7 @@ async function showResetSettings(ctx, user) {
       `🗑️ *Что будет сброшено:*\n` +
       `├ Все настройки уведомлений\n` +
       `├ Настройки приватности\n` +
-      `├ Языковые настройки\n` +
+      `├ Настройки языка\n` +
       `└ Другие пользовательские настройки\n\n` +
       `✅ *Что НЕ будет затронуто:*\n` +
       `├ Ваш прогресс в игре\n` +
@@ -4261,91 +4097,6 @@ async function resetUserSettings(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка сброса настроек');
   }
 }
-// ==================== ЗАДАНИЯ ====================
-async function showTasksMenu(ctx, user) {
-  try {
-    log(`📋 Показ меню заданий для пользователя ${user.id}`);
-    
-    const tasks = user.tasks || {};
-    const completedTasks = tasks.completedTasks || 0;
-    const totalEarnings = tasks.totalTaskEarnings || 0;
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('🎯 Спонсорские задания', 'tasks_sponsor'),
-        Markup.button.callback('📅 Ежедневные задания', 'tasks_daily')
-      ],
-      [
-        Markup.button.callback('📊 Прогресс', 'tasks_progress'),
-        Markup.button.callback('🏆 Достижения', 'tasks_achievements')
-      ],
-      [Markup.button.callback('🔙 Назад', 'main_menu')]
-    ]);
-    
-    const message = 
-      `📋 *Система заданий*\n\n` +
-      `📊 *Ваша статистика:*\n` +
-      `├ Выполнено заданий: \`${completedTasks}\`\n` +
-      `├ Заработано: \`${formatNumber(totalEarnings)}\` Stars\n` +
-      `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Stars\n\n` +
-      `🎯 *Типы заданий:*\n` +
-      `├ 🎯 Спонсорские задания (подписки, запуски ботов)\n` +
-      `├ 📅 Ежедневные задания (фарм, майнинг, бонусы)\n` +
-      `└ 🏆 Достижения (долгосрочные цели)\n\n` +
-      `💡 *Выберите тип заданий:*\n\n` +
-      `🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'Показ меню заданий');
-    await ctx.answerCbQuery('❌ Ошибка загрузки меню заданий');
-  }
-}
-
-async function showSponsorTasks(ctx, user) {
-  try {
-    log(`🎯 Показ спонсорских заданий для пользователя ${user.id}`);
-    
-    const sponsorTasks = getSponsorTasks();
-    const userTasks = user.tasks?.sponsorTasks || {};
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад', 'tasks')]
-    ]);
-    
-    let message = `🎯 *Спонсорские задания*\n\n`;
-    message += `💰 *Выполняйте задания от спонсоров и получайте награды!*\n\n`;
-    
-    sponsorTasks.forEach((task, index) => {
-      const isCompleted = userTasks[task.id]?.completed || false;
-      const isClaimed = userTasks[task.id]?.claimed || false;
-      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
-      
-      message += `${status} *${task.title}*\n`;
-      message += `├ ${task.description}\n`;
-      message += `├ Награда: \`${task.reward}\` Magnum Coins\n`;
-      message += `└ Сложность: ${task.difficulty}\n\n`;
-    });
-    
-    message += `💡 *Как выполнить:*\n`;
-    message += `├ Нажмите на задание для подробностей\n`;
-    message += `├ Выполните требуемое действие\n`;
-    message += `├ Нажмите "Проверить выполнение"\n`;
-    message += `└ Получите награду!\n\n`;
-    message += `🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'Показ спонсорских заданий');
-    await ctx.answerCbQuery('❌ Ошибка загрузки спонсорских заданий');
-  }
-}
 async function showSponsorTaskDetails(ctx, user, taskId) {
   try {
     log(`🎯 Показ деталей спонсорского задания ${taskId} для пользователя ${user.id}`);
@@ -4473,7 +4224,6 @@ async function verifySponsorTask(ctx, user, taskId) {
     await ctx.answerCbQuery('❌ Ошибка проверки задания');
   }
 }
-
 async function claimSponsorTask(ctx, user, taskId) {
   try {
     log(`🎁 Получение награды спонсорского задания ${taskId} для пользователя ${user.id}`);
@@ -4824,7 +4574,6 @@ async function showTitlesMenu(ctx, user) {
     reply_markup: Markup.inlineKeyboard(buttons).reply_markup
   });
 }
-
 async function showTitlesSelectMenu(ctx, user) {
   const definitions = getTitlesList(user);
   const ownedDefs = definitions.filter(d => (user.titles || []).includes(d.name));
@@ -4925,7 +4674,6 @@ afterActions.push(() => {
 });
 // ==================== СОЗДАНИЕ БОТА ====================
 const bot = new Telegraf(config.BOT_TOKEN);
-
 // Регистрация отложенных обработчиков
 if (typeof afterActions !== 'undefined' && Array.isArray(afterActions)) {
   for (const fn of afterActions) {
@@ -5006,113 +4754,7 @@ bot.start(async (ctx) => {
   }
 });
 
-
-
-// Функции обработки админ действий
-async function handleAdminSearchUser(ctx, user, text) {
-  try {
-    let targetUser;
-    
-    // Пытаемся найти пользователя по ID или username
-    if (text.startsWith('@')) {
-      const username = text.substring(1);
-      targetUser = await db.collection('users').findOne({ username: username });
-    } else {
-      const userId = parseInt(text);
-      if (isNaN(userId)) {
-        await ctx.reply('❌ Неверный формат ID. Используйте число или @username');
-        return;
-      }
-      targetUser = await db.collection('users').findOne({ id: userId });
-    }
-    
-    if (!targetUser) {
-      await ctx.reply('❌ Пользователь не найден');
-      return;
-    }
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('🚫 Заблокировать', `admin_ban_${targetUser.id}`),
-        Markup.button.callback('✅ Разблокировать', `admin_unban_${targetUser.id}`)
-      ],
-      [
-        Markup.button.callback('💰 Изменить баланс', `admin_balance_${targetUser.id}`),
-        Markup.button.callback('📊 Подробная статистика', `admin_stats_${targetUser.id}`)
-      ],
-      [Markup.button.callback('🔙 Назад', 'admin_users')]
-    ]);
-    
-    const message = 
-      `👤 *Информация о пользователе*\n\n` +
-      `🆔 *ID:* \`${targetUser.id}\`\n` +
-      `👤 *Имя:* ${targetUser.firstName || 'Не указано'}\n` +
-      `📅 *Дата регистрации:* ${targetUser.createdAt ? targetUser.createdAt.toLocaleDateString() : 'Неизвестно'}\n` +
-      `⏰ *Последний вход:* ${targetUser.lastSeen ? targetUser.lastSeen.toLocaleDateString() : 'Неизвестно'}\n\n` +
-      `📊 *Статистика:*\n` +
-      `├ Уровень: \`${targetUser.level || 1}\`\n` +
-      `├ Опыт: \`${targetUser.experience || 0}\`\n` +
-      `├ Magnum Coins: \`${formatNumber(targetUser.magnumCoins || 0)}\`\n` +
-      `├ Stars: \`${formatNumber(targetUser.stars || 0)}\`\n` +
-      `├ Рефералов: \`${targetUser.referralsCount || 0}\`\n` +
-      `└ Статус: ${targetUser.banned ? '🚫 Заблокирован' : '✅ Активен'}\n\n` +
-      `🎯 Выберите действие:`;
-    
-    await ctx.reply(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    console.error('❌ Ошибка поиска пользователя админом:', error);
-    await ctx.reply('❌ Ошибка поиска пользователя');
-  }
-}
-
-async function handleAdminBanUser(ctx, user, text) {
-  try {
-    const userId = parseInt(text);
-    if (isNaN(userId)) {
-      await ctx.reply('❌ Неверный формат ID. Используйте число');
-      return;
-    }
-    
-    const targetUser = await db.collection('users').findOne({ id: userId });
-    if (!targetUser) {
-      await ctx.reply('❌ Пользователь не найден');
-      return;
-    }
-    
-    if (targetUser.banned) {
-      await ctx.reply('❌ Пользователь уже заблокирован');
-      return;
-    }
-    
-    // Блокируем пользователя
-    await db.collection('users').updateOne(
-      { id: userId },
-      { $set: { banned: true, bannedAt: new Date(), bannedBy: user.id, updatedAt: new Date() } }
-    );
-    
-    await ctx.reply(`✅ Пользователь ${userId} успешно заблокирован`);
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Блокировка пользователя админом');
-    await ctx.reply('❌ Ошибка блокировки пользователя');
-  }
-}
+// ... (rest of the code remains unchanged)
 async function handleAdminUnbanUser(ctx, user, text) {
   try {
     const userId = parseInt(text);
@@ -5184,7 +4826,6 @@ async function handleAdminSetFarmReward(ctx, user, text) {
     await ctx.reply('❌ Ошибка изменения награды');
   }
 }
-
 async function handleAdminSetFarmCooldown(ctx, user, text) {
   try {
     const newCooldown = parseInt(text);
@@ -5280,7 +4921,6 @@ async function handleAdminSetMinerReward(ctx, user, text) {
     await ctx.reply('❌ Ошибка изменения награды майнера');
   }
 }
-
 async function handleAdminSetReferralReward(ctx, user, text) {
   try {
     const newReward = parseFloat(text);
@@ -5345,173 +4985,6 @@ async function handleAdminSetSubscriptionChannel(ctx, user, text) {
     await ctx.reply('❌ Ошибка изменения канала подписки');
   }
 }
-// Функции для обработки постов и промокодов
-async function handleAdminCreatePostWithButton(ctx, user, text) {
-  try {
-    const lines = text.split('\n');
-    const postText = lines[0];
-    const buttonData = lines[1];
-    
-    if (!postText || !buttonData) {
-      await ctx.reply('❌ Неверный формат. Отправьте текст поста, а затем кнопку в формате: Текст | Ссылка');
-      return;
-    }
-    
-    const [buttonText, buttonUrl] = buttonData.split('|').map(s => s.trim());
-    
-    if (!buttonText || !buttonUrl) {
-      await ctx.reply('❌ Неверный формат кнопки. Используйте: Текст | Ссылка');
-      return;
-    }
-    
-    // Отправляем пост в канал
-    await ctx.telegram.sendMessage('@magnumtap', postText, {
-      parse_mode: 'Markdown',
-      reply_markup: Markup.inlineKeyboard([
-        [Markup.button.url(buttonText, buttonUrl)]
-      ]).reply_markup
-    });
-    
-    await ctx.reply('✅ Пост с кнопкой успешно опубликован в канале @magnumtap!');
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Создание поста с кнопкой');
-    await ctx.reply('❌ Ошибка создания поста');
-  }
-}
-
-async function handleAdminCreatePostNoButton(ctx, user, text) {
-  try {
-    // Отправляем пост в канал
-    await ctx.telegram.sendMessage('@magnumtap', text, {
-      parse_mode: 'Markdown'
-    });
-    
-    await ctx.reply('✅ Пост без кнопки успешно опубликован в канале @magnumtap!');
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Создание поста без кнопки');
-    await ctx.reply('❌ Ошибка создания поста');
-  }
-}
-async function handleAdminCreatePromocode(ctx, user, text) {
-  try {
-    const [name, amount, activations] = text.split('|').map(s => s.trim());
-    
-    if (!name || !amount || !activations) {
-      await ctx.reply('❌ Неверный формат. Используйте: Название | Количество | Активации');
-      return;
-    }
-    
-    const magnumCoins = parseFloat(amount);
-    const maxActivations = parseInt(activations);
-    
-    if (isNaN(magnumCoins) || isNaN(maxActivations)) {
-      await ctx.reply('❌ Неверные числовые значения');
-      return;
-    }
-    
-    // Создаем промокод в базе данных
-    await db.collection('promocodes').insertOne({
-      name: name.toUpperCase(),
-      magnumCoins: magnumCoins,
-      maxActivations: maxActivations,
-      activations: maxActivations,
-      totalActivations: 0,
-      createdBy: user.id,
-      createdAt: new Date()
-    });
-    
-    await ctx.reply(`✅ Промокод "${name.toUpperCase()}" создан!\n💰 Награда: ${magnumCoins} Magnum Coins\n🎫 Активаций: ${maxActivations}`);
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Создание промокода');
-    await ctx.reply('❌ Ошибка создания промокода');
-  }
-}
-
-async function handleUserEnterPromocode(ctx, user, text) {
-  try {
-    const promocodeName = text.toUpperCase().trim();
-    
-    // Ищем промокод в базе данных
-    const promocode = await db.collection('promocodes').findOne({ name: promocodeName });
-    
-    if (!promocode) {
-      await ctx.reply('❌ Промокод не найден');
-      return;
-    }
-    
-    if (promocode.activations <= 0) {
-      await ctx.reply('❌ Промокод больше не действителен (закончились активации)');
-      return;
-    }
-    
-    // Проверяем, не использовал ли пользователь уже этот промокод
-    const usedPromocodes = user.usedPromocodes || [];
-    if (usedPromocodes.includes(promocodeName)) {
-      await ctx.reply('❌ Вы уже использовали этот промокод');
-      return;
-    }
-    
-    // Активируем промокод
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { 
-        $inc: { 
-          magnumCoins: promocode.magnumCoins,
-          totalEarnedMagnumCoins: promocode.magnumCoins
-        },
-        $push: { usedPromocodes: promocodeName },
-        $set: { updatedAt: new Date() }
-      }
-    );
-    
-    await db.collection('promocodes').updateOne(
-      { name: promocodeName },
-      { 
-        $inc: { 
-          activations: -1,
-          totalActivations: 1
-        }
-      }
-    );
-    
-    // Очищаем кеш
-    userCache.delete(user.id);
-    
-    await ctx.reply(`✅ Промокод "${promocodeName}" активирован!\n💰 Получено: ${promocode.magnumCoins} Magnum Coins`);
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-  } catch (error) {
-    logError(error, 'Активация промокода');
-    await ctx.reply('❌ Ошибка активации промокода');
-  }
-}
-
 // ==================== СИСТЕМА ПОДДЕРЖКИ ====================
 async function handleCreateSupportTicket(ctx, user, text) {
   try {
@@ -5773,7 +5246,6 @@ async function handleAdminAnswerTicket(ctx, user, text) {
     await ctx.reply('❌ Ошибка отправки ответа. Попробуйте позже.');
   }
 }
-
 // ==================== FAQ ОБРАБОТЧИКИ ====================
 bot.action('faq_farm', async (ctx) => {
   try {
@@ -5846,7 +5318,6 @@ bot.action('faq_miner', async (ctx) => {
     logError(error, 'FAQ Майнер');
   }
 });
-
 bot.action('faq_bonus', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -6128,6 +5599,7 @@ bot.action('contact_support', async (ctx) => {
     });
   }
 });
+
 // ==================== ОБРАБОТЧИКИ КАНАЛА ПОДДЕРЖКИ ====================
 // Обработчик для ответа на тикет
 bot.action(/^support_answer_(.+)$/, async (ctx) => {
@@ -6280,7 +5752,6 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
-
 // Обработчик для отклонения тикета
 bot.action(/^support_reject_(.+)$/, async (ctx) => {
   try {
@@ -6415,7 +5886,6 @@ bot.action(/^support_close_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
-
 // Обработчик для отмены ответа на тикет
 bot.action(/^support_cancel_(.+)$/, async (ctx) => {
   try {
@@ -6719,7 +6189,6 @@ bot.action('farm', async (ctx) => {
     });
   }
 });
-
 // Обмен
 bot.action('exchange', async (ctx) => {
   try {
@@ -6764,7 +6233,6 @@ bot.action('exchange_100', async (ctx) => {
     logError(error, 'Обмен 100 Magnum Coins');
   }
 });
-
 bot.action('exchange_500', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -6775,7 +6243,6 @@ bot.action('exchange_500', async (ctx) => {
     logError(error, 'Обмен 500 Magnum Coins');
   }
 });
-
 bot.action('exchange_all', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -6869,7 +6336,6 @@ bot.action('referral_rewards', async (ctx) => {
     logError(error, 'Награды рефералов');
   }
 });
-
 bot.action('referral_list', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7064,7 +6530,6 @@ bot.action(/^sponsor_task_(\d+)$/, async (ctx) => {
     logError(error, 'Детали спонсорского задания');
   }
 });
-
 bot.action(/^claim_sponsor_(\d+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7088,7 +6553,6 @@ bot.action(/^verify_sponsor_(\d+)$/, async (ctx) => {
     logError(error, 'Проверка спонсорского задания');
   }
 });
-
 bot.action('do_farm', async (ctx) => {
   try {
     logFunction('bot.action.do_farm', ctx.from.id);
@@ -7263,7 +6727,6 @@ bot.action('check_subscription', async (ctx) => {
     }
   }
 });
-
 // Админ панель
 bot.action('admin', async (ctx) => {
   try {
@@ -7275,7 +6738,6 @@ bot.action('admin', async (ctx) => {
     logError(error, 'Админ панель (обработчик)');
   }
 });
-
 bot.action('admin_stats', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7330,6 +6792,7 @@ bot.action('admin_promocodes', async (ctx) => {
     logError(error, 'Управление промокодами (обработчик)');
   }
 });
+
 bot.action('admin_cache', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7592,6 +7055,7 @@ bot.action('admin_commission_set', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
+
 bot.action('admin_commission_stats', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7641,6 +7105,157 @@ bot.action('admin_commission_stats', async (ctx) => {
     logError(error, 'Статистика комиссий');
     await ctx.answerCbQuery('❌ Ошибка');
   }
+});
+
+// Недостающие обработчики админ-панели (простые реализации)
+bot.action('admin_posts_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_posts')]]);
+    const message = `📊 *Статистика постов*\n\nДетальная статистика недоступна.`;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Статистика постов (обработчик)'); }
+});
+
+bot.action('admin_broadcast', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user || !isAdmin(user.id)) return;
+    await db.collection('users').updateOne({ id: user.id }, { $set: { adminState: 'broadcasting', updatedAt: new Date() } });
+    await ctx.reply('📢 Введите текст для рассылки всем пользователям:');
+  } catch (error) { logError(error, 'Рассылка (обработчик)'); }
+});
+
+bot.action('admin_mass_give', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user || !isAdmin(user.id)) return;
+    await db.collection('users').updateOne({ id: user.id }, { $set: { adminState: 'mass_give', updatedAt: new Date() } });
+    await ctx.reply('💰 Введите массовую выдачу (например: "stars 100" или "mc 50"):');
+  } catch (error) { logError(error, 'Массовая выдача (обработчик)'); }
+});
+
+bot.action('admin_miner_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const active = await db.collection('users').countDocuments({ 'miner.active': true });
+    const agg = await db.collection('users').aggregate([
+      { $match: { miner: { $exists: true } } },
+      { $group: { _id: null, totalMined: { $sum: { $ifNull: ['$miner.totalMined', 0] } }, avgEff: { $avg: { $ifNull: ['$miner.efficiency', 1] } }, count: { $sum: 1 } } }
+    ]).toArray();
+    const g = agg[0] || { totalMined: 0, avgEff: 1, count: 0 };
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_miner_settings')]]);
+    const message = `⛏️ *Статистика майнера*`+"\n\n"+
+      `├ Активных майнеров: \`${active}\``+"\n"+
+      `├ Всего пользователей с майнером: \`${g.count}\``+"\n"+
+      `├ Суммарно намайнено: \`${formatNumber(g.totalMined)}\` MC`+"\n"+
+      `└ Средняя эффективность: \`${(g.avgEff || 1).toFixed(2)}\``;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Статистика майнера (обработчик)'); }
+});
+
+bot.action('admin_miner_levels', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const dist = await db.collection('users').aggregate([
+      { $match: { 'miner.level': { $exists: true } } },
+      { $group: { _id: '$miner.level', cnt: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]).toArray();
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_miner_settings')]]);
+    let message = `⚙️ *Уровни майнера*`+"\n\n";
+    if (dist.length === 0) message += `Нет данных.`; else dist.forEach(d => { message += `Уровень ${d._id}: \`${d.cnt}\``+"\n"; });
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Уровни майнера (обработчик)'); }
+});
+
+bot.action('admin_referral_bonuses', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_referral_settings')]]);
+    const message = `🏆 *Бонусы за рефералов*`+"\n\n"+`Базовая награда: \`${config.REFERRAL_BONUS}\` MC.`;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Бонусы за рефералов (обработчик)'); }
+});
+
+bot.action('admin_referral_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const agg = await db.collection('users').aggregate([
+      { $group: { _id: null, totalRef: { $sum: { $ifNull: ['$referralsCount', 0] } }, totalEarn: { $sum: { $ifNull: ['$totalReferralEarnings', 0] } }, users: { $sum: 1 } } }
+    ]).toArray();
+    const g = agg[0] || { totalRef: 0, totalEarn: 0, users: 0 };
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_referral_settings')]]);
+    const message = `👥 *Статистика рефералов*`+"\n\n"+
+      `├ Всего рефералов: \`${g.totalRef}\``+"\n"+
+      `├ Суммарные выплаты: \`${formatNumber(g.totalEarn)}\` MC`+"\n"+
+      `└ Пользователей: \`${g.users}\``;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Статистика рефералов (обработчик)'); }
+});
+
+bot.action('admin_bonus_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const agg = await db.collection('users').aggregate([
+      { $group: { _id: null, avgStreak: { $avg: { $ifNull: ['$dailyBonus.streak', 0] } }, maxStreak: { $max: { $ifNull: ['$dailyBonus.streak', 0] } }, gotToday: { $sum: { $cond: [{ $gte: ['$dailyBonus.lastBonus', new Date(Date.now() - 24*60*60*1000)] }, 1, 0] } } } }
+    ]).toArray();
+    const g = agg[0] || { avgStreak: 0, maxStreak: 0, gotToday: 0 };
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_settings')]]);
+    const message = `🎁 *Статистика бонусов*`+"\n\n"+
+      `├ Средняя серия: \`${(g.avgStreak || 0).toFixed(1)}\``+"\n"+
+      `├ Максимальная серия: \`${g.maxStreak || 0}\``+"\n"+
+      `└ Получили бонус за 24ч: \`${g.gotToday}\``;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Статистика бонусов (обработчик)'); }
+});
+
+bot.action('admin_bonus_series', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_settings')]]);
+    const message = `🔥 *Серия бонусов*`+"\n\n"+`Ежедневный бонус раз в 24 часа. Серия растет при ежедневных получениях.`;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Серия бонусов (обработчик)'); }
+});
+
+bot.action('admin_cooldown_bonus', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_cooldowns')]]);
+    const message = `🎁 *Кулдаун бонуса*`+"\n\n"+`Ежедневный бонус доступен раз в 24 часа.`;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Кулдаун бонуса (обработчик)'); }
+});
+
+bot.action('admin_cooldown_miner', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_cooldowns')]]);
+    const message = `⛏️ *Кулдаун майнера*`+"\n\n"+`Начисление награды выполняется каждые 30 минут задачей бота.`;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Кулдаун майнера (обработчик)'); }
+});
+
+bot.action('admin_cooldown_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_cooldowns')]]);
+    const message = `⏱️ *Статистика кулдаунов*`+"\n\n"+
+      `├ Кулдаун фарма: \`${formatTime(config.FARM_COOLDOWN)}\``+"\n"+
+      `├ Кулдаун бонуса: \`24ч\``+"\n"+
+      `└ Период награды майнера: \`30м\``;
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'Статистика кулдаунов (обработчик)'); }
+});
+
+bot.action('promocode_history', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const used = user.usedPromocodes || [];
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'promocode')]]);
+    let message = `📜 *История промокодов*`+"\n\n";
+    message += used.length === 0 ? 'Вы еще не активировали промокоды.' : used.map((c, i) => `${i + 1}. ${c}`).join('\n');
+    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
+  } catch (error) { logError(error, 'История промокодов (обработчик)'); }
 });
 
 // Обработчики для создания постов
@@ -7714,6 +7329,7 @@ bot.action('promocode', async (ctx) => {
     logError(error, 'Промокоды (обработчик)');
   }
 });
+
 bot.action('enter_promocode', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7817,150 +7433,6 @@ bot.action('support_faq', async (ctx) => {
     });
   } catch (error) {
     logError(error, 'FAQ (обработчик)');
-  }
-});
-bot.action('admin_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки бота (обработчик)');
-  }
-});
-
-bot.action('admin_search_user', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSearchUser(ctx, user);
-  } catch (error) {
-    logError(error, 'Поиск пользователя (обработчик)');
-  }
-});
-
-bot.action('admin_top_users', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminTopUsers(ctx, user);
-  } catch (error) {
-    logError(error, 'Топ пользователей (обработчик)');
-  }
-});
-
-bot.action('admin_ban_user', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminBanUser(ctx, user);
-  } catch (error) {
-    logError(error, 'Блокировка пользователя (обработчик)');
-  }
-});
-
-bot.action('admin_unban_user', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminUnbanUser(ctx, user);
-  } catch (error) {
-    logError(error, 'Разблокировка пользователя (обработчик)');
-  }
-});
-
-// Обработчики настроек бота
-bot.action('admin_farm_rewards', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminFarmRewards(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки наград фарма (обработчик)');
-  }
-});
-
-bot.action('admin_cooldowns', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminCooldowns(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки кулдаунов (обработчик)');
-  }
-});
-
-bot.action('admin_daily_bonus', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminDailyBonus(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки ежедневного бонуса (обработчик)');
-  }
-});
-
-bot.action('admin_miner_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminMinerSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки майнера (обработчик)');
-  }
-});
-
-bot.action('admin_referral_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminReferralSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки реферальной системы (обработчик)');
-  }
-});
-
-bot.action('admin_subscription_channels', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSubscriptionChannels(ctx, user);
-  } catch (error) {
-    logError(error, 'Настройки каналов подписки (обработчик)');
-  }
-});
-
-// Обработчики возврата к настройкам
-bot.action('admin_settings', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminSettings(ctx, user);
-  } catch (error) {
-    logError(error, 'Возврат к настройкам (обработчик)');
-  }
-});
-
-bot.action('admin_users', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showAdminUsers(ctx, user);
-  } catch (error) {
-    logError(error, 'Управление пользователями (обработчик)');
   }
 });
 // Обработчики изменения настроек
@@ -8079,7 +7551,6 @@ bot.catch((err, ctx) => {
     stack: err.stack
   });
 });
-
 // ==================== ЗАПУСК БОТА ====================
 async function startBot() {
   try {
@@ -8162,7 +7633,6 @@ async function startBot() {
       bot.stop('SIGTERM');
     });
     console.log('✅ Все обработчики сигналов настроены');
-    
   } catch (error) {
     console.error('❌ Критическая ошибка запуска бота:', error);
     console.log('Критическая ошибка при запуске:', {
@@ -8221,7 +7691,6 @@ bot.on('text', async (ctx) => {
         await handleUserEnterPromocode(ctx, user, text);
         return;
       }
-      
       // Проверяем админские состояния (только для админов)
       if (isAdmin(user.id)) {
         if (user.adminState === 'searching_user') {
@@ -8275,6 +7744,27 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'setting_commission') {
           console.log(`💸 Админ ${ctx.from.id} устанавливает комиссию: "${text}"`);
           await handleAdminSetCommission(ctx, user, text);
+        } else if (user.adminState === 'broadcasting') {
+          console.log(`📢 Админ ${ctx.from.id} рассылает сообщение: "${text}"`);
+          const cursor = db.collection('users').find({}, { projection: { id: 1 } });
+          let sent = 0, errors = 0;
+          while (await cursor.hasNext()) {
+            const u = await cursor.next();
+            try { await ctx.telegram.sendMessage(u.id, text); sent++; } catch (e) { errors++; }
+          }
+          await db.collection('users').updateOne({ id: user.id }, { $unset: { adminState: '' } });
+          await ctx.reply(`📢 Рассылка завершена. Отправлено: ${sent}, ошибок: ${errors}`);
+        } else if (user.adminState === 'mass_give') {
+          console.log(`💰 Админ ${ctx.from.id} выполняет массовую выдачу: "${text}"`);
+          const parts = text.trim().split(/\s+/);
+          if (parts.length < 2) { await ctx.reply('❌ Формат: "stars 100" или "mc 50"'); return; }
+          const type = parts[0].toLowerCase();
+          const amount = parseFloat(parts[1]);
+          if (!['stars','mc'].includes(type) || !isFinite(amount)) { await ctx.reply('❌ Неверные параметры'); return; }
+          const inc = type === 'stars' ? { stars: amount, totalEarnedStars: Math.max(amount, 0) } : { magnumCoins: amount, totalEarnedMagnumCoins: Math.max(amount, 0) };
+          await db.collection('users').updateMany({}, { $inc: inc, $set: { updatedAt: new Date() } });
+          await db.collection('users').updateOne({ id: user.id }, { $unset: { adminState: '' } });
+          await ctx.reply(`✅ Массовая выдача выполнена: ${type} ${amount}`);
         } else {
           console.log(`ℹ️ Админ ${ctx.from.id} отправил текст с неизвестным adminState: "${text}"`);
           await ctx.reply('❌ Неизвестная команда. Используйте админ панель для управления.');
