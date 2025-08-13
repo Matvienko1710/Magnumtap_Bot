@@ -9454,6 +9454,140 @@ bot.on('text', async (ctx) => {
   }
 });
 
+// ==================== ОБРАБОТКА ПРОМОКОДОВ ====================
+async function handleUserEnterPromocode(ctx, user, text) {
+  try {
+    log(`🎫 Обработка промокода от пользователя ${user.id}: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: '' }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const promocode = text.trim().toUpperCase();
+    
+    // Проверяем, что промокод не пустой
+    if (!promocode || promocode.length < 3) {
+      await ctx.reply('❌ Промокод должен содержать минимум 3 символа!');
+      return;
+    }
+    
+    // Проверяем, не использовал ли пользователь уже этот промокод
+    const usedPromocodes = user.usedPromocodes || [];
+    if (usedPromocodes.includes(promocode)) {
+      await ctx.reply('❌ Вы уже использовали этот промокод!');
+      return;
+    }
+    
+    // Ищем промокод в базе данных
+    const promocodeDoc = await db.collection('promocodes').findOne({ 
+      code: promocode,
+      isActive: true,
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gt: new Date() } }
+      ]
+    });
+    
+    if (!promocodeDoc) {
+      await ctx.reply('❌ Промокод не найден или недействителен!');
+      return;
+    }
+    
+    // Проверяем лимит активаций
+    if (promocodeDoc.maxActivations && promocodeDoc.activations >= promocodeDoc.maxActivations) {
+      await ctx.reply('❌ Промокод больше не действителен (закончились активации)!');
+      return;
+    }
+    
+    // Выдаем награду
+    const reward = promocodeDoc.reward || 10;
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: reward,
+          totalEarnedMagnumCoins: reward
+        },
+        $push: { usedPromocodes: promocode },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Обновляем статистику промокода
+    await db.collection('promocodes').updateOne(
+      { code: promocode },
+      { 
+        $inc: { 
+          activations: 1,
+          totalActivations: 1,
+          totalRewards: reward
+        },
+        $push: { 
+          activationsHistory: {
+            userId: user.id,
+            username: user.username || 'Неизвестно',
+            firstName: user.firstName || 'Неизвестно',
+            activatedAt: new Date(),
+            reward: reward
+          }
+        }
+      }
+    );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
+    
+    // Отправляем уведомление пользователю
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'promocode')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод активирован!*\n\n` +
+      `🎫 Промокод: \`${promocode}\`\n` +
+      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `📊 Ваш баланс: \`${formatNumber(user.magnumCoins + reward)}\` Magnum Coins\n\n` +
+      `🎉 Спасибо за использование промокода!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    // Отправляем уведомление в чат @magnumtapchat
+    try {
+      const chatId = '@magnumtapchat';
+      const notificationMessage = 
+        `🎫 *Новая активация промокода!*\n\n` +
+        `👤 Пользователь: ${user.firstName || 'Неизвестно'} ${user.username ? `(@${user.username})` : ''}\n` +
+        `🆔 ID: \`${user.id}\`\n` +
+        `🎫 Промокод: \`${promocode}\`\n` +
+        `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+        `📅 Время: ${new Date().toLocaleString('ru-RU')}\n\n` +
+        `🎉 Поздравляем с активацией промокода!`;
+      
+      await ctx.telegram.sendMessage(chatId, notificationMessage, {
+        parse_mode: 'Markdown'
+      });
+      
+      log(`✅ Уведомление об активации промокода отправлено в чат ${chatId}`);
+    } catch (error) {
+      logError(error, `Отправка уведомления в чат @magnumtapchat`);
+      console.log(`⚠️ Не удалось отправить уведомление в чат: ${error.message}`);
+    }
+    
+    log(`✅ Промокод ${promocode} успешно активирован пользователем ${user.id}, награда: ${reward} Magnum Coins`);
+    
+  } catch (error) {
+    logError(error, `Обработка промокода пользователем ${user.id}`);
+    await ctx.reply('❌ Произошла ошибка при активации промокода. Попробуйте позже.');
+  }
+}
+
 // Обработчики необработанных ошибок
 process.on('uncaughtException', (error) => {
   console.error('❌ Необработанная ошибка (uncaughtException):', error);
