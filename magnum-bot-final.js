@@ -4821,8 +4821,7 @@ async function showExchangeMenu(ctx, user) {
       `└ Ликвидность: ${Math.min(100, ((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
       `🎯 *Лимиты обмена:*\n` +
       `├ MC → Stars: ${formatNumber(mcToStarsLimit)} MC за раз\n` +
-      `└ Stars → MC: ${formatNumber(starsToMCLimit)} MC эквивалент за раз\n` +
-      `(зависит от ранга)\n\n` +
+      `└ Stars → MC: ${formatNumber(starsToMCLimit)} MC эквивалент за раз\n\n` +
       `🎯 Выберите сумму для обмена или действие:`;
     
     // Проверяем тип контекста для правильного метода отправки
@@ -5230,13 +5229,12 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       return;
     }
     
-    // Проверяем лимит обмена по рангу (конвертируем в MC для проверки)
-    const exchangeRate = await calculateExchangeRate();
-    const mcEquivalent = starsAmount / exchangeRate;
+    // Проверяем лимит обмена по рангу (в Stars)
     const exchangeLimit = getStarsToMCLimitByRank(user.level);
-    if (mcEquivalent > exchangeLimit) {
-      log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${mcEquivalent} MC эквивалент > ${exchangeLimit}`);
-      await ctx.reply(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC эквивалент (зависит от ранга)`);
+    const starsLimit = exchangeLimit * exchangeRate;
+    if (starsAmount > starsLimit) {
+      log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${starsAmount} Stars > ${starsLimit}`);
+      await ctx.reply(`❌ Превышен лимит обмена! Максимум: ${formatNumber(starsLimit)} Stars`);
       return;
     }
     
