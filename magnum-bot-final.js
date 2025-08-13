@@ -1160,8 +1160,8 @@ async function showMinerMenu(ctx, user) {
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
   
-  // Рассчитываем текущую награду с учетом курса и количества майнеров
-  const currentReward = await calculateMinerReward(efficiency);
+      // Рассчитываем текущую награду с учетом курса, количества майнеров и титула
+    const currentReward = await calculateMinerReward(efficiency, user);
   const rewardPerMinute = currentReward;
   const rewardPerHour = currentReward * 60; // Примерная награда за час
   
@@ -1290,8 +1290,8 @@ async function showMinerUpgrade(ctx, user) {
     const upgradeCost = currentLevel * 100; // 100 Magnum Coins за уровень
     const newEfficiency = currentEfficiency + 0.1;
     
-    // Рассчитываем новую награду с учетом курса и количества майнеров
-    const newRewardPerMinute = await calculateMinerReward(newEfficiency);
+    // Рассчитываем новую награду с учетом курса, количества майнеров и титула
+    const newRewardPerMinute = await calculateMinerReward(newEfficiency, user);
     const newRewardPerHour = newRewardPerMinute * 60;
     
     const canUpgrade = user.magnumCoins >= upgradeCost;
@@ -1310,7 +1310,7 @@ async function showMinerUpgrade(ctx, user) {
       `⬆️ *Улучшение майнера*\n\n` +
       `📊 *Текущий уровень:* ${currentLevel}\n` +
       `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
-      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency)) * 60)} Magnum Coins\n\n` +
+      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency, user)) * 60)} Magnum Coins\n\n` +
       `📈 *После улучшения:*\n` +
       `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
       `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Magnum Coins\n\n` +
@@ -1338,8 +1338,8 @@ async function showMinerStats(ctx, user) {
     const isActive = miner.active || false;
     const efficiency = miner.efficiency || 1;
     
-    // Рассчитываем текущую награду с учетом курса и количества майнеров
-    const currentReward = await calculateMinerReward(efficiency);
+    // Рассчитываем текущую награду с учетом курса, количества майнеров и титула
+    const currentReward = await calculateMinerReward(efficiency, user);
     const rewardPerMinute = currentReward;
     const rewardPerHour = currentReward * 60;
     
@@ -1361,10 +1361,17 @@ async function showMinerStats(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'miner')]
     ]);
     
+    // Получаем информацию о титуле
+    const titlesList = getTitlesList(user);
+    const currentTitle = titlesList.find(t => t.name === user.mainTitle);
+    const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
+    const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
+
     const message = 
       `📊 *Статистика майнера*\n\n` +
       `📈 *Уровень:* ${miner.level || 1}\n` +
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
+      `👑 *Титул:* ${user.mainTitle}${titleBonusText}\n` +
       `📊 *Статус:* ${statusText}\n` +
       `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
       `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
@@ -1374,7 +1381,7 @@ async function showMinerStats(ctx, user) {
       `📈 *Информация:*\n` +
       `• Майнер работает автоматически\n` +
       `• Награды выдаются каждую минуту\n` +
-      `• Награда зависит от курса обмена и количества майнеров\n` +
+      `• Награда зависит от курса обмена, количества майнеров и титула\n` +
       `• Эффективность увеличивается с улучшениями\n` +
       `• Можно улучшать за Magnum Coins`;
     
@@ -1736,8 +1743,8 @@ async function updateMinerMenu(ctx, user) {
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
   
-  // Рассчитываем текущую награду с учетом курса и количества майнеров
-  const currentReward = await calculateMinerReward(efficiency);
+  // Рассчитываем текущую награду с учетом курса, количества майнеров и титула
+  const currentReward = await calculateMinerReward(efficiency, user);
   const rewardPerMinute = currentReward;
   const rewardPerHour = currentReward * 60;
   
@@ -1766,11 +1773,18 @@ async function updateMinerMenu(ctx, user) {
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
+  // Получаем информацию о титуле
+  const titlesList = getTitlesList(user);
+  const currentTitle = titlesList.find(t => t.name === user.mainTitle);
+  const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
+  const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
+
   const message = 
     `⛏️ *Майнер*\n\n` +
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level || 1}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
+    `👑 *Титул:* ${user.mainTitle}${titleBonusText}\n` +
     `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins${lastRewardText}\n\n` +
@@ -3669,8 +3683,8 @@ async function showAdminUnbanUser(ctx, user) {
 }
 
 // ==================== ОБРАБОТКА МАЙНЕРА ====================
-// Функция для расчета награды майнера с учетом курса и количества активных майнеров
-async function calculateMinerReward(userEfficiency = 1) {
+// Функция для расчета награды майнера с учетом курса, количества активных майнеров и титула
+async function calculateMinerReward(userEfficiency = 1, user = null) {
   try {
     // Получаем количество активных майнеров
     const activeMinersCount = await db.collection('users').countDocuments({
@@ -3689,8 +3703,18 @@ async function calculateMinerReward(userEfficiency = 1) {
     // Множитель на основе количества активных майнеров (чем больше майнеров, тем меньше награда)
     const minersMultiplier = Math.max(0.3, Math.min(2.0, 1 / Math.sqrt(activeMinersCount + 1)));
     
+    // Множитель на основе титула пользователя
+    let titleMultiplier = 1.0;
+    if (user && user.mainTitle) {
+      const titlesList = getTitlesList(user);
+      const currentTitle = titlesList.find(t => t.name === user.mainTitle);
+      if (currentTitle) {
+        titleMultiplier = currentTitle.minerBonus || 1.0;
+      }
+    }
+    
     // Итоговая награда
-    const finalReward = baseReward * exchangeMultiplier * minersMultiplier * userEfficiency;
+    const finalReward = baseReward * exchangeMultiplier * minersMultiplier * userEfficiency * titleMultiplier;
     
     console.log(`⛏️ Расчет награды майнера:`, {
       baseReward: baseReward.toFixed(4),
@@ -3699,6 +3723,8 @@ async function calculateMinerReward(userEfficiency = 1) {
       activeMiners: activeMinersCount,
       minersMultiplier: minersMultiplier.toFixed(3),
       userEfficiency: userEfficiency.toFixed(2),
+      titleMultiplier: titleMultiplier.toFixed(2),
+      userTitle: user?.mainTitle || 'Нет',
       finalReward: finalReward.toFixed(4)
     });
     
@@ -3723,8 +3749,8 @@ async function processMinerRewards() {
     
     for (const user of activeMiners) {
       try {
-        // Рассчитываем награду с учетом курса и количества майнеров
-        const reward = await calculateMinerReward(user.miner.efficiency);
+        // Рассчитываем награду с учетом курса, количества майнеров и титула
+        const reward = await calculateMinerReward(user.miner.efficiency, user);
         
         await db.collection('users').updateOne(
           { id: user.id },
@@ -5479,26 +5505,35 @@ function getTitlesList(user) {
   const totalStars = user.totalEarnedStars || 0;
   const referrals = user.referralsCount || 0;
   const achievements = user.achievementsCount || 0;
+  const isAdmin = user.isAdmin || false;
 
   const definitions = [
-    // Обычные (7)
-    { id: 'novice', name: '🌱 Новичок', rarity: 'Обычный', conditionText: 'Титул по умолчанию', unlocked: true },
-    { id: 'starter', name: '🚀 Начинающий', rarity: 'Обычный', conditionText: 'Уровень 2 или 100 Stars', unlocked: level >= 2 || stars >= 100 },
-    { id: 'skilled', name: '🎯 Опытный', rarity: 'Обычный', conditionText: 'Уровень 5 или 20 фармов', unlocked: level >= 5 || farmCount >= 20 },
-    { id: 'master', name: '✨ Мастер', rarity: 'Обычный', conditionText: 'Уровень 10 или 1 000 Stars', unlocked: level >= 10 || stars >= 1000 },
-    { id: 'expert', name: '💫 Эксперт', rarity: 'Обычный', conditionText: 'Уровень 20 или 1 000 Magnum Coins заработано', unlocked: level >= 20 || totalMC >= 1000 },
-    { id: 'pro', name: '🌟 Профессионал', rarity: 'Обычный', conditionText: '10 000 Stars или 5 рефералов', unlocked: stars >= 10000 || referrals >= 5 },
-    { id: 'champion', name: '🏆 Чемпион', rarity: 'Обычный', conditionText: 'Уровень 30 или 5 достижений', unlocked: level >= 30 || achievements >= 5 },
+    // Обычные (5)
+    { id: 'novice', name: '🌱 Новичок', rarity: 'Обычный', conditionText: 'Титул по умолчанию', unlocked: true, minerBonus: 1.0 },
+    { id: 'starter', name: '🚀 Начинающий', rarity: 'Обычный', conditionText: 'Уровень 3 или 500 Stars', unlocked: level >= 3 || stars >= 500, minerBonus: 1.1 },
+    { id: 'skilled', name: '🎯 Опытный', rarity: 'Обычный', conditionText: 'Уровень 10 или 50 фармов', unlocked: level >= 10 || farmCount >= 50, minerBonus: 1.2 },
+    { id: 'master', name: '✨ Мастер', rarity: 'Обычный', conditionText: 'Уровень 25 или 10 000 Stars', unlocked: level >= 25 || stars >= 10000, minerBonus: 1.3 },
+    { id: 'expert', name: '💫 Эксперт', rarity: 'Обычный', conditionText: 'Уровень 50 или 10 000 Magnum Coins заработано', unlocked: level >= 50 || totalMC >= 10000, minerBonus: 1.4 },
+
+    // Редкие (3)
+    { id: 'pro', name: '🌟 Профессионал', rarity: 'Редкий', conditionText: '100 000 Stars или 10 рефералов', unlocked: stars >= 100000 || referrals >= 10, minerBonus: 1.5 },
+    { id: 'champion', name: '🏆 Чемпион', rarity: 'Редкий', conditionText: 'Уровень 75 или 10 достижений', unlocked: level >= 75 || achievements >= 10, minerBonus: 1.6 },
+    { id: 'legend', name: '👑 Легенда', rarity: 'Редкий', conditionText: '1 000 000 Stars', unlocked: stars >= 1000000 || totalStars >= 1000000, minerBonus: 1.7 },
 
     // Секретные (3)
-    { id: 'stealth', name: '🕵️ Скрытный', rarity: 'Секретный', conditionText: 'Серия бонусов 7 дней подряд', unlocked: streak >= 7 },
-    { id: 'tactician', name: '🧠 Тактик', rarity: 'Секретный', conditionText: '50 фармов и 3 реферала', unlocked: farmCount >= 50 && referrals >= 3 },
-    { id: 'chronos', name: '⏳ Усердный', rarity: 'Секретный', conditionText: 'Намайнить 500 Magnum Coins', unlocked: minerTotal >= 500 },
+    { id: 'stealth', name: '🕵️ Скрытный', rarity: 'Секретный', conditionText: 'Серия бонусов 14 дней подряд', unlocked: streak >= 14, minerBonus: 1.8 },
+    { id: 'tactician', name: '🧠 Тактик', rarity: 'Секретный', conditionText: '100 фармов и 5 рефералов', unlocked: farmCount >= 100 && referrals >= 5, minerBonus: 1.9 },
+    { id: 'chronos', name: '⏳ Усердный', rarity: 'Секретный', conditionText: 'Намайнить 5 000 Magnum Coins', unlocked: minerTotal >= 5000, minerBonus: 2.0 },
 
     // Легендарные (3)
-    { id: 'legend', name: '👑 Легенда', rarity: 'Легендарный', conditionText: '1 000 000 Stars', unlocked: stars >= 1000000 || totalStars >= 1000000 },
-    { id: 'immortal', name: '🔥 Бессмертный', rarity: 'Легендарный', conditionText: '100 000 Magnum Coins заработано', unlocked: totalMC >= 100000 },
-    { id: 'dragon', name: '🐉 Дракон', rarity: 'Легендарный', conditionText: '50 рефералов', unlocked: referrals >= 50 }
+    { id: 'immortal', name: '🔥 Бессмертный', rarity: 'Легендарный', conditionText: '1 000 000 Magnum Coins заработано', unlocked: totalMC >= 1000000, minerBonus: 2.2 },
+    { id: 'dragon', name: '🐉 Дракон', rarity: 'Легендарный', conditionText: '100 рефералов', unlocked: referrals >= 100, minerBonus: 2.4 },
+    { id: 'god', name: '⚡ Бог', rarity: 'Легендарный', conditionText: 'Уровень 100 и 50 достижений', unlocked: level >= 100 && achievements >= 50, minerBonus: 2.5 },
+
+    // Админские (3)
+    { id: 'moderator', name: '🛡️ Модератор', rarity: 'Админский', conditionText: 'Доступ только для модераторов', unlocked: isAdmin, minerBonus: 3.0 },
+    { id: 'administrator', name: '⚙️ Администратор', rarity: 'Админский', conditionText: 'Доступ только для администраторов', unlocked: isAdmin, minerBonus: 3.5 },
+    { id: 'owner', name: '👑 Владелец', rarity: 'Админский', conditionText: 'Доступ только для владельцев', unlocked: isAdmin, minerBonus: 4.0 }
   ];
 
   return definitions;
