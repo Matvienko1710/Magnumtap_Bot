@@ -4676,16 +4676,7 @@ async function showExchangeMenu(ctx, user) {
     const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
-    // Рассчитываем примеры с комиссией
-    const commission10 = (10 * config.EXCHANGE_COMMISSION) / 100;
-    const commission50 = (50 * config.EXCHANGE_COMMISSION) / 100;
-    const commission100 = (100 * config.EXCHANGE_COMMISSION) / 100;
-    const commission500 = (500 * config.EXCHANGE_COMMISSION) / 100;
-    
-    const stars10 = ((10 - commission10) * exchangeRate).toFixed(6);
-    const stars50 = ((50 - commission50) * exchangeRate).toFixed(6);
-    const stars100 = ((100 - commission100) * exchangeRate).toFixed(6);
-    const stars500 = ((500 - commission500) * exchangeRate).toFixed(6);
+
     
     // Получаем историю курсов
     const exchangeHistory = await db.collection('exchangeHistory')
@@ -4727,14 +4718,6 @@ async function showExchangeMenu(ctx, user) {
       [
         Markup.button.callback('🪙 Ввести сумму MC → Stars', 'exchange_custom_mc'),
         Markup.button.callback('⭐ Ввести сумму Stars → MC', 'exchange_custom_stars')
-      ],
-      [
-        Markup.button.callback(`🪙 10 MC → ${stars10} Stars`, 'exchange_10'),
-        Markup.button.callback(`🪙 50 MC → ${stars50} Stars`, 'exchange_50')
-      ],
-      [
-        Markup.button.callback(`🪙 100 MC → ${stars100} Stars`, 'exchange_100'),
-        Markup.button.callback(`🪙 500 MC → ${stars500} Stars`, 'exchange_500')
       ],
       [
         Markup.button.callback('🪙 Все Magnum Coins', 'exchange_all'),
@@ -9000,48 +8983,7 @@ bot.action('exchange_custom_stars', async (ctx) => {
   }
 });
 
-bot.action('exchange_10', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 10);
-  } catch (error) {
-    logError(error, 'Обмен 10 Magnum Coins');
-  }
-});
 
-bot.action('exchange_50', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 50);
-  } catch (error) {
-    logError(error, 'Обмен 50 Magnum Coins');
-  }
-});
-
-bot.action('exchange_100', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 100);
-  } catch (error) {
-    logError(error, 'Обмен 100 Magnum Coins');
-  }
-});
-bot.action('exchange_500', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 500);
-  } catch (error) {
-    logError(error, 'Обмен 500 Magnum Coins');
-  }
-});
 bot.action('exchange_all', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
