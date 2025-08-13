@@ -4731,6 +4731,9 @@ async function showExchangeMenu(ctx, user) {
         Markup.button.callback('⚙️ Настройки биржи', 'exchange_settings'),
         Markup.button.callback('📰 Новости биржи', 'exchange_news')
       ],
+      [
+        Markup.button.callback('🔄 Обновить', 'exchange_refresh')
+      ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
@@ -5115,6 +5118,12 @@ async function performExchange(ctx, user, amount) {
     await ctx.answerCbQuery(
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
+    
+    // Автоматически обновляем меню биржи
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showExchangeMenu(ctx, updatedUser);
+    }
   } catch (error) {
     logError(error, 'Обмен Magnum Coins на Stars');
     await ctx.answerCbQuery('❌ Ошибка обмена');
@@ -8901,6 +8910,10 @@ bot.action('farm', async (ctx) => {
 // Обмен
 bot.action('exchange', async (ctx) => {
   try {
+    // Очищаем кеш для получения свежих данных
+    userCache.delete(ctx.from.id);
+    statsCache.delete('reserve');
+    
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
@@ -9047,6 +9060,27 @@ bot.action('exchange_news', async (ctx) => {
   } catch (error) {
     logError(error, 'Новости биржи');
     await ctx.answerCbQuery('❌ Ошибка загрузки новостей');
+  }
+});
+
+bot.action('exchange_refresh', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Очищаем кеш для получения свежих данных
+    userCache.delete(user.id);
+    statsCache.delete('reserve');
+    
+    // Получаем обновленного пользователя
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showExchangeMenu(ctx, updatedUser);
+      await ctx.answerCbQuery('✅ Биржа обновлена!');
+    }
+  } catch (error) {
+    logError(error, 'Обновление биржи');
+    await ctx.answerCbQuery('❌ Ошибка обновления');
   }
 });
 
@@ -11898,7 +11932,7 @@ async function handleExchangeCustomMC(ctx, user, text) {
       return;
     }
     
-    // Выполняем обмен
+    // Выполняем обмен (автоматически обновит меню)
     await performExchange(ctx, user, amount);
     
   } catch (error) {
@@ -11926,7 +11960,7 @@ async function handleExchangeCustomStars(ctx, user, text) {
       return;
     }
     
-    // Выполняем обмен Stars на MC
+    // Выполняем обмен Stars на MC (автоматически обновит меню)
     await performStarsToMCExchange(ctx, user, starsAmount);
     
   } catch (error) {
