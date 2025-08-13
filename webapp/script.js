@@ -136,10 +136,64 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Инициализация игры
-function initGame() {
-    console.log('🎮 Инициализация WebApp...');
-    elements.username.textContent = username;
-    updateConnectionStatus('connecting');
+async function initGame() {
+    try {
+        console.log('🎮 Инициализация WebApp...');
+        
+        // Получаем userId из Telegram WebApp
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe) {
+            userId = window.Telegram.WebApp.initDataUnsafe.user?.id;
+            console.log('🔗 Telegram WebApp userId:', userId);
+        }
+        
+        // Если нет userId из Telegram, пробуем получить из localStorage
+        if (!userId) {
+            const savedUserId = localStorage.getItem('magnumStarsUserId');
+            if (savedUserId) {
+                userId = parseInt(savedUserId);
+                console.log('📱 userId из localStorage:', userId);
+            }
+        }
+        
+        // Если все еще нет userId, создаем временный
+        if (!userId) {
+            userId = Date.now(); // Временный ID
+            localStorage.setItem('magnumStarsUserId', userId.toString());
+            console.log('🆔 Создан временный userId:', userId);
+        }
+        
+        elements.username.textContent = username;
+        updateConnectionStatus('connecting');
+        
+        // Загружаем данные с сервера если есть userId
+        if (userId) {
+            await loadUserData();
+        } else {
+            console.log('⚠️ userId не найден, используем локальные данные');
+        }
+        
+        // Загружаем локальные данные
+        loadLocalData();
+        
+        // Обновляем UI
+        updateUI();
+        
+        // Запускаем авто-кликер
+        startAutoClicker();
+        
+        // Запускаем майнер
+        startMiner();
+        
+        // Обновляем фарм каждую секунду
+        setInterval(updateFarmCooldown, 1000);
+        
+        // Обновляем визуал фарма каждые 100мс
+        setInterval(updateFarmVisual, 100);
+        
+        console.log('🎮 Игра инициализирована');
+    } catch (error) {
+        console.log('❌ Ошибка инициализации игры:', error);
+    }
 }
 
 // Настройка обработчиков событий
@@ -263,8 +317,10 @@ function handleClick() {
     // Обновление UI
     updateUI();
     
-    // Сохранение данных
-    saveUserData();
+    // Сохранение данных каждые 5 кликов
+    if (gameState.clickCount % 5 === 0) {
+        saveUserData();
+    }
     
     // Haptic feedback
     if (tg?.HapticFeedback) {
