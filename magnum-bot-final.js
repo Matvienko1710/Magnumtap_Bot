@@ -7,7 +7,7 @@ const fs = require('fs');
 
 // Создаем Express приложение для WebApp
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000; // Railway использует свой порт
 
 // Middleware для логирования запросов
 app.use((req, res, next) => {
@@ -12360,12 +12360,17 @@ async function startBot() {
     // Запускаем Express сервер независимо от бота
     const server = app.listen(PORT, () => {
         console.log(`🌐 WebApp сервер запущен на порту ${PORT}`);
+        console.log(`🌐 Переменная PORT: ${process.env.PORT || 'не установлена'}`);
         console.log(`🌐 WebApp доступен по адресу: http://localhost:${PORT}/webapp`);
+        console.log(`🌐 Railway URL: https://magnumtapbot-production.up.railway.app`);
     });
 
     // Обработка ошибок сервера
     server.on('error', (error) => {
         console.error('❌ Ошибка Express сервера:', error);
+        if (error.code === 'EADDRINUSE') {
+            console.error('❌ Порт уже занят. Попробуйте другой порт.');
+        }
     });
 
     // Graceful shutdown для Express сервера
