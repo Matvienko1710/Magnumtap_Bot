@@ -4068,7 +4068,10 @@ async function showExchangeChart(ctx, user) {
     // Получаем историю курсов за последние 24 часа
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const exchangeHistory = await db.collection('exchangeHistory')
-      .find({ timestamp: { $gte: yesterday } })
+      .find({ 
+        timestamp: { $gte: yesterday },
+        type: 'rate_update' // Фильтруем только записи с курсами
+      })
       .sort({ timestamp: 1 })
       .toArray();
     
@@ -4087,10 +4090,10 @@ async function showExchangeChart(ctx, user) {
     let message = `📈 *График курса Magnum Coin*\n\n`;
     
     if (exchangeHistory.length > 0) {
-      const currentRate = exchangeHistory[exchangeHistory.length - 1].rate;
-      const minRate = Math.min(...exchangeHistory.map(h => h.rate));
-      const maxRate = Math.max(...exchangeHistory.map(h => h.rate));
-      const avgRate = exchangeHistory.reduce((sum, h) => sum + h.rate, 0) / exchangeHistory.length;
+      const currentRate = exchangeHistory[exchangeHistory.length - 1].rate || 0.001;
+      const minRate = Math.min(...exchangeHistory.map(h => h.rate || 0.001));
+      const maxRate = Math.max(...exchangeHistory.map(h => h.rate || 0.001));
+      const avgRate = exchangeHistory.reduce((sum, h) => sum + (h.rate || 0.001), 0) / exchangeHistory.length;
       
       message += `📊 *Статистика за 24 часа:*\n`;
       message += `├ 📈 Максимум: \`${maxRate.toFixed(6)}\` Stars\n`;
@@ -4105,13 +4108,23 @@ async function showExchangeChart(ctx, user) {
       
       for (let i = 0; i < points; i++) {
         const index = i * step;
-        const rate = exchangeHistory[index].rate;
-        const time = new Date(exchangeHistory[index].timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        const rate = exchangeHistory[index]?.rate || 0.001;
+        const timestamp = exchangeHistory[index]?.timestamp || new Date();
+        const time = new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         const bar = '█'.repeat(Math.floor((rate / maxRate) * 10));
         message += `├ ${time}: ${rate.toFixed(6)} ${bar}\n`;
       }
     } else {
-      message += `❌ Нет данных для построения графика\n`;
+      // Создаем резервные данные, если истории нет
+      const currentRate = await calculateExchangeRate();
+      message += `📊 *Статистика:*\n`;
+      message += `├ 📈 Текущий курс: \`${currentRate.toFixed(6)}\` Stars\n`;
+      message += `├ 📉 Минимум: \`${currentRate.toFixed(6)}\` Stars\n`;
+      message += `├ 📊 Среднее: \`${currentRate.toFixed(6)}\` Stars\n`;
+      message += `└ 📈 Максимум: \`${currentRate.toFixed(6)}\` Stars\n\n`;
+      message += `📈 *Динамика курса:*\n`;
+      message += `├ ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}: ${currentRate.toFixed(6)} ██████████\n`;
+      message += `└ 💡 График будет доступен после совершения обменов\n`;
     }
     
     message += `\n💡 Выберите период для детального анализа:`;
@@ -4133,7 +4146,10 @@ async function showExchangeHistory(ctx, user) {
     
     // Получаем историю обменов пользователя
     const userHistory = await db.collection('exchangeHistory')
-      .find({ userId: user.id })
+      .find({ 
+        userId: user.id,
+        type: { $ne: 'rate_update' } // Исключаем записи с курсами
+      })
       .sort({ timestamp: -1 })
       .limit(10)
       .toArray();
@@ -4156,20 +4172,23 @@ async function showExchangeHistory(ctx, user) {
       message += `📊 *Последние 10 обменов:*\n\n`;
       
       userHistory.forEach((exchange, index) => {
-        const date = new Date(exchange.timestamp).toLocaleString('ru-RU');
-        const profit = exchange.starsReceived - (exchange.magnumCoinsAmount * 0.001); // Примерная прибыль
+        const date = new Date(exchange.timestamp || new Date()).toLocaleString('ru-RU');
+        const magnumCoinsAmount = exchange.magnumCoinsAmount || 0;
+        const starsReceived = exchange.starsReceived || 0;
+        const commission = exchange.commission || 0;
+        const profit = starsReceived - (magnumCoinsAmount * 0.001); // Примерная прибыль
         const profitIcon = profit >= 0 ? '📈' : '📉';
         
         message += `${index + 1}. ${date}\n`;
-        message += `├ 💱 ${exchange.magnumCoinsAmount} MC → ${exchange.starsReceived.toFixed(6)} Stars\n`;
-        message += `├ 💸 Комиссия: ${exchange.commission.toFixed(2)} MC\n`;
+        message += `├ 💱 ${magnumCoinsAmount} MC → ${starsReceived.toFixed(6)} Stars\n`;
+        message += `├ 💸 Комиссия: ${commission.toFixed(2)} MC\n`;
         message += `└ ${profitIcon} Прибыль: ${profit >= 0 ? '+' : ''}${profit.toFixed(6)} Stars\n\n`;
       });
       
       // Общая статистика
-      const totalExchanged = userHistory.reduce((sum, h) => sum + h.magnumCoinsAmount, 0);
-      const totalStars = userHistory.reduce((sum, h) => sum + h.starsReceived, 0);
-      const totalCommission = userHistory.reduce((sum, h) => sum + h.commission, 0);
+      const totalExchanged = userHistory.reduce((sum, h) => sum + (h.magnumCoinsAmount || 0), 0);
+      const totalStars = userHistory.reduce((sum, h) => sum + (h.starsReceived || 0), 0);
+      const totalCommission = userHistory.reduce((sum, h) => sum + (h.commission || 0), 0);
       
       message += `📊 *Общая статистика:*\n`;
       message += `├ 💱 Всего обменено: \`${formatNumber(totalExchanged)}\` MC\n`;
