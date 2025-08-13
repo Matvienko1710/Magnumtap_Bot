@@ -6,182 +6,292 @@
     <title>Magnum Stars - WebApp</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="/webapp/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <!-- Заголовок -->
-        <header class="header">
-            <h1>🎯 Magnum Stars</h1>
-            <p class="subtitle">WebApp версия</p>
+    <div class="app-container">
+        <!-- Верхняя панель -->
+        <header class="top-panel">
+            <div class="user-info">
+                <div class="avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="user-details">
+                    <div class="username" id="username">Пользователь</div>
+                    <div class="level-info">
+                        <span class="level-badge">Уровень <span id="level">1</span></span>
+                        <div class="exp-bar">
+                            <div class="exp-fill" id="expFill"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="connection-status" id="connectionStatus">
+                <div class="status-dot"></div>
+            </div>
         </header>
 
         <!-- Статистика -->
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-icon">🪙</div>
-                <div class="stat-info">
+        <div class="stats-panel">
+            <div class="stat-card primary">
+                <div class="stat-icon">
+                    <i class="fas fa-coins"></i>
+                </div>
+                <div class="stat-content">
                     <div class="stat-value" id="magnumCoins">0</div>
                     <div class="stat-label">Magnum Coins</div>
                 </div>
+                <div class="stat-change" id="mcChange">+0</div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">⭐</div>
-                <div class="stat-info">
+            <div class="stat-card secondary">
+                <div class="stat-icon">
+                    <i class="fas fa-star"></i>
+                </div>
+                <div class="stat-content">
                     <div class="stat-value" id="stars">0</div>
                     <div class="stat-label">Stars</div>
                 </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">📊</div>
-                <div class="stat-info">
-                    <div class="stat-value" id="level">1</div>
-                    <div class="stat-label">Уровень</div>
-                </div>
+                <div class="stat-change" id="starsChange">+0</div>
             </div>
         </div>
 
         <!-- Основная кнопка кликера -->
         <div class="clicker-section">
-            <button class="clicker-btn" id="clickerBtn">
-                <div class="clicker-icon">⚡</div>
-                <div class="clicker-text">КЛИК!</div>
-            </button>
-            <div class="clicker-info">
+            <div class="clicker-container">
+                <button class="clicker-btn" id="clickerBtn">
+                    <div class="clicker-glow"></div>
+                    <div class="clicker-content">
+                        <i class="fas fa-bolt clicker-icon"></i>
+                        <div class="clicker-text">КЛИК!</div>
+                    </div>
+                </button>
                 <div class="clicker-stats">
-                    <span>Кликов: <span id="clickCount">0</span></span>
-                    <span>CPS: <span id="cps">1</span></span>
+                    <div class="stat-item">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <span>Кликов: <span id="clickCount">0</span></span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span>CPS: <span id="cps">1</span></span>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Навигация -->
-        <div class="navigation">
-            <div class="nav-grid">
-                <button class="nav-btn" data-section="clicker">
-                    <div class="nav-icon">⚡</div>
-                    <div class="nav-text">Кликер</div>
+        <nav class="main-nav">
+            <div class="nav-container">
+                <button class="nav-item active" data-section="clicker">
+                    <i class="fas fa-bolt"></i>
+                    <span>Кликер</span>
                 </button>
-                <button class="nav-btn" data-section="farm">
-                    <div class="nav-icon">🌾</div>
-                    <div class="nav-text">Фарм</div>
+                <button class="nav-item" data-section="farm">
+                    <i class="fas fa-seedling"></i>
+                    <span>Фарм</span>
                 </button>
-                <button class="nav-btn" data-section="exchange">
-                    <div class="nav-icon">📈</div>
-                    <div class="nav-text">Биржа</div>
+                <button class="nav-item" data-section="exchange">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Биржа</span>
                 </button>
-                <button class="nav-btn" data-section="miner">
-                    <div class="nav-icon">⛏️</div>
-                    <div class="nav-text">Майнер</div>
+                <button class="nav-item" data-section="miner">
+                    <i class="fas fa-hammer"></i>
+                    <span>Майнер</span>
                 </button>
-                <button class="nav-btn" data-section="tasks">
-                    <div class="nav-icon">📋</div>
-                    <div class="nav-text">Задания</div>
+                <button class="nav-item" data-section="tasks">
+                    <i class="fas fa-tasks"></i>
+                    <span>Задания</span>
                 </button>
-                <button class="nav-btn" data-section="referrals">
-                    <div class="nav-icon">👥</div>
-                    <div class="nav-text">Рефералы</div>
+                <button class="nav-item" data-section="referrals">
+                    <i class="fas fa-users"></i>
+                    <span>Рефералы</span>
                 </button>
-                <button class="nav-btn" data-section="achievements">
-                    <div class="nav-icon">🏆</div>
-                    <div class="nav-text">Достижения</div>
+                <button class="nav-item" data-section="achievements">
+                    <i class="fas fa-trophy"></i>
+                    <span>Достижения</span>
                 </button>
-                <button class="nav-btn" data-section="settings">
-                    <div class="nav-icon">⚙️</div>
-                    <div class="nav-text">Настройки</div>
+                <button class="nav-item" data-section="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Настройки</span>
                 </button>
             </div>
-        </div>
+        </nav>
 
-        <!-- Секции контента -->
-        <div class="content-sections">
+        <!-- Контент секций -->
+        <main class="content-area">
             <!-- Секция кликера -->
-            <div class="content-section active" id="clicker-section">
-                <h3>🚀 Улучшения кликера</h3>
-                <div class="upgrade-list" id="upgradeList">
+            <section class="content-section active" id="clicker-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-bolt"></i> Улучшения кликера</h2>
+                    <p>Улучшайте свои возможности для максимального дохода</p>
+                </div>
+                <div class="upgrades-grid" id="upgradeList">
                     <!-- Улучшения будут добавлены через JavaScript -->
                 </div>
-            </div>
+            </section>
 
             <!-- Секция фарма -->
-            <div class="content-section" id="farm-section">
-                <h3>🌾 Фарм</h3>
-                <div class="farm-info">
-                    <div class="farm-stats">
-                        <div class="farm-stat">
-                            <span>Время до следующего фарма:</span>
-                            <span id="farmCooldown">Готово</span>
-                        </div>
-                        <div class="farm-stat">
-                            <span>Награда за фарм:</span>
-                            <span id="farmReward">0.01 MC</span>
+            <section class="content-section" id="farm-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-seedling"></i> Фарм</h2>
+                    <p>Собирайте урожай для получения дополнительного дохода</p>
+                </div>
+                <div class="farm-container">
+                    <div class="farm-visual">
+                        <div class="farm-field" id="farmField">
+                            <div class="crop-row">
+                                <div class="crop" data-grown="false"></div>
+                                <div class="crop" data-grown="false"></div>
+                                <div class="crop" data-grown="false"></div>
+                            </div>
+                            <div class="crop-row">
+                                <div class="crop" data-grown="false"></div>
+                                <div class="crop" data-grown="false"></div>
+                                <div class="crop" data-grown="false"></div>
+                            </div>
                         </div>
                     </div>
-                    <button class="farm-btn" id="farmBtn">🌾 Собрать урожай</button>
+                    <div class="farm-info">
+                        <div class="farm-stats">
+                            <div class="farm-stat">
+                                <i class="fas fa-clock"></i>
+                                <div class="stat-details">
+                                    <span class="stat-label">Следующий урожай</span>
+                                    <span class="stat-value" id="farmCooldown">Готово</span>
+                                </div>
+                            </div>
+                            <div class="farm-stat">
+                                <i class="fas fa-coins"></i>
+                                <div class="stat-details">
+                                    <span class="stat-label">Награда за урожай</span>
+                                    <span class="stat-value" id="farmReward">0.01 MC</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="action-btn farm-btn" id="farmBtn">
+                            <i class="fas fa-hand-paper"></i>
+                            Собрать урожай
+                        </button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Секция биржи -->
-            <div class="content-section" id="exchange-section">
-                <h3>📈 Биржа</h3>
-                <div class="exchange-info">
-                    <div class="exchange-rate">
-                        <span>Курс обмена:</span>
-                        <span id="exchangeRate">1 MC = 0.001 ⭐</span>
+            <section class="content-section" id="exchange-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-chart-line"></i> Биржа</h2>
+                    <p>Обменивайте валюты по текущему курсу</p>
+                </div>
+                <div class="exchange-container">
+                    <div class="exchange-rate-card">
+                        <div class="rate-info">
+                            <i class="fas fa-exchange-alt"></i>
+                            <div class="rate-details">
+                                <span class="rate-label">Текущий курс</span>
+                                <span class="rate-value" id="exchangeRate">1 MC = 0.001 ⭐</span>
+                            </div>
+                        </div>
+                        <div class="rate-change" id="rateChange">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+2.5%</span>
+                        </div>
                     </div>
                     <div class="exchange-form">
                         <div class="exchange-input-group">
-                            <label>Отправить:</label>
-                            <input type="number" id="exchangeAmount" placeholder="0" min="0">
-                            <select id="exchangeFrom">
-                                <option value="mc">Magnum Coins</option>
-                                <option value="stars">Stars</option>
-                            </select>
+                            <label>Отправить</label>
+                            <div class="input-container">
+                                <input type="number" id="exchangeAmount" placeholder="0" min="0" step="0.01">
+                                <select id="exchangeFrom">
+                                    <option value="mc">Magnum Coins</option>
+                                    <option value="stars">Stars</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="exchange-arrow">
+                            <i class="fas fa-arrow-down"></i>
                         </div>
                         <div class="exchange-result">
-                            <span>Получить:</span>
-                            <span id="exchangeResult">0</span>
-                            <span id="exchangeResultCurrency">Stars</span>
+                            <label>Получить</label>
+                            <div class="result-container">
+                                <span class="result-value" id="exchangeResult">0</span>
+                                <span class="result-currency" id="exchangeResultCurrency">Stars</span>
+                            </div>
                         </div>
-                        <button class="exchange-btn" id="exchangeBtn">🔄 Обменять</button>
+                        <button class="action-btn exchange-btn" id="exchangeBtn">
+                            <i class="fas fa-sync-alt"></i>
+                            Обменять
+                        </button>
                     </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Секция майнера -->
-            <div class="content-section" id="miner-section">
-                <h3>⛏️ Майнер</h3>
-                <div class="miner-info">
-                    <div class="miner-status">
-                        <span>Статус:</span>
-                        <span id="minerStatus">Выключен</span>
-                    </div>
-                    <div class="miner-stats">
-                        <div class="miner-stat">
-                            <span>Доход в минуту:</span>
-                            <span id="minerIncome">0.01 MC</span>
+            <section class="content-section" id="miner-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-hammer"></i> Майнер</h2>
+                    <p>Пассивный доход с помощью майнинга</p>
+                </div>
+                <div class="miner-container">
+                    <div class="miner-status-card">
+                        <div class="miner-visual">
+                            <div class="miner-machine" id="minerMachine">
+                                <div class="miner-gear"></div>
+                                <div class="miner-gear"></div>
+                                <div class="miner-gear"></div>
+                            </div>
                         </div>
-                        <div class="miner-stat">
-                            <span>Уровень:</span>
-                            <span id="minerLevel">1</span>
+                        <div class="miner-info">
+                            <div class="miner-stat">
+                                <i class="fas fa-power-off"></i>
+                                <div class="stat-details">
+                                    <span class="stat-label">Статус</span>
+                                    <span class="stat-value" id="minerStatus">Выключен</span>
+                                </div>
+                            </div>
+                            <div class="miner-stat">
+                                <i class="fas fa-coins"></i>
+                                <div class="stat-details">
+                                    <span class="stat-label">Доход в минуту</span>
+                                    <span class="stat-value" id="minerIncome">0.01 MC</span>
+                                </div>
+                            </div>
+                            <div class="miner-stat">
+                                <i class="fas fa-level-up-alt"></i>
+                                <div class="stat-details">
+                                    <span class="stat-label">Уровень</span>
+                                    <span class="stat-value" id="minerLevel">1</span>
+                                </div>
+                            </div>
                         </div>
+                        <button class="action-btn miner-btn" id="minerBtn">
+                            <i class="fas fa-play"></i>
+                            Включить майнер
+                        </button>
                     </div>
-                    <button class="miner-btn" id="minerBtn">⛏️ Включить майнер</button>
                     <div class="miner-upgrades">
-                        <h4>Улучшения майнера</h4>
-                        <div class="miner-upgrade-list" id="minerUpgradeList">
+                        <h3>Улучшения майнера</h3>
+                        <div class="upgrades-grid" id="minerUpgradeList">
                             <!-- Улучшения майнера будут добавлены через JavaScript -->
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Секция заданий -->
-            <div class="content-section" id="tasks-section">
-                <h3>📋 Задания</h3>
-                <div class="tasks-info">
+            <section class="content-section" id="tasks-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-tasks"></i> Задания</h2>
+                    <p>Выполняйте задания для получения наград</p>
+                </div>
+                <div class="tasks-container">
                     <div class="tasks-tabs">
-                        <button class="task-tab active" data-tab="daily">Ежедневные</button>
-                        <button class="task-tab" data-tab="achievements">Достижения</button>
+                        <button class="task-tab active" data-tab="daily">
+                            <i class="fas fa-calendar-day"></i>
+                            Ежедневные
+                        </button>
+                        <button class="task-tab" data-tab="achievements">
+                            <i class="fas fa-trophy"></i>
+                            Достижения
+                        </button>
                     </div>
                     <div class="tasks-content">
                         <div class="task-list" id="dailyTasks">
@@ -192,84 +302,147 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Секция рефералов -->
-            <div class="content-section" id="referrals-section">
-                <h3>👥 Рефералы</h3>
-                <div class="referrals-info">
+            <section class="content-section" id="referrals-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-users"></i> Рефералы</h2>
+                    <p>Приглашайте друзей и получайте награды</p>
+                </div>
+                <div class="referrals-container">
                     <div class="referral-stats">
-                        <div class="referral-stat">
-                            <span>Всего рефералов:</span>
-                            <span id="referralsCount">0</span>
+                        <div class="referral-stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-user-plus"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="referralsCount">0</div>
+                                <div class="stat-label">Всего рефералов</div>
+                            </div>
                         </div>
-                        <div class="referral-stat">
-                            <span>Заработок с рефералов:</span>
-                            <span id="referralEarnings">0 MC</span>
+                        <div class="referral-stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-coins"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="referralEarnings">0 MC</div>
+                                <div class="stat-label">Заработок с рефералов</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="referral-link">
-                        <label>Ваша реферальная ссылка:</label>
+                    <div class="referral-link-section">
+                        <h3>Ваша реферальная ссылка</h3>
                         <div class="link-container">
                             <input type="text" id="referralLink" readonly>
-                            <button class="copy-btn" id="copyReferralBtn">📋</button>
+                            <button class="copy-btn" id="copyReferralBtn">
+                                <i class="fas fa-copy"></i>
+                            </button>
                         </div>
+                        <p class="referral-info">
+                            <i class="fas fa-info-circle"></i>
+                            За каждого приглашенного друга вы получите 100 MC
+                        </p>
                     </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Секция достижений -->
-            <div class="content-section" id="achievements-section">
-                <h3>🏆 Достижения</h3>
-                <div class="achievements-info">
+            <section class="content-section" id="achievements-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-trophy"></i> Достижения</h2>
+                    <p>Разблокируйте достижения для получения наград</p>
+                </div>
+                <div class="achievements-container">
                     <div class="achievements-stats">
-                        <div class="achievement-stat">
-                            <span>Выполнено:</span>
-                            <span id="achievementsCompleted">0</span>
+                        <div class="achievement-stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="achievementsCompleted">0</div>
+                                <div class="stat-label">Выполнено</div>
+                            </div>
                         </div>
-                        <div class="achievement-stat">
-                            <span>Всего:</span>
-                            <span id="achievementsTotal">0</span>
+                        <div class="achievement-stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-list"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="achievementsTotal">0</div>
+                                <div class="stat-label">Всего</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="achievements-list" id="achievementsList">
+                    <div class="achievements-grid" id="achievementsList">
                         <!-- Достижения будут добавлены через JavaScript -->
                     </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Секция настроек -->
-            <div class="content-section" id="settings-section">
-                <h3>⚙️ Настройки</h3>
-                <div class="settings-info">
-                    <div class="setting-item">
-                        <label>Уведомления:</label>
-                        <input type="checkbox" id="notificationsToggle" checked>
-                    </div>
-                    <div class="setting-item">
-                        <label>Звуковые эффекты:</label>
-                        <input type="checkbox" id="soundToggle" checked>
-                    </div>
-                    <div class="setting-item">
-                        <label>Автосохранение:</label>
-                        <input type="checkbox" id="autoSaveToggle" checked>
-                    </div>
-                    <button class="settings-btn" id="resetDataBtn">🔄 Сбросить данные</button>
+            <section class="content-section" id="settings-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-cog"></i> Настройки</h2>
+                    <p>Настройте приложение под свои предпочтения</p>
                 </div>
-            </div>
-        </div>
+                <div class="settings-container">
+                    <div class="settings-group">
+                        <h3>Уведомления</h3>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <i class="fas fa-bell"></i>
+                                <div class="setting-details">
+                                    <span class="setting-label">Push уведомления</span>
+                                    <span class="setting-description">Получать уведомления о важных событиях</span>
+                                </div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="notificationsToggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <i class="fas fa-volume-up"></i>
+                                <div class="setting-details">
+                                    <span class="setting-label">Звуковые эффекты</span>
+                                    <span class="setting-description">Воспроизводить звуки при действиях</span>
+                                </div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="soundToggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Данные</h3>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <i class="fas fa-save"></i>
+                                <div class="setting-details">
+                                    <span class="setting-label">Автосохранение</span>
+                                    <span class="setting-description">Автоматически сохранять прогресс</span>
+                                </div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="autoSaveToggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <button class="danger-btn" id="resetDataBtn">
+                            <i class="fas fa-trash"></i>
+                            Сбросить все данные
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
 
-        <!-- Статус подключения -->
-        <div class="connection-status" id="connectionStatus">
-            <div class="status-indicator"></div>
-            <span>WebApp загружен</span>
-        </div>
-
-        <!-- Информация о подключении -->
-        <div class="info-section">
-            <p>💡 Это WebApp версия Magnum Stars</p>
-            <p>🎮 Все функции бота доступны в WebApp</p>
-            <p>🚀 Прогресс синхронизируется с ботом</p>
+        <!-- Уведомления -->
+        <div class="notifications-container" id="notificationsContainer">
+            <!-- Уведомления будут добавляться динамически -->
         </div>
     </div>
 
