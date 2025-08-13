@@ -3082,6 +3082,26 @@ async function handleAdminAddReserveMC(ctx, user, text) {
       { upsert: true }
     );
     
+    // Очищаем кеш резерва
+    statsCache.delete('reserve');
+    
+    // Получаем обновленный резерв для расчета нового курса
+    const updatedReserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
+    
+    // Сохраняем историю изменения курса
+    await db.collection('exchangeHistory').insertOne({
+      type: 'rate_update',
+      rate: newRate,
+      timestamp: new Date(),
+      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
+      reason: 'admin_reserve_change',
+      adminId: user.id,
+      changeType: 'add_mc',
+      changeAmount: amount
+    });
+    
     // Сбрасываем состояние админа
     await db.collection('users').updateOne(
       { id: user.id },
@@ -3096,7 +3116,8 @@ async function handleAdminAddReserveMC(ctx, user, text) {
     
     await ctx.reply(
       `✅ *Magnum Coins добавлены в резерв!*\n\n` +
-      `💰 Добавлено: \`${formatNumber(amount)}\` Magnum Coins\n\n` +
+      `💰 Добавлено: \`${formatNumber(amount)}\` Magnum Coins\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -3138,6 +3159,26 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
       }
     );
     
+    // Очищаем кеш резерва
+    statsCache.delete('reserve');
+    
+    // Получаем обновленный резерв для расчета нового курса
+    const updatedReserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
+    
+    // Сохраняем историю изменения курса
+    await db.collection('exchangeHistory').insertOne({
+      type: 'rate_update',
+      rate: newRate,
+      timestamp: new Date(),
+      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
+      reason: 'admin_reserve_change',
+      adminId: user.id,
+      changeType: 'remove_mc',
+      changeAmount: amount
+    });
+    
     // Сбрасываем состояние админа
     await db.collection('users').updateOne(
       { id: user.id },
@@ -3152,7 +3193,8 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
     
     await ctx.reply(
       `✅ *Magnum Coins удалены из резерва!*\n\n` +
-      `💰 Удалено: \`${formatNumber(amount)}\` Magnum Coins\n\n` +
+      `💰 Удалено: \`${formatNumber(amount)}\` Magnum Coins\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -3186,6 +3228,26 @@ async function handleAdminAddReserveStars(ctx, user, text) {
       { upsert: true }
     );
     
+    // Очищаем кеш резерва
+    statsCache.delete('reserve');
+    
+    // Получаем обновленный резерв для расчета нового курса
+    const updatedReserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
+    
+    // Сохраняем историю изменения курса
+    await db.collection('exchangeHistory').insertOne({
+      type: 'rate_update',
+      rate: newRate,
+      timestamp: new Date(),
+      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
+      reason: 'admin_reserve_change',
+      adminId: user.id,
+      changeType: 'add_stars',
+      changeAmount: amount
+    });
+    
     // Сбрасываем состояние админа
     await db.collection('users').updateOne(
       { id: user.id },
@@ -3200,7 +3262,8 @@ async function handleAdminAddReserveStars(ctx, user, text) {
     
     await ctx.reply(
       `✅ *Stars добавлены в резерв!*\n\n` +
-      `⭐ Добавлено: \`${formatNumber(amount)}\` Stars\n\n` +
+      `⭐ Добавлено: \`${formatNumber(amount)}\` Stars\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -3241,6 +3304,26 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
       }
     );
     
+    // Очищаем кеш резерва
+    statsCache.delete('reserve');
+    
+    // Получаем обновленный резерв для расчета нового курса
+    const updatedReserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
+    
+    // Сохраняем историю изменения курса
+    await db.collection('exchangeHistory').insertOne({
+      type: 'rate_update',
+      rate: newRate,
+      timestamp: new Date(),
+      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
+      reason: 'admin_reserve_change',
+      adminId: user.id,
+      changeType: 'remove_stars',
+      changeAmount: amount
+    });
+    
     // Сбрасываем состояние админа
     await db.collection('users').updateOne(
       { id: user.id },
@@ -3255,7 +3338,8 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     
     await ctx.reply(
       `✅ *Stars удалены из резерва!*\n\n` +
-      `⭐ Удалено: \`${formatNumber(amount)}\` Stars\n\n` +
+      `⭐ Удалено: \`${formatNumber(amount)}\` Stars\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -3990,7 +4074,7 @@ async function showExchangeMenu(ctx, user) {
     
     // Получаем историю курсов
     const exchangeHistory = await db.collection('exchangeHistory')
-      .find({})
+      .find({ type: 'rate_update' })
       .sort({ timestamp: -1 })
       .limit(5)
       .toArray();
@@ -4000,9 +4084,15 @@ async function showExchangeMenu(ctx, user) {
     let priceChangePercent = 0;
     if (exchangeHistory.length >= 2) {
       const currentPrice = exchangeRate;
-      const previousPrice = exchangeHistory[1].rate;
+      const previousPrice = exchangeHistory[1].rate || 0.001;
       priceChange = currentPrice - previousPrice;
-      priceChangePercent = ((priceChange / previousPrice) * 100);
+      priceChangePercent = previousPrice > 0 ? ((priceChange / previousPrice) * 100) : 0;
+    }
+    
+    // Проверяем на NaN и корректность данных
+    if (isNaN(priceChange) || isNaN(priceChangePercent)) {
+      priceChange = 0;
+      priceChangePercent = 0;
     }
     
     const priceChangeIcon = priceChange >= 0 ? '📈' : '📉';
@@ -4039,7 +4129,7 @@ async function showExchangeMenu(ctx, user) {
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `📊 *Текущий курс:*\n` +
       `├ ${priceChangeIcon} 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ ${priceChangeColor} Изменение: ${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(6)} (${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)\n` +
+      `├ ${priceChangeColor} Изменение: ${exchangeHistory.length >= 2 ? `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(6)} (${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)` : 'Нет данных'}\n` +
       `├ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n` +
       `└ 📅 Обновлено: ${new Date().toLocaleTimeString('ru-RU')}\n\n` +
       `🏦 *Резерв биржи:*\n` +
@@ -4048,7 +4138,7 @@ async function showExchangeMenu(ctx, user) {
       `📈 *Рыночные данные:*\n` +
       `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` MC\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
-      `└ Ликвидность: ${((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100).toFixed(1)}%\n\n` +
+      `└ Ликвидность: ${Math.min(100, ((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
       `🎯 Выберите сумму для обмена или действие:`;
     
     await ctx.editMessageText(message, {
@@ -4357,13 +4447,14 @@ async function performExchange(ctx, user, amount) {
       }
     );
     
-    // Обновляем резерв (комиссия остается в резерве Magnum Coins)
+    // Обновляем резерв
+    // Комиссия остается в резерве Magnum Coins, а обменная сумма уходит на покупку Stars
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
         $inc: { 
-          magnumCoins: amount, // Полная сумма идет в резерв
-          stars: -starsToReceive
+          magnumCoins: commission, // Только комиссия остается в резерве MC
+          stars: -starsToReceive    // Stars уходят пользователю
         },
         $set: { 
           updatedAt: new Date()
@@ -4399,6 +4490,7 @@ async function performExchange(ctx, user, amount) {
     await updateDailyTaskProgress(user, 'daily_exchange', 1);
     
     log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission})`);
+    log(`💰 Комиссия ${commission} MC добавлена в резерв биржи`);
     await ctx.answerCbQuery(
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
