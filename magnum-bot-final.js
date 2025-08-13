@@ -1419,11 +1419,19 @@ async function showMinerMenu(ctx, user) {
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
+  // Получаем информацию о титуле
+  const titlesList = getTitlesList(user);
+  const mainTitle = user.mainTitle || '🌱 Новичок';
+  const currentTitle = titlesList.find(t => t.name === mainTitle);
+  const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
+  const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
+
   const message = 
     `⛏️ *Майнер*\n\n` +
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level || 1}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
+    `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
     `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins${lastRewardText}\n\n` +
@@ -4499,7 +4507,11 @@ async function calculateMinerReward(userEfficiency = 1, user = null) {
     const exchangeMultiplier = Math.max(0.5, Math.min(3.0, exchangeRate / config.BASE_EXCHANGE_RATE));
     
     // Множитель на основе количества активных майнеров (чем больше майнеров, тем меньше награда)
-    const minersMultiplier = Math.max(0.3, Math.min(2.0, 1 / Math.sqrt(activeMinersCount + 1)));
+    // Используем общее количество пользователей с майнерами, а не только активных
+    const totalMinersCount = await db.collection('users').countDocuments({
+      'miner': { $exists: true }
+    });
+    const minersMultiplier = Math.max(0.3, Math.min(2.0, 1 / Math.sqrt(totalMinersCount + 1)));
     
     // Множитель на основе титула пользователя
     let titleMultiplier = 1.0;
