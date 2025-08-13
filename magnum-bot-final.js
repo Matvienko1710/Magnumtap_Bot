@@ -920,6 +920,9 @@ function formatProfileMessage(user, rankProgress) {
     `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
     `├ Рефералы: \`${user.referralsCount}\`\n` +
     `└ Достижения: \`${user.achievementsCount}\`\n\n` +
+    `⚠️ *Нашли ошибку?*\n` +
+    `├ Сообщите в поддержку за вознаграждение!\n` +
+    `└ Перейдите в ⚙️ Настройки → 🆘 Поддержка\n\n` +
     `🎯 Выберите действие:`;
 }
 
@@ -7804,6 +7807,77 @@ async function handleAdminAnswerTicket(ctx, user, text) {
   }
 }
 
+// ==================== СООБЩЕНИЕ ОБ ОШИБКАХ ====================
+async function handleBugReport(ctx, user, text) {
+  try {
+    log(`🐛 Пользователь ${user.id} сообщает об ошибке: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Сохраняем сообщение об ошибке в базу данных
+    const bugReport = {
+      userId: user.id,
+      userFirstName: user.firstName,
+      userUsername: user.username,
+      report: text,
+      timestamp: new Date(),
+      status: 'new',
+      reviewed: false
+    };
+    
+    await db.collection('bugReports').insertOne(bugReport);
+    
+    // Отправляем уведомление админам
+    const adminIds = await getAdminIds();
+    for (const adminId of adminIds) {
+      try {
+        await ctx.telegram.sendMessage(
+          adminId,
+          `🐛 *Новое сообщение об ошибке!*\n\n` +
+          `👤 *От:* ${getDisplayName(user)} (ID: ${user.id})\n` +
+          `📝 *Сообщение:* ${text}\n` +
+          `📅 *Время:* ${new Date().toLocaleString('ru-RU')}\n\n` +
+          `🔍 Проверьте и оцените вознаграждение!`,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (error) {
+        logError(error, `Отправка уведомления админу ${adminId}`);
+      }
+    }
+    
+    // Отправляем подтверждение пользователю
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в поддержку', 'support')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Сообщение об ошибке отправлено!*\n\n` +
+      `📝 Ваше сообщение:\n` +
+      `"${text}"\n\n` +
+      `💰 *Вознаграждение:*\n` +
+      `├ Мы рассмотрим ваше сообщение\n` +
+      `├ При подтверждении ошибки вы получите награду\n` +
+      `└ Размер награды зависит от важности ошибки\n\n` +
+      `📧 Мы свяжемся с вами в ближайшее время!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Сообщение об ошибке от пользователя ${user.id} успешно сохранено`);
+    
+  } catch (error) {
+    logError(error, `Сообщение об ошибке от пользователя ${user.id}`);
+    await ctx.reply('❌ Ошибка отправки сообщения. Попробуйте позже.');
+  }
+}
+
 // ==================== СОЗДАНИЕ ПРОМОКОДОВ ====================
 async function handleAdminCreatePromocode(ctx, user, text) {
   try {
@@ -11234,7 +11308,13 @@ bot.action('admin_create_post_with_button', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    user.adminState = 'creating_post_with_button';
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_post_with_button', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
     await ctx.editMessageText(
       `📝 *Создание поста с кнопкой*\n\n` +
       `Отправьте текст поста в следующем сообщении.\n\n` +
@@ -11254,8 +11334,13 @@ bot.action('admin_create_post_no_button', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_post_no_button', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
     
-    user.adminState = 'creating_post_no_button';
     await ctx.editMessageText(
       `📝 *Создание поста без кнопки*\n\n` +
       `Отправьте текст поста в следующем сообщении.\n\n` +
@@ -11273,7 +11358,13 @@ bot.action('admin_create_promocode', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    user.adminState = 'creating_promocode';
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_promocode', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
     await ctx.editMessageText(
       `🎫 *Создание промокода*\n\n` +
       `Отправьте данные промокода в формате:\n` +
@@ -11305,7 +11396,13 @@ bot.action('enter_promocode', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    user.adminState = 'entering_promocode';
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'entering_promocode', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
     await ctx.editMessageText(
       `🎫 *Ввод промокода*\n\n` +
       `Отправьте промокод в следующем сообщении.\n\n` +
@@ -11325,7 +11422,8 @@ bot.action('support', async (ctx) => {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('📧 Написать в поддержку', 'contact_support')
+        Markup.button.callback('📧 Написать в поддержку', 'contact_support'),
+        Markup.button.callback('🐛 Сообщить об ошибке', 'report_bug')
       ],
       [
         Markup.button.callback('❓ FAQ', 'support_faq')
@@ -11338,8 +11436,13 @@ bot.action('support', async (ctx) => {
     const message = 
       `🆘 *Поддержка*\n\n` +
       `Если у вас возникли вопросы или проблемы, мы готовы помочь!\n\n` +
+      `💰 *Сообщите об ошибке и получите вознаграждение!*\n` +
+      `├ Нашли баг или ошибку в боте?\n` +
+      `├ Сообщите нам и получите награду\n` +
+      `└ Помогите сделать бота лучше\n\n` +
       `📧 *Связаться с поддержкой:*\n` +
       `├ Написать сообщение\n` +
+      `├ Сообщить об ошибке\n` +
       `└ Получить быстрый ответ\n\n` +
       `❓ *Часто задаваемые вопросы:*\n` +
       `├ Как фармить Magnum Coins\n` +
@@ -11356,6 +11459,47 @@ bot.action('support', async (ctx) => {
     logError(error, 'Поддержка (обработчик)');
   }
 });
+// Обработчик для сообщения об ошибке
+bot.action('report_bug', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'reporting_bug', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'support')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🐛 *Сообщить об ошибке*\n\n` +
+      `💰 *Вознаграждение за найденные ошибки:*\n` +
+      `├ Критические ошибки: 50-100 MC\n` +
+      `├ Ошибки интерфейса: 10-25 MC\n` +
+      `├ Мелкие баги: 5-15 MC\n` +
+      `└ Предложения улучшений: 5-20 MC\n\n` +
+      `📝 *Отправьте подробное описание ошибки:*\n` +
+      `├ Что произошло?\n` +
+      `├ Как воспроизвести?\n` +
+      `├ На каком экране?\n` +
+      `└ Дополнительная информация\n\n` +
+      `🔙 Для отмены нажмите кнопку "Назад"`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Сообщение об ошибке');
+    await ctx.answerCbQuery('❌ Ошибка загрузки формы');
+  }
+});
+
 // Обработчик для FAQ
 bot.action('support_faq', async (ctx) => {
   try {
@@ -11698,6 +11842,9 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'creating_promocode') {
           console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
           await handleAdminCreatePromocode(ctx, user, text);
+        } else if (user.adminState === 'reporting_bug') {
+          console.log(`🐛 Пользователь ${ctx.from.id} сообщает об ошибке: "${text}"`);
+          await handleBugReport(ctx, user, text);
         } else if (user.adminState === 'adding_reserve_mc') {
           console.log(`➕ Админ ${ctx.from.id} добавляет Magnum Coins в резерв: "${text}"`);
           await handleAdminAddReserveMC(ctx, user, text);
