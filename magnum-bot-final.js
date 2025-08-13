@@ -27,6 +27,28 @@ app.get('/', (req, res) => {
     res.json({ 
         status: 'ok', 
         message: 'Magnum Stars Bot is running',
+        timestamp: new Date().toISOString(),
+        webappUrl: '/webapp',
+        apiUrl: '/api/webapp/check-access'
+    });
+});
+
+// Тестовый маршрут для проверки статических файлов
+app.get('/test', (req, res) => {
+    const fs = require('fs');
+    const webappPath = path.join(__dirname, 'webapp');
+    const indexPath = path.join(webappPath, 'index.html');
+    const stylesPath = path.join(webappPath, 'styles.css');
+    const scriptPath = path.join(webappPath, 'script.js');
+    
+    res.json({
+        status: 'test',
+        webappPath: webappPath,
+        files: {
+            index: fs.existsSync(indexPath) ? 'found' : 'not found',
+            styles: fs.existsSync(stylesPath) ? 'found' : 'not found',
+            script: fs.existsSync(scriptPath) ? 'found' : 'not found'
+        },
         timestamp: new Date().toISOString()
     });
 });
