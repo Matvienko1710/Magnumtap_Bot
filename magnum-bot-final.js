@@ -12685,6 +12685,40 @@ async function handleWithdrawalMC(ctx, user, text) {
       { parse_mode: 'Markdown' }
     );
     
+    // Отправляем заявку в канал поддержки
+    if (config.WITHDRAWAL_CHANNEL) {
+      try {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+          ]
+        ]);
+        
+        await bot.telegram.sendMessage(
+          config.WITHDRAWAL_CHANNEL,
+          `🆕 *Новая заявка на вывод Magnum Coins*\n\n` +
+          `👤 *Пользователь:* ${user.firstName} (@${user.username || 'без username'})\n` +
+          `🆔 ID: \`${user.id}\`\n` +
+          `💰 *Сумма:* ${formatNumber(amount)} Magnum Coins\n` +
+          `💸 *Комиссия:* ${formatNumber(commission)} Magnum Coins\n` +
+          `📊 *К получению:* ${formatNumber(amountAfterCommission)} Magnum Coins\n` +
+          `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n` +
+          `🆔 *Номер заявки:* #${withdrawalRequest._id}\n\n` +
+          `🎯 Выберите действие:`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: keyboard.reply_markup
+          }
+        );
+        
+        log(`✅ Заявка на вывод MC отправлена в канал поддержки: ${config.WITHDRAWAL_CHANNEL}`);
+      } catch (error) {
+        logError(error, `Отправка заявки в канал поддержки ${config.WITHDRAWAL_CHANNEL}`);
+        console.log(`⚠️ Не удалось отправить заявку в канал: ${error.message}`);
+      }
+    }
+    
     // Уведомляем админов
     for (const adminId of config.ADMIN_IDS) {
       try {
@@ -12799,6 +12833,40 @@ async function handleWithdrawalStars(ctx, user, text) {
       { parse_mode: 'Markdown' }
     );
     
+    // Отправляем заявку в канал поддержки
+    if (config.WITHDRAWAL_CHANNEL) {
+      try {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+          ]
+        ]);
+        
+        await bot.telegram.sendMessage(
+          config.WITHDRAWAL_CHANNEL,
+          `🆕 *Новая заявка на вывод Stars*\n\n` +
+          `👤 *Пользователь:* ${user.firstName} (@${user.username || 'без username'})\n` +
+          `🆔 ID: \`${user.id}\`\n` +
+          `⭐ *Сумма:* ${formatNumber(amount)} Stars\n` +
+          `💸 *Комиссия:* ${formatNumber(commission)} Stars\n` +
+          `📊 *К получению:* ${formatNumber(amountAfterCommission)} Stars\n` +
+          `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n` +
+          `🆔 *Номер заявки:* #${withdrawalRequest._id}\n\n` +
+          `🎯 Выберите действие:`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: keyboard.reply_markup
+          }
+        );
+        
+        log(`✅ Заявка на вывод Stars отправлена в канал поддержки: ${config.WITHDRAWAL_CHANNEL}`);
+      } catch (error) {
+        logError(error, `Отправка заявки в канал поддержки ${config.WITHDRAWAL_CHANNEL}`);
+        console.log(`⚠️ Не удалось отправить заявку в канал: ${error.message}`);
+      }
+    }
+    
     // Уведомляем админов
     for (const adminId of config.ADMIN_IDS) {
       try {
@@ -12826,6 +12894,282 @@ async function handleWithdrawalStars(ctx, user, text) {
     await ctx.reply('❌ Произошла ошибка при создании заявки на вывод. Попробуйте позже.');
   }
 }
+
+// ==================== ОБРАБОТКА ЗАЯВОК НА ВЫВОД ====================
+bot.action(/^withdrawal_approve_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const requestId = ctx.match[1];
+    
+    // Получаем заявку из базы данных
+    const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
+    
+    if (!withdrawalRequest) {
+      await ctx.answerCbQuery('❌ Заявка не найдена');
+      return;
+    }
+    
+    if (withdrawalRequest.status !== 'pending') {
+      await ctx.answerCbQuery('❌ Заявка уже обработана');
+      return;
+    }
+    
+    // Обновляем статус заявки
+    await db.collection('withdrawalRequests').updateOne(
+      { _id: new ObjectId(requestId) },
+      { 
+        $set: { 
+          status: 'approved',
+          approvedBy: user.id,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Уведомляем пользователя
+    try {
+      await bot.telegram.sendMessage(
+        withdrawalRequest.userId,
+        `✅ *Заявка на вывод одобрена!*\n\n` +
+        `${withdrawalRequest.currency === 'magnum_coins' ? '💰' : '⭐'} *Детали заявки:*\n` +
+        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(withdrawalRequest.commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ К получению: ${formatNumber(withdrawalRequest.amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `└ Статус: ✅ Одобрено\n\n` +
+        `📅 *Дата одобрения:* ${new Date().toLocaleString('ru-RU')}\n` +
+        `🆔 *Номер заявки:* #${requestId}\n\n` +
+        `💡 Средства будут переведены в ближайшее время!`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      console.log(`⚠️ Не удалось уведомить пользователя ${withdrawalRequest.userId}: ${error.message}`);
+    }
+    
+    // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('✅ Одобрено', 'withdrawal_approved')]
+    ]);
+    
+    await ctx.editMessageText(
+      ctx.callbackQuery.message.text + '\n\n✅ *Одобрено администратором*',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    await ctx.answerCbQuery('✅ Заявка одобрена');
+    
+    log(`✅ Заявка на вывод ${requestId} одобрена администратором ${user.id}`);
+    
+  } catch (error) {
+    logError(error, 'Одобрение заявки на вывод');
+    await ctx.answerCbQuery('❌ Ошибка одобрения заявки');
+  }
+});
+
+bot.action(/^withdrawal_reject_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const requestId = ctx.match[1];
+    
+    // Получаем заявку из базы данных
+    const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
+    
+    if (!withdrawalRequest) {
+      await ctx.answerCbQuery('❌ Заявка не найдена');
+      return;
+    }
+    
+    if (withdrawalRequest.status !== 'pending') {
+      await ctx.answerCbQuery('❌ Заявка уже обработана');
+      return;
+    }
+    
+    // Показываем кнопки с причинами отклонения
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🚫 Недостаточно средств', `withdrawal_reject_reason_${requestId}_insufficient_funds`),
+        Markup.button.callback('🚫 Подозрительная активность', `withdrawal_reject_reason_${requestId}_suspicious_activity`)
+      ],
+      [
+        Markup.button.callback('🚫 Нарушение правил', `withdrawal_reject_reason_${requestId}_rules_violation`),
+        Markup.button.callback('🚫 Техническая ошибка', `withdrawal_reject_reason_${requestId}_technical_error`)
+      ],
+      [
+        Markup.button.callback('🚫 Другая причина', `withdrawal_reject_reason_${requestId}_other`),
+        Markup.button.callback('🔙 Назад', `withdrawal_reject_cancel_${requestId}`)
+      ]
+    ]);
+    
+    await ctx.editMessageText(
+      ctx.callbackQuery.message.text + '\n\n❌ *Выберите причину отклонения:*',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    await ctx.answerCbQuery('Выберите причину отклонения');
+    
+  } catch (error) {
+    logError(error, 'Отклонение заявки на вывод');
+    await ctx.answerCbQuery('❌ Ошибка отклонения заявки');
+  }
+});
+
+bot.action(/^withdrawal_reject_reason_(.+)_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const requestId = ctx.match[1];
+    const reason = ctx.match[2];
+    
+    // Получаем заявку из базы данных
+    const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
+    
+    if (!withdrawalRequest) {
+      await ctx.answerCbQuery('❌ Заявка не найдена');
+      return;
+    }
+    
+    if (withdrawalRequest.status !== 'pending') {
+      await ctx.answerCbQuery('❌ Заявка уже обработана');
+      return;
+    }
+    
+    // Определяем текст причины
+    const reasonTexts = {
+      'insufficient_funds': 'Недостаточно средств в резерве',
+      'suspicious_activity': 'Подозрительная активность',
+      'rules_violation': 'Нарушение правил использования',
+      'technical_error': 'Техническая ошибка',
+      'other': 'Другая причина'
+    };
+    
+    const reasonText = reasonTexts[reason] || 'Не указана';
+    
+    // Обновляем статус заявки
+    await db.collection('withdrawalRequests').updateOne(
+      { _id: new ObjectId(requestId) },
+      { 
+        $set: { 
+          status: 'rejected',
+          rejectedBy: user.id,
+          rejectedAt: new Date(),
+          rejectionReason: reasonText,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Возвращаем средства пользователю
+    const currencyField = withdrawalRequest.currency === 'magnum_coins' ? 'magnumCoins' : 'stars';
+    await db.collection('users').updateOne(
+      { id: withdrawalRequest.userId },
+      { 
+        $inc: { [currencyField]: withdrawalRequest.amount },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(withdrawalRequest.userId);
+    
+    // Уведомляем пользователя
+    try {
+      await bot.telegram.sendMessage(
+        withdrawalRequest.userId,
+        `❌ *Заявка на вывод отклонена*\n\n` +
+        `${withdrawalRequest.currency === 'magnum_coins' ? '💰' : '⭐'} *Детали заявки:*\n` +
+        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(withdrawalRequest.commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ К получению: ${formatNumber(withdrawalRequest.amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `└ Статус: ❌ Отклонено\n\n` +
+        `🚫 *Причина отклонения:* ${reasonText}\n` +
+        `📅 *Дата отклонения:* ${new Date().toLocaleString('ru-RU')}\n` +
+        `🆔 *Номер заявки:* #${requestId}\n\n` +
+        `💡 Средства возвращены на ваш баланс!`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      console.log(`⚠️ Не удалось уведомить пользователя ${withdrawalRequest.userId}: ${error.message}`);
+    }
+    
+    // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('❌ Отклонено', 'withdrawal_rejected')]
+    ]);
+    
+    await ctx.editMessageText(
+      ctx.callbackQuery.message.text + '\n\n❌ *Отклонено администратором*\n🚫 *Причина:* ' + reasonText,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    await ctx.answerCbQuery('❌ Заявка отклонена');
+    
+    log(`❌ Заявка на вывод ${requestId} отклонена администратором ${user.id}, причина: ${reasonText}`);
+    
+  } catch (error) {
+    logError(error, 'Отклонение заявки на вывод с причиной');
+    await ctx.answerCbQuery('❌ Ошибка отклонения заявки');
+  }
+});
+
+bot.action(/^withdrawal_reject_cancel_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const requestId = ctx.match[1];
+    
+    // Возвращаем к исходному сообщению с кнопками одобрения/отклонения
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Одобрить', `withdrawal_approve_${requestId}`),
+        Markup.button.callback('❌ Отклонить', `withdrawal_reject_${requestId}`)
+      ]
+    ]);
+    
+    // Убираем текст о выборе причины отклонения
+    const originalText = ctx.callbackQuery.message.text.replace('\n\n❌ *Выберите причину отклонения:*', '');
+    
+    await ctx.editMessageText(
+      originalText + '\n\n🎯 Выберите действие:',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    await ctx.answerCbQuery('Отменено');
+    
+  } catch (error) {
+    logError(error, 'Отмена отклонения заявки');
+    await ctx.answerCbQuery('❌ Ошибка отмены');
+  }
+});
 
 // Обработчики необработанных ошибок
 process.on('uncaughtException', (error) => {
