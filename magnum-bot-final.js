@@ -5223,7 +5223,8 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       return;
     }
     
-
+    // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     
     // Рассчитываем комиссию в Stars
     const commission = (starsAmount * config.EXCHANGE_COMMISSION) / 100;
