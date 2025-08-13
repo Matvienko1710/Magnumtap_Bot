@@ -12688,6 +12688,12 @@ async function handleWithdrawalMC(ctx, user, text) {
     // Отправляем заявку в канал поддержки
     if (config.WITHDRAWAL_CHANNEL) {
       try {
+        // Проверяем существование канала
+        const chat = await bot.telegram.getChat(config.WITHDRAWAL_CHANNEL);
+        if (!chat) {
+          throw new Error('Канал не найден');
+        }
+        
         const keyboard = Markup.inlineKeyboard([
           [
             Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
@@ -12716,12 +12722,22 @@ async function handleWithdrawalMC(ctx, user, text) {
       } catch (error) {
         logError(error, `Отправка заявки в канал поддержки ${config.WITHDRAWAL_CHANNEL}`);
         console.log(`⚠️ Не удалось отправить заявку в канал: ${error.message}`);
+        
+        // Если канал недоступен, отправляем только админам
+        console.log(`🔄 Отправляем заявку только админам из-за недоступности канала`);
       }
     }
     
     // Уведомляем админов
     for (const adminId of config.ADMIN_IDS) {
       try {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+          ]
+        ]);
+        
         await bot.telegram.sendMessage(
           adminId,
           `🆕 *Новая заявка на вывод Magnum Coins*\n\n` +
@@ -12731,8 +12747,12 @@ async function handleWithdrawalMC(ctx, user, text) {
           `💸 *Комиссия:* ${formatNumber(commission)} Magnum Coins\n` +
           `📊 *К получению:* ${formatNumber(amountAfterCommission)} Magnum Coins\n` +
           `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n` +
-          `🆔 *Номер заявки:* #${withdrawalRequest._id}`,
-          { parse_mode: 'Markdown' }
+          `🆔 *Номер заявки:* #${withdrawalRequest._id}\n\n` +
+          `🎯 Выберите действие:`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: keyboard.reply_markup
+          }
         );
       } catch (error) {
         console.log(`⚠️ Не удалось уведомить админа ${adminId}: ${error.message}`);
@@ -12836,6 +12856,12 @@ async function handleWithdrawalStars(ctx, user, text) {
     // Отправляем заявку в канал поддержки
     if (config.WITHDRAWAL_CHANNEL) {
       try {
+        // Проверяем существование канала
+        const chat = await bot.telegram.getChat(config.WITHDRAWAL_CHANNEL);
+        if (!chat) {
+          throw new Error('Канал не найден');
+        }
+        
         const keyboard = Markup.inlineKeyboard([
           [
             Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
@@ -12864,12 +12890,22 @@ async function handleWithdrawalStars(ctx, user, text) {
       } catch (error) {
         logError(error, `Отправка заявки в канал поддержки ${config.WITHDRAWAL_CHANNEL}`);
         console.log(`⚠️ Не удалось отправить заявку в канал: ${error.message}`);
+        
+        // Если канал недоступен, отправляем только админам
+        console.log(`🔄 Отправляем заявку только админам из-за недоступности канала`);
       }
     }
     
     // Уведомляем админов
     for (const adminId of config.ADMIN_IDS) {
       try {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+          ]
+        ]);
+        
         await bot.telegram.sendMessage(
           adminId,
           `🆕 *Новая заявка на вывод Stars*\n\n` +
@@ -12879,8 +12915,12 @@ async function handleWithdrawalStars(ctx, user, text) {
           `💸 *Комиссия:* ${formatNumber(commission)} Stars\n` +
           `📊 *К получению:* ${formatNumber(amountAfterCommission)} Stars\n` +
           `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n` +
-          `🆔 *Номер заявки:* #${withdrawalRequest._id}`,
-          { parse_mode: 'Markdown' }
+          `🆔 *Номер заявки:* #${withdrawalRequest._id}\n\n` +
+          `🎯 Выберите действие:`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: keyboard.reply_markup
+          }
         );
       } catch (error) {
         console.log(`⚠️ Не удалось уведомить админа ${adminId}: ${error.message}`);
