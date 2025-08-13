@@ -366,7 +366,6 @@ async function getRankProgress(user) {
   
   console.log(`🔍 Найден текущий ранг: ${currentRank.name} (${currentRank.level})`);
   console.log(`🔍 Следующий ранг: ${nextRank ? nextRank.name + ' (' + nextRank.level + ')' : 'Нет'}`);
-  
   // Если достигнут максимальный ранг
   if (!nextRank) {
     const result = {
@@ -403,7 +402,6 @@ async function getRankProgress(user) {
   const userProgress = level - currentRank.level;
   
   console.log(`🔍 Расчет прогресса: levelDifference=${levelDifference}, userProgress=${userProgress}`);
-  
   if (levelDifference <= 0) {
     console.error('Ошибка в расчете прогресса ранга: levelDifference <= 0', {
       currentRank,
@@ -2810,7 +2808,6 @@ async function showAdminForceLevelCheck(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка принудительной проверки уровня');
   }
 }
-
 // Функции обработки управления резервом
 async function handleAdminAddReserveMC(ctx, user, text) {
   try {
@@ -7763,6 +7760,7 @@ bot.action('admin_debug_ranks', async (ctx) => {
   }
 });
 
+<<<<<<< HEAD
 bot.action('admin_test_progress', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7793,6 +7791,8 @@ bot.action('admin_force_level_check', async (ctx) => {
   }
 });
 
+=======
+>>>>>>> origin/main
 bot.action('admin_reserve_add_mc', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
