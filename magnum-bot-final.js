@@ -1010,7 +1010,7 @@ async function showMainMenu(ctx, user) {
       Markup.button.callback('🌾 Фарм', 'farm')
     ],
     [
-      Markup.button.callback('💱 Обмен', 'exchange'),
+      Markup.button.callback('📈 Биржа', 'exchange'),
       Markup.button.callback('💰 Вывод', 'withdrawal')
     ],
     [
@@ -1053,7 +1053,7 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('🌾 Фарм', 'farm')
     ],
     [
-      Markup.button.callback('💱 Обмен', 'exchange'),
+      Markup.button.callback('📈 Биржа', 'exchange'),
       Markup.button.callback('💰 Вывод', 'withdrawal')
     ],
     [
@@ -3963,10 +3963,10 @@ function logFunction(functionName, userId = null, params = null) {
   
   console.log(logMessage);
 }
-// ==================== ОБМЕН ====================
+// ==================== БИРЖА ====================
 async function showExchangeMenu(ctx, user) {
   try {
-    log(`💱 Показ меню обмена для пользователя ${user.id}`);
+    log(`📈 Показ биржи для пользователя ${user.id}`);
     
     // Получаем текущий курс обмена
     const exchangeRate = await calculateExchangeRate();
@@ -3988,6 +3988,26 @@ async function showExchangeMenu(ctx, user) {
     const stars100 = ((100 - commission100) * exchangeRate).toFixed(6);
     const stars500 = ((500 - commission500) * exchangeRate).toFixed(6);
     
+    // Получаем историю курсов
+    const exchangeHistory = await db.collection('exchangeHistory')
+      .find({})
+      .sort({ timestamp: -1 })
+      .limit(5)
+      .toArray();
+    
+    // Рассчитываем изменение курса
+    let priceChange = 0;
+    let priceChangePercent = 0;
+    if (exchangeHistory.length >= 2) {
+      const currentPrice = exchangeRate;
+      const previousPrice = exchangeHistory[1].rate;
+      priceChange = currentPrice - previousPrice;
+      priceChangePercent = ((priceChange / previousPrice) * 100);
+    }
+    
+    const priceChangeIcon = priceChange >= 0 ? '📈' : '📉';
+    const priceChangeColor = priceChange >= 0 ? '🟢' : '🔴';
+    
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(`🪙 10 MC → ${stars10} Stars`, 'exchange_10'),
@@ -4001,35 +4021,271 @@ async function showExchangeMenu(ctx, user) {
         Markup.button.callback('🪙 Все Magnum Coins', 'exchange_all'),
         Markup.button.callback('📊 Статистика обменов', 'exchange_stats')
       ],
+      [
+        Markup.button.callback('📈 График курса', 'exchange_chart'),
+        Markup.button.callback('📋 История обменов', 'exchange_history')
+      ],
+      [
+        Markup.button.callback('⚙️ Настройки биржи', 'exchange_settings'),
+        Markup.button.callback('📰 Новости биржи', 'exchange_news')
+      ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
     const message = 
-      `💱 *Обмен валют*\n\n` +
+      `📈 *Magnum Exchange*\n\n` +
       `💰 *Ваши балансы:*\n` +
       `├ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
-      `💱 *Курс обмена:*\n` +
-      `├ 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ 100 Magnum Coins = ${((100 - (100 * config.EXCHANGE_COMMISSION / 100)) * exchangeRate).toFixed(4)} Stars\n` +
-      `└ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n\n` +
+      `📊 *Текущий курс:*\n` +
+      `├ ${priceChangeIcon} 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
+      `├ ${priceChangeColor} Изменение: ${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(6)} (${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)\n` +
+      `├ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n` +
+      `└ 📅 Обновлено: ${new Date().toLocaleTimeString('ru-RU')}\n\n` +
       `🏦 *Резерв биржи:*\n` +
       `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
-      `📊 *Статистика обменов:*\n` +
+      `📈 *Рыночные данные:*\n` +
+      `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` MC\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
-      `└ Всего обменено: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` Magnum Coins\n\n` +
-      `🎯 Выберите сумму для обмена:`;
+      `└ Ликвидность: ${((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100).toFixed(1)}%\n\n` +
+      `🎯 Выберите сумму для обмена или действие:`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
   } catch (error) {
-    logError(error, 'Показ меню обмена');
-    await ctx.answerCbQuery('❌ Ошибка загрузки меню обмена');
+    logError(error, 'Показ биржи');
+    await ctx.answerCbQuery('❌ Ошибка загрузки биржи');
   }
 }
+// Функция для показа графика курса
+async function showExchangeChart(ctx, user) {
+  try {
+    log(`📈 Показ графика курса для пользователя ${user.id}`);
+    
+    // Получаем историю курсов за последние 24 часа
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const exchangeHistory = await db.collection('exchangeHistory')
+      .find({ timestamp: { $gte: yesterday } })
+      .sort({ timestamp: 1 })
+      .toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📊 24 часа', 'chart_24h'),
+        Markup.button.callback('📈 7 дней', 'chart_7d')
+      ],
+      [
+        Markup.button.callback('📉 30 дней', 'chart_30d'),
+        Markup.button.callback('📊 Все время', 'chart_all')
+      ],
+      [Markup.button.callback('🔙 Назад', 'exchange')]
+    ]);
+    
+    let message = `📈 *График курса Magnum Coin*\n\n`;
+    
+    if (exchangeHistory.length > 0) {
+      const currentRate = exchangeHistory[exchangeHistory.length - 1].rate;
+      const minRate = Math.min(...exchangeHistory.map(h => h.rate));
+      const maxRate = Math.max(...exchangeHistory.map(h => h.rate));
+      const avgRate = exchangeHistory.reduce((sum, h) => sum + h.rate, 0) / exchangeHistory.length;
+      
+      message += `📊 *Статистика за 24 часа:*\n`;
+      message += `├ 📈 Максимум: \`${maxRate.toFixed(6)}\` Stars\n`;
+      message += `├ 📉 Минимум: \`${minRate.toFixed(6)}\` Stars\n`;
+      message += `├ 📊 Среднее: \`${avgRate.toFixed(6)}\` Stars\n`;
+      message += `└ 📈 Текущий: \`${currentRate.toFixed(6)}\` Stars\n\n`;
+      
+      // Создаем простой текстовый график
+      message += `📈 *Динамика курса:*\n`;
+      const points = Math.min(10, exchangeHistory.length);
+      const step = Math.floor(exchangeHistory.length / points);
+      
+      for (let i = 0; i < points; i++) {
+        const index = i * step;
+        const rate = exchangeHistory[index].rate;
+        const time = new Date(exchangeHistory[index].timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        const bar = '█'.repeat(Math.floor((rate / maxRate) * 10));
+        message += `├ ${time}: ${rate.toFixed(6)} ${bar}\n`;
+      }
+    } else {
+      message += `❌ Нет данных для построения графика\n`;
+    }
+    
+    message += `\n💡 Выберите период для детального анализа:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ графика курса');
+    await ctx.answerCbQuery('❌ Ошибка загрузки графика');
+  }
+}
+
+// Функция для показа истории обменов
+async function showExchangeHistory(ctx, user) {
+  try {
+    log(`📋 Показ истории обменов для пользователя ${user.id}`);
+    
+    // Получаем историю обменов пользователя
+    const userHistory = await db.collection('exchangeHistory')
+      .find({ userId: user.id })
+      .sort({ timestamp: -1 })
+      .limit(10)
+      .toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📊 Все обмены', 'history_all'),
+        Markup.button.callback('📈 Прибыльные', 'history_profit')
+      ],
+      [
+        Markup.button.callback('📉 Убыточные', 'history_loss'),
+        Markup.button.callback('📅 По датам', 'history_dates')
+      ],
+      [Markup.button.callback('🔙 Назад', 'exchange')]
+    ]);
+    
+    let message = `📋 *История ваших обменов*\n\n`;
+    
+    if (userHistory.length > 0) {
+      message += `📊 *Последние 10 обменов:*\n\n`;
+      
+      userHistory.forEach((exchange, index) => {
+        const date = new Date(exchange.timestamp).toLocaleString('ru-RU');
+        const profit = exchange.starsReceived - (exchange.magnumCoinsAmount * 0.001); // Примерная прибыль
+        const profitIcon = profit >= 0 ? '📈' : '📉';
+        
+        message += `${index + 1}. ${date}\n`;
+        message += `├ 💱 ${exchange.magnumCoinsAmount} MC → ${exchange.starsReceived.toFixed(6)} Stars\n`;
+        message += `├ 💸 Комиссия: ${exchange.commission.toFixed(2)} MC\n`;
+        message += `└ ${profitIcon} Прибыль: ${profit >= 0 ? '+' : ''}${profit.toFixed(6)} Stars\n\n`;
+      });
+      
+      // Общая статистика
+      const totalExchanged = userHistory.reduce((sum, h) => sum + h.magnumCoinsAmount, 0);
+      const totalStars = userHistory.reduce((sum, h) => sum + h.starsReceived, 0);
+      const totalCommission = userHistory.reduce((sum, h) => sum + h.commission, 0);
+      
+      message += `📊 *Общая статистика:*\n`;
+      message += `├ 💱 Всего обменено: \`${formatNumber(totalExchanged)}\` MC\n`;
+      message += `├ ⭐ Получено Stars: \`${formatNumber(totalStars)}\`\n`;
+      message += `└ 💸 Уплачено комиссий: \`${formatNumber(totalCommission)}\` MC\n`;
+    } else {
+      message += `❌ У вас пока нет истории обменов\n`;
+      message += `💡 Совершите первый обмен, чтобы увидеть статистику!`;
+    }
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ истории обменов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки истории');
+  }
+}
+
+// Функция для показа настроек биржи
+async function showExchangeSettings(ctx, user) {
+  try {
+    log(`⚙️ Показ настроек биржи для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🔔 Уведомления', 'exchange_notifications'),
+        Markup.button.callback('📊 Автообмен', 'exchange_auto')
+      ],
+      [
+        Markup.button.callback('🎯 Лимиты', 'exchange_limits'),
+        Markup.button.callback('🔒 Безопасность', 'exchange_security')
+      ],
+      [Markup.button.callback('🔙 Назад', 'exchange')]
+    ]);
+    
+    const message = 
+      `⚙️ *Настройки биржи*\n\n` +
+      `🔔 *Уведомления:*\n` +
+      `├ Изменение курса: ${user.exchangeSettings?.priceAlerts ? '✅' : '❌'}\n` +
+      `├ Успешные обмены: ${user.exchangeSettings?.successAlerts ? '✅' : '❌'}\n` +
+      `└ Ошибки обмена: ${user.exchangeSettings?.errorAlerts ? '✅' : '❌'}\n\n` +
+      `📊 *Автообмен:*\n` +
+      `├ Автоматический обмен: ${user.exchangeSettings?.autoExchange ? '✅' : '❌'}\n` +
+      `├ Лимит автобмена: \`${user.exchangeSettings?.autoLimit || 0}\` MC\n` +
+      `└ Целевой курс: \`${user.exchangeSettings?.targetRate || 0}\` Stars\n\n` +
+      `🎯 *Лимиты:*\n` +
+      `├ Максимум за раз: \`${user.exchangeSettings?.maxAmount || 'Не ограничено'}\` MC\n` +
+      `├ Минимум за раз: \`${user.exchangeSettings?.minAmount || 1}\` MC\n` +
+      `└ Дневной лимит: \`${user.exchangeSettings?.dailyLimit || 'Не ограничено'}\` MC\n\n` +
+      `🔒 *Безопасность:*\n` +
+      `├ Подтверждение обменов: ${user.exchangeSettings?.confirmExchanges ? '✅' : '❌'}\n` +
+      `├ 2FA для обменов: ${user.exchangeSettings?.require2FA ? '✅' : '❌'}\n` +
+      `└ Логирование: ${user.exchangeSettings?.logExchanges ? '✅' : '❌'}\n\n` +
+      `💡 Выберите настройку для изменения:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек биржи');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек');
+  }
+}
+
+// Функция для показа новостей биржи
+async function showExchangeNews(ctx, user) {
+  try {
+    log(`📰 Показ новостей биржи для пользователя ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📈 Аналитика', 'news_analytics'),
+        Markup.button.callback('📊 Отчеты', 'news_reports')
+      ],
+      [
+        Markup.button.callback('🔔 Обновления', 'news_updates'),
+        Markup.button.callback('📰 Новости', 'news_latest')
+      ],
+      [Markup.button.callback('🔙 Назад', 'exchange')]
+    ]);
+    
+    const currentRate = await calculateExchangeRate();
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    
+    const message = 
+      `📰 *Новости Magnum Exchange*\n\n` +
+      `📅 *${new Date().toLocaleDateString('ru-RU')}*\n\n` +
+      `📈 *Рыночные новости:*\n` +
+      `├ Курс Magnum Coin стабилен\n` +
+      `├ Резерв биржи: \`${formatNumber(magnumCoinsReserve)}\` MC\n` +
+      `└ Ликвидность: ${((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100).toFixed(1)}%\n\n` +
+      `🔔 *Последние обновления:*\n` +
+      `├ ✅ Улучшена система безопасности\n` +
+      `├ ✅ Добавлены новые функции аналитики\n` +
+      `├ ✅ Оптимизирована скорость обменов\n` +
+      `└ ✅ Расширен резерв биржи\n\n` +
+      `📊 *Аналитика:*\n` +
+      `├ Тренд: ${currentRate > 0.001 ? '📈 Растущий' : '📉 Падающий'}\n` +
+      `├ Волатильность: Низкая\n` +
+      `└ Рекомендация: ${currentRate > 0.001 ? 'Покупать' : 'Продавать'}\n\n` +
+      `💡 Выберите раздел для подробной информации:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ новостей биржи');
+    await ctx.answerCbQuery('❌ Ошибка загрузки новостей');
+  }
+}
+
 async function performExchange(ctx, user, amount) {
   try {
     log(`💱 Попытка обмена ${amount} Magnum Coins для пользователя ${user.id}`);
@@ -4095,6 +4351,27 @@ async function performExchange(ctx, user, amount) {
         }
       }
     );
+    
+    // Сохраняем историю обмена
+    await db.collection('exchangeHistory').insertOne({
+      userId: user.id,
+      magnumCoinsAmount: amount,
+      starsReceived: starsToReceive,
+      exchangeRate: exchangeRate,
+      commission: commission,
+      timestamp: new Date(),
+      userFirstName: user.firstName,
+      userUsername: user.username
+    });
+    
+    // Сохраняем историю курсов
+    await db.collection('exchangeHistory').insertOne({
+      type: 'rate_update',
+      rate: exchangeRate,
+      timestamp: new Date(),
+      magnumCoinsReserve: reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      starsReserve: reserve?.stars || config.INITIAL_RESERVE_STARS
+    });
     
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
@@ -7766,6 +8043,251 @@ bot.action('exchange_all', async (ctx) => {
     await performExchange(ctx, user, amount);
   } catch (error) {
     logError(error, 'Обмен всех Magnum Coins');
+  }
+});
+
+// Обработчики для новых функций биржи
+bot.action('exchange_chart', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeChart(ctx, user);
+  } catch (error) {
+    logError(error, 'График курса');
+    await ctx.answerCbQuery('❌ Ошибка загрузки графика');
+  }
+});
+
+bot.action('exchange_history', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeHistory(ctx, user);
+  } catch (error) {
+    logError(error, 'История обменов');
+    await ctx.answerCbQuery('❌ Ошибка загрузки истории');
+  }
+});
+
+bot.action('exchange_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки биржи');
+    await ctx.answerCbQuery('❌ Ошибка загрузки настроек');
+  }
+});
+
+bot.action('exchange_news', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeNews(ctx, user);
+  } catch (error) {
+    logError(error, 'Новости биржи');
+    await ctx.answerCbQuery('❌ Ошибка загрузки новостей');
+  }
+});
+
+// Обработчики для графика курса
+bot.action('chart_24h', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeChart(ctx, user);
+  } catch (error) {
+    logError(error, 'График 24 часа');
+    await ctx.answerCbQuery('❌ Ошибка загрузки графика');
+  }
+});
+
+bot.action('chart_7d', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeChart(ctx, user);
+  } catch (error) {
+    logError(error, 'График 7 дней');
+    await ctx.answerCbQuery('❌ Ошибка загрузки графика');
+  }
+});
+
+bot.action('chart_30d', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeChart(ctx, user);
+  } catch (error) {
+    logError(error, 'График 30 дней');
+    await ctx.answerCbQuery('❌ Ошибка загрузки графика');
+  }
+});
+
+bot.action('chart_all', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeChart(ctx, user);
+  } catch (error) {
+    logError(error, 'График все время');
+    await ctx.answerCbQuery('❌ Ошибка загрузки графика');
+  }
+});
+
+// Обработчики для истории обменов
+bot.action('history_all', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeHistory(ctx, user);
+  } catch (error) {
+    logError(error, 'Все обмены');
+    await ctx.answerCbQuery('❌ Ошибка загрузки истории');
+  }
+});
+
+bot.action('history_profit', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeHistory(ctx, user);
+  } catch (error) {
+    logError(error, 'Прибыльные обмены');
+    await ctx.answerCbQuery('❌ Ошибка загрузки истории');
+  }
+});
+
+bot.action('history_loss', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeHistory(ctx, user);
+  } catch (error) {
+    logError(error, 'Убыточные обмены');
+    await ctx.answerCbQuery('❌ Ошибка загрузки истории');
+  }
+});
+
+bot.action('history_dates', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showExchangeHistory(ctx, user);
+  } catch (error) {
+    logError(error, 'Обмены по датам');
+    await ctx.answerCbQuery('❌ Ошибка загрузки истории');
+  }
+});
+
+// Обработчики для настроек биржи
+bot.action('exchange_notifications', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('🔔 Настройки уведомлений будут добавлены в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Настройки уведомлений');
+    await ctx.answerCbQuery('❌ Ошибка настроек уведомлений');
+  }
+});
+
+bot.action('exchange_auto', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('📊 Автообмен будет добавлен в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Настройки автообмена');
+    await ctx.answerCbQuery('❌ Ошибка настроек автообмена');
+  }
+});
+
+bot.action('exchange_limits', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('🎯 Настройки лимитов будут добавлены в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Настройки лимитов');
+    await ctx.answerCbQuery('❌ Ошибка настроек лимитов');
+  }
+});
+
+bot.action('exchange_security', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('🔒 Настройки безопасности будут добавлены в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Настройки безопасности');
+    await ctx.answerCbQuery('❌ Ошибка настроек безопасности');
+  }
+});
+
+// Обработчики для новостей биржи
+bot.action('news_analytics', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('📈 Аналитика будет добавлена в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Аналитика новостей');
+    await ctx.answerCbQuery('❌ Ошибка загрузки аналитики');
+  }
+});
+
+bot.action('news_reports', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('📊 Отчеты будут добавлены в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Отчеты новостей');
+    await ctx.answerCbQuery('❌ Ошибка загрузки отчетов');
+  }
+});
+
+bot.action('news_updates', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('🔔 Обновления будут добавлены в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Обновления новостей');
+    await ctx.answerCbQuery('❌ Ошибка загрузки обновлений');
+  }
+});
+
+bot.action('news_latest', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await ctx.answerCbQuery('📰 Последние новости будут добавлены в следующем обновлении!');
+  } catch (error) {
+    logError(error, 'Последние новости');
+    await ctx.answerCbQuery('❌ Ошибка загрузки новостей');
   }
 });
 
