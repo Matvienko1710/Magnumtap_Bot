@@ -177,31 +177,30 @@ app.get('/api/webapp/user-data', async (req, res) => {
             return res.status(400).json({ error: 'User ID required' });
         }
 
-        const user = await getUser(parseInt(userId));
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
         console.log(`📥 WebApp загрузка данных для пользователя ${userId}`);
 
-        res.json({
-            success: true,
-            data: {
-                magnumCoins: user.magnumCoins || 0,
-                stars: user.stars || 0,
-                level: user.level || 1,
-                experience: user.experience || 0,
-                clickCount: user.clickCount || 0,
-                upgrades: user.upgrades || {
+        // Сначала пробуем найти в коллекции webappUsers
+        let webappUser = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+        
+        if (!webappUser) {
+            // Если нет в webappUsers, создаем нового пользователя
+            webappUser = {
+                userId: parseInt(userId),
+                magnumCoins: 1000, // Начальный бонус
+                stars: 0,
+                level: 1,
+                experience: 0,
+                clickCount: 0,
+                upgrades: {
                     autoClicker: { level: 0, cost: 10, baseCost: 10, multiplier: 1.5 },
                     clickPower: { level: 0, cost: 25, baseCost: 25, multiplier: 2 },
                     starGenerator: { level: 0, cost: 50, baseCost: 50, multiplier: 2.5 }
                 },
-                minerUpgrades: user.minerUpgrades || {
+                minerUpgrades: {
                     efficiency: { level: 0, cost: 100, baseCost: 100, multiplier: 2 },
                     capacity: { level: 0, cost: 200, baseCost: 200, multiplier: 2.5 }
                 },
-                tasks: user.tasks || {
+                tasks: {
                     daily: [
                         { id: 'click_100', name: 'Кликер', description: 'Сделайте 100 кликов', target: 100, progress: 0, reward: 50, completed: false },
                         { id: 'earn_1000', name: 'Заработок', description: 'Заработайте 1000 MC', target: 1000, progress: 0, reward: 100, completed: false },
@@ -213,7 +212,50 @@ app.get('/api/webapp/user-data', async (req, res) => {
                         { id: 'click_master', name: 'Мастер кликов', description: 'Сделайте 1000 кликов', target: 1000, progress: 0, reward: 200, completed: false }
                     ]
                 },
-                settings: user.settings || {
+                settings: {
+                    notifications: true,
+                    sound: true,
+                    autoSave: true
+                },
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
+            
+            // Сохраняем нового пользователя
+            await db.collection('webappUsers').insertOne(webappUser);
+            console.log(`🆕 Создан новый WebApp пользователь: ${userId}`);
+        }
+
+        res.json({
+            success: true,
+            data: {
+                magnumCoins: webappUser.magnumCoins || 0,
+                stars: webappUser.stars || 0,
+                level: webappUser.level || 1,
+                experience: webappUser.experience || 0,
+                clickCount: webappUser.clickCount || 0,
+                upgrades: webappUser.upgrades || {
+                    autoClicker: { level: 0, cost: 10, baseCost: 10, multiplier: 1.5 },
+                    clickPower: { level: 0, cost: 25, baseCost: 25, multiplier: 2 },
+                    starGenerator: { level: 0, cost: 50, baseCost: 50, multiplier: 2.5 }
+                },
+                minerUpgrades: webappUser.minerUpgrades || {
+                    efficiency: { level: 0, cost: 100, baseCost: 100, multiplier: 2 },
+                    capacity: { level: 0, cost: 200, baseCost: 200, multiplier: 2.5 }
+                },
+                tasks: webappUser.tasks || {
+                    daily: [
+                        { id: 'click_100', name: 'Кликер', description: 'Сделайте 100 кликов', target: 100, progress: 0, reward: 50, completed: false },
+                        { id: 'earn_1000', name: 'Заработок', description: 'Заработайте 1000 MC', target: 1000, progress: 0, reward: 100, completed: false },
+                        { id: 'farm_5', name: 'Фармер', description: 'Используйте фарм 5 раз', target: 5, progress: 0, reward: 75, completed: false }
+                    ],
+                    achievements: [
+                        { id: 'first_click', name: 'Первый клик', description: 'Сделайте первый клик', target: 1, progress: 0, reward: 25, completed: false },
+                        { id: 'rich_player', name: 'Богач', description: 'Накопите 10000 MC', target: 10000, progress: 0, reward: 500, completed: false },
+                        { id: 'click_master', name: 'Мастер кликов', description: 'Сделайте 1000 кликов', target: 1000, progress: 0, reward: 200, completed: false }
+                    ]
+                },
+                settings: webappUser.settings || {
                     notifications: true,
                     sound: true,
                     autoSave: true
@@ -235,10 +277,13 @@ app.post('/api/webapp/update-data', async (req, res) => {
             return res.status(400).json({ error: 'User ID required' });
         }
 
-        const user = await getUser(parseInt(userId));
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+        console.log(`📤 WebApp обновление данных для пользователя ${userId}:`, {
+            magnumCoins, stars, level, experience, clickCount,
+            upgrades: upgrades ? 'present' : 'not present',
+            minerUpgrades: minerUpgrades ? 'present' : 'not present',
+            tasks: tasks ? 'present' : 'not present',
+            settings: settings ? 'present' : 'not present'
+        });
 
         // Подготавливаем данные для обновления
         const updateData = {
@@ -272,16 +317,14 @@ app.post('/api/webapp/update-data', async (req, res) => {
             updateData.settings = settings;
         }
 
-        console.log(`📤 WebApp обновление данных для пользователя ${userId}:`, updateData);
-
-        // Обновляем данные пользователя
-        await db.collection('users').updateOne(
-            { id: parseInt(userId) },
-            { $set: updateData }
+        // Обновляем данные в коллекции webappUsers
+        const result = await db.collection('webappUsers').updateOne(
+            { userId: parseInt(userId) },
+            { $set: updateData },
+            { upsert: true } // Создаем документ если не существует
         );
 
-        // Очищаем кеш
-        userCache.delete(parseInt(userId));
+        console.log(`✅ WebApp данные обновлены для пользователя ${userId}, результат:`, result);
 
         res.json({ success: true, message: 'Data updated successfully' });
     } catch (error) {
@@ -442,6 +485,12 @@ async function connectDB() {
         throw error;
       }
     }
+    
+    // Создаем индексы для коллекции webappUsers
+    console.log('📋 Создание индексов для коллекции webappUsers...');
+    await db.collection('webappUsers').createIndex({ userId: 1 }, { unique: true });
+    await db.collection('webappUsers').createIndex({ updatedAt: -1 });
+    console.log('✅ Индексы для webappUsers созданы');
     console.log('✅ Все индексы созданы успешно');
     console.log('✅ База данных подключена');
     console.log('💰 Инициализация резерва...');
