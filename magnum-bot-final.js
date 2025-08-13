@@ -1111,12 +1111,12 @@ async function showRoadmap(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🚀 Q4 2024', 'roadmap_q4_2024'),
-        Markup.button.callback('🎯 Q1 2025', 'roadmap_q1_2025')
+        Markup.button.callback('🚀 Q4 2025', 'roadmap_q4_2025'),
+        Markup.button.callback('🎯 Q1 2026', 'roadmap_q1_2026')
       ],
       [
-        Markup.button.callback('🌟 Q2 2025', 'roadmap_q2_2025'),
-        Markup.button.callback('🔥 Q3 2025', 'roadmap_q3_2025')
+        Markup.button.callback('🌟 Q2 2026', 'roadmap_q2_2026'),
+        Markup.button.callback('🔥 Q3 2026', 'roadmap_q3_2026')
       ],
       [
         Markup.button.callback('📊 Голосование', 'roadmap_vote'),
@@ -1129,12 +1129,12 @@ async function showRoadmap(ctx, user) {
       `🗺️ *Роадмап развития Magnum Stars Bot*\n\n` +
       `🌟 *Добро пожаловать в будущее нашего бота!*\n\n` +
       `🔬 *Текущий статус: Beta-версия*\n` +
-      `📅 *Дата запуска: 28 августа 2024*\n\n` +
+      `📅 *Дата запуска: 28 августа 2025*\n\n` +
       `📅 *Планы развития:*\n` +
-      `├ 🚀 Q4 2024 - Основные функции\n` +
-      `├ 🎯 Q1 2025 - Социальные функции\n` +
-      `├ 🌟 Q2 2025 - Игровые механики\n` +
-      `└ 🔥 Q3 2025 - Инновации\n\n` +
+      `├ 🚀 Q4 2025 - Основные функции\n` +
+      `├ 🎯 Q1 2026 - Социальные функции\n` +
+      `├ 🌟 Q2 2026 - Игровые механики\n` +
+      `└ 🔥 Q3 2026 - Инновации\n\n` +
       `🎮 *Что нас ждет:*\n` +
       `├ 🏰 Система гильдий\n` +
       `├ ⚔️ PvP сражения\n` +
@@ -1145,7 +1145,7 @@ async function showRoadmap(ctx, user) {
       `├ 🌍 Метавселенная\n` +
       `└ 💎 NFT интеграция\n\n` +
       `📱 *WebApp интеграция:*\n` +
-      `└ Сентябрь - Ноябрь 2024\n\n` +
+      `└ Сентябрь - Ноябрь 2025\n\n` +
       `💡 *Ваше мнение важно!*\n` +
       `├ 📊 Голосуйте за функции\n` +
       `└ 💡 Предлагайте идеи\n\n` +
@@ -1164,15 +1164,15 @@ async function showRoadmap(ctx, user) {
 }
 
 // ==================== ДЕТАЛЬНЫЕ РОАДМАПЫ ====================
-async function showRoadmapQ4_2024(ctx, user) {
+async function showRoadmapQ4_2025(ctx, user) {
   try {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
     const message = 
-      `🚀 *Q4 2024 - Основные функции*\n\n` +
-      `📅 *Август - Декабрь 2024*\n\n` +
+      `🚀 *Q4 2025 - Основные функции*\n\n` +
+      `📅 *Август - Декабрь 2025*\n\n` +
       `✅ *Завершено:*\n` +
       `├ 🌾 Система фарминга\n` +
       `├ 📈 Биржа Magnum Exchange\n` +
@@ -1193,7 +1193,7 @@ async function showRoadmapQ4_2024(ctx, user) {
       `├ 📱 Мобильная оптимизация\n` +
       `└ 🖥️ Десктопная версия\n\n` +
       `📈 *Прогресс: 85%*\n` +
-      `🎯 *Запуск: 28 августа 2024*`;
+      `🎯 *Запуск: 28 августа 2025*`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -1204,15 +1204,15 @@ async function showRoadmapQ4_2024(ctx, user) {
   }
 }
 
-async function showRoadmapQ1_2025(ctx, user) {
+async function showRoadmapQ1_2026(ctx, user) {
   try {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
     const message = 
-      `🎯 *Q1 2025 - Социальные функции*\n\n` +
-      `📅 *Январь - Март 2025*\n\n` +
+      `🎯 *Q1 2026 - Социальные функции*\n\n` +
+      `📅 *Январь - Март 2026*\n\n` +
       `🏰 *Система гильдий:*\n` +
       `├ Создание и управление гильдиями\n` +
       `├ Общий банк гильдии\n` +
@@ -1243,15 +1243,15 @@ async function showRoadmapQ1_2025(ctx, user) {
   }
 }
 
-async function showRoadmapQ2_2025(ctx, user) {
+async function showRoadmapQ2_2026(ctx, user) {
   try {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
     const message = 
-      `🌟 *Q2 2025 - Игровые механики*\n\n` +
-      `📅 *Апрель - Июнь 2025*\n\n` +
+      `🌟 *Q2 2026 - Игровые механики*\n\n` +
+      `📅 *Апрель - Июнь 2026*\n\n` +
       `⚔️ *PvP система:*\n` +
       `├ Дуэли между игроками\n` +
       `├ Турниры с призовыми фондами\n` +
@@ -1282,15 +1282,15 @@ async function showRoadmapQ2_2025(ctx, user) {
   }
 }
 
-async function showRoadmapQ3_2025(ctx, user) {
+async function showRoadmapQ3_2026(ctx, user) {
   try {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
     const message = 
-      `🔥 *Q3 2025 - Инновации*\n\n` +
-      `📅 *Июль - Сентябрь 2025*\n\n` +
+      `🔥 *Q3 2026 - Инновации*\n\n` +
+      `📅 *Июль - Сентябрь 2026*\n\n` +
       `🌍 *Метавселенная:*\n` +
       `├ Виртуальные миры\n` +
       `├ 3D аватары\n` +
@@ -8317,47 +8317,47 @@ bot.action('roadmap', async (ctx) => {
   }
 });
 
-bot.action('roadmap_q4_2024', async (ctx) => {
+bot.action('roadmap_q4_2025', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showRoadmapQ4_2024(ctx, user);
+    await showRoadmapQ4_2025(ctx, user);
   } catch (error) {
-    logError(error, 'Роадмап Q4 2024 (обработчик)');
+    logError(error, 'Роадмап Q4 2025 (обработчик)');
   }
 });
 
-bot.action('roadmap_q1_2025', async (ctx) => {
+bot.action('roadmap_q1_2026', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showRoadmapQ1_2025(ctx, user);
+    await showRoadmapQ1_2026(ctx, user);
   } catch (error) {
-    logError(error, 'Роадмап Q1 2025 (обработчик)');
+    logError(error, 'Роадмап Q1 2026 (обработчик)');
   }
 });
 
-bot.action('roadmap_q2_2025', async (ctx) => {
+bot.action('roadmap_q2_2026', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showRoadmapQ2_2025(ctx, user);
+    await showRoadmapQ2_2026(ctx, user);
   } catch (error) {
-    logError(error, 'Роадмап Q2 2025 (обработчик)');
+    logError(error, 'Роадмап Q2 2026 (обработчик)');
   }
 });
 
-bot.action('roadmap_q3_2025', async (ctx) => {
+bot.action('roadmap_q3_2026', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showRoadmapQ3_2025(ctx, user);
+    await showRoadmapQ3_2026(ctx, user);
   } catch (error) {
-    logError(error, 'Роадмап Q3 2025 (обработчик)');
+    logError(error, 'Роадмап Q3 2026 (обработчик)');
   }
 });
 
