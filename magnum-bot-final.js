@@ -4651,6 +4651,18 @@ function logFunction(functionName, userId = null, params = null) {
   console.log(logMessage);
 }
 // ==================== БИРЖА ====================
+// Функция для получения лимита обмена по рангу
+function getExchangeLimitByRank(userLevel) {
+  if (userLevel >= 100) return 10000; // Император
+  if (userLevel >= 75) return 5000;   // Легенда
+  if (userLevel >= 50) return 2500;   // Герой
+  if (userLevel >= 35) return 1000;   // Воин
+  if (userLevel >= 20) return 500;    // Рыцарь
+  if (userLevel >= 10) return 250;    // Лучник
+  if (userLevel >= 5) return 100;     // Боец
+  return 50; // Новичок
+}
+
 async function showExchangeMenu(ctx, user) {
   try {
     log(`📈 Показ биржи для пользователя ${user.id}`);
@@ -4708,7 +4720,14 @@ async function showExchangeMenu(ctx, user) {
       return `${changeSign}${change.toFixed(6)} (${percentSign}${percent.toFixed(2)}%)`;
     };
     
+    // Получаем лимит обмена по рангу
+    const exchangeLimit = getExchangeLimitByRank(user.level);
+    
     const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🪙 Ввести сумму MC → Stars', 'exchange_custom_mc'),
+        Markup.button.callback('⭐ Ввести сумму Stars → MC', 'exchange_custom_stars')
+      ],
       [
         Markup.button.callback(`🪙 10 MC → ${stars10} Stars`, 'exchange_10'),
         Markup.button.callback(`🪙 50 MC → ${stars50} Stars`, 'exchange_50')
@@ -4749,6 +4768,7 @@ async function showExchangeMenu(ctx, user) {
       `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` MC\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
       `└ Ликвидность: ${Math.min(100, ((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
+      `🎯 *Лимит обмена:* ${formatNumber(exchangeLimit)} MC за раз (зависит от ранга)\n\n` +
       `🎯 Выберите сумму для обмена или действие:`;
     
     await ctx.editMessageText(message, {
@@ -5021,6 +5041,14 @@ async function performExchange(ctx, user, amount) {
       return;
     }
     
+    // Проверяем лимит обмена по рангу
+    const exchangeLimit = getExchangeLimitByRank(user.level);
+    if (amount > exchangeLimit) {
+      log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${amount} > ${exchangeLimit}`);
+      await ctx.answerCbQuery(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC (зависит от ранга)`);
+      return;
+    }
+    
     // Получаем текущий курс обмена
     const exchangeRate = await calculateExchangeRate();
     
@@ -5103,6 +5131,120 @@ async function performExchange(ctx, user, amount) {
     log(`💰 Комиссия ${commission} MC добавлена в резерв биржи`);
     await ctx.answerCbQuery(
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
+    );
+  } catch (error) {
+    logError(error, 'Обмен Magnum Coins на Stars');
+    await ctx.answerCbQuery('❌ Ошибка обмена');
+  }
+}
+
+// Функция для обмена Stars на Magnum Coins
+async function performStarsToMCExchange(ctx, user, starsAmount) {
+  try {
+    log(`💱 Попытка обмена ${starsAmount} Stars на Magnum Coins для пользователя ${user.id}`);
+    
+    if (starsAmount > user.stars) {
+      log(`❌ Недостаточно Stars для пользователя ${user.id}`);
+      await ctx.answerCbQuery('❌ Недостаточно Stars для обмена!');
+      return;
+    }
+    
+    if (starsAmount <= 0) {
+      log(`❌ Некорректная сумма обмена для пользователя ${user.id}`);
+      await ctx.answerCbQuery('❌ Некорректная сумма обмена!');
+      return;
+    }
+    
+    // Проверяем лимит обмена по рангу (конвертируем в MC для проверки)
+    const exchangeRate = await calculateExchangeRate();
+    const mcEquivalent = starsAmount / exchangeRate;
+    const exchangeLimit = getExchangeLimitByRank(user.level);
+    if (mcEquivalent > exchangeLimit) {
+      log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${mcEquivalent} MC эквивалент > ${exchangeLimit}`);
+      await ctx.answerCbQuery(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC эквивалент (зависит от ранга)`);
+      return;
+    }
+    
+    // Рассчитываем комиссию в Stars
+    const commission = (starsAmount * config.EXCHANGE_COMMISSION) / 100;
+    const starsAfterCommission = starsAmount - commission;
+    const mcToReceive = starsAfterCommission / exchangeRate;
+    
+    // Проверяем резерв Magnum Coins
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const availableMC = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    
+    if (mcToReceive > availableMC) {
+      log(`❌ Недостаточно Magnum Coins в резерве для пользователя ${user.id}`);
+      await ctx.answerCbQuery('❌ Недостаточно Magnum Coins в резерве для обмена!');
+      return;
+    }
+    
+    // Обновляем пользователя
+    log(`💾 Обновление базы данных для пользователя ${user.id}`);
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          stars: -starsAmount,
+          magnumCoins: mcToReceive,
+          'exchange.totalExchanges': 1,
+          'exchange.totalExchanged': mcToReceive,
+          'statistics.totalActions': 1
+        },
+        $set: { 
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Обновляем резерв
+    // Комиссия остается в резерве Stars, а обменная сумма уходит на покупку Magnum Coins
+    await db.collection('reserve').updateOne(
+      { currency: 'main' },
+      { 
+        $inc: { 
+          stars: commission, // Только комиссия остается в резерве Stars
+          magnumCoins: -mcToReceive    // Magnum Coins уходят пользователю
+        },
+        $set: { 
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Сохраняем историю обмена
+    await db.collection('exchangeHistory').insertOne({
+      userId: user.id,
+      starsAmount: starsAmount,
+      magnumCoinsReceived: mcToReceive,
+      exchangeRate: exchangeRate,
+      commission: commission,
+      commissionType: 'stars',
+      timestamp: new Date(),
+      userFirstName: user.firstName,
+      userUsername: user.username
+    });
+    
+    // Сохраняем историю курсов
+    await db.collection('exchangeHistory').insertOne({
+      type: 'rate_update',
+      rate: exchangeRate,
+      timestamp: new Date(),
+      magnumCoinsReserve: reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      starsReserve: reserve?.stars || config.INITIAL_RESERVE_STARS
+    });
+    
+    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
+    userCache.delete(user.id);
+    
+    // Обновляем прогресс ежедневного задания "Трейдер дня"
+    await updateDailyTaskProgress(user, 'daily_exchange', 1);
+    
+    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${starsAmount} Stars → ${mcToReceive} Magnum Coins (курс: ${exchangeRate}, комиссия: ${commission} Stars)`);
+    log(`💰 Комиссия ${commission} Stars добавлена в резерв биржи`);
+    await ctx.answerCbQuery(
+      `✅ Обмен выполнен! ${formatNumber(starsAmount)} Stars → ${formatNumber(mcToReceive)} Magnum Coins\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
     );
     
     // Обновляем меню обмена
@@ -8785,6 +8927,79 @@ bot.action('exchange', async (ctx) => {
   }
 });
 
+// Обработчики для ввода суммы обмена
+bot.action('exchange_custom_mc', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода суммы MC
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'exchange_custom_mc', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const exchangeLimit = getExchangeLimitByRank(user.level);
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'exchange')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🪙 *Ввод суммы обмена MC → Stars*\n\n` +
+      `💰 Ваш баланс: \`${formatNumber(user.magnumCoins)}\` Magnum Coins\n` +
+      `🎯 Лимит обмена: \`${formatNumber(exchangeLimit)}\` MC за раз\n\n` +
+      `💡 Введите сумму Magnum Coins для обмена на Stars:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Ввод суммы MC для обмена');
+    await ctx.answerCbQuery('❌ Ошибка ввода суммы');
+  }
+});
+
+bot.action('exchange_custom_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода суммы Stars
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'exchange_custom_stars', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const exchangeLimit = getExchangeLimitByRank(user.level);
+    const exchangeRate = await calculateExchangeRate();
+    const starsLimit = exchangeLimit * exchangeRate;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'exchange')]
+    ]);
+    
+    await ctx.editMessageText(
+      `⭐ *Ввод суммы обмена Stars → MC*\n\n` +
+      `💰 Ваш баланс: \`${formatNumber(user.stars)}\` Stars\n` +
+      `🎯 Лимит обмена: \`${formatNumber(starsLimit)}\` Stars за раз\n` +
+      `📊 Текущий курс: 1 MC = \`${exchangeRate.toFixed(6)}\` Stars\n\n` +
+      `💡 Введите сумму Stars для обмена на Magnum Coins:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Ввод суммы Stars для обмена');
+    await ctx.answerCbQuery('❌ Ошибка ввода суммы');
+  }
+});
+
 bot.action('exchange_10', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -11460,6 +11675,14 @@ bot.on('text', async (ctx) => {
         console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
         await handleUserEnterPromocode(ctx, user, text);
         return;
+      } else if (user.adminState === 'exchange_custom_mc') {
+        console.log(`🪙 Пользователь ${ctx.from.id} вводит сумму MC для обмена: "${text}"`);
+        await handleExchangeCustomMC(ctx, user, text);
+        return;
+      } else if (user.adminState === 'exchange_custom_stars') {
+        console.log(`⭐ Пользователь ${ctx.from.id} вводит сумму Stars для обмена: "${text}"`);
+        await handleExchangeCustomStars(ctx, user, text);
+        return;
       }
       // Проверяем админские состояния (только для админов)
       if (isAdmin(user.id)) {
@@ -11710,6 +11933,63 @@ async function handleUserEnterPromocode(ctx, user, text) {
   } catch (error) {
     logError(error, `Обработка промокода пользователем ${user.id}`);
     await ctx.reply('❌ Произошла ошибка при активации промокода. Попробуйте позже.');
+  }
+}
+
+// ==================== ОБРАБОТКА ВВОДА СУММЫ ОБМЕНА ====================
+async function handleExchangeCustomMC(ctx, user, text) {
+  try {
+    log(`🪙 Обработка ввода суммы MC для обмена от пользователя ${user.id}: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: '' }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const amount = parseFloat(text.trim());
+    
+    // Проверяем корректность суммы
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Некорректная сумма! Введите положительное число.');
+      return;
+    }
+    
+    // Выполняем обмен
+    await performExchange(ctx, user, amount);
+    
+  } catch (error) {
+    logError(error, `Обработка ввода суммы MC для обмена пользователем ${user.id}`);
+    await ctx.reply('❌ Произошла ошибка при обработке суммы. Попробуйте позже.');
+  }
+}
+
+async function handleExchangeCustomStars(ctx, user, text) {
+  try {
+    log(`⭐ Обработка ввода суммы Stars для обмена от пользователя ${user.id}: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: '' }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const starsAmount = parseFloat(text.trim());
+    
+    // Проверяем корректность суммы
+    if (isNaN(starsAmount) || starsAmount <= 0) {
+      await ctx.reply('❌ Некорректная сумма! Введите положительное число.');
+      return;
+    }
+    
+    // Выполняем обмен Stars на MC
+    await performStarsToMCExchange(ctx, user, starsAmount);
+    
+  } catch (error) {
+    logError(error, `Обработка ввода суммы Stars для обмена пользователем ${user.id}`);
+    await ctx.reply('❌ Произошла ошибка при обработке суммы. Попробуйте позже.');
   }
 }
 
