@@ -2374,7 +2374,7 @@ async function handleAdminGiveTitle(ctx, user, text) {
   try {
     const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
-      await ctx.reply('❌ Формат: `ID_пользователя Название_титула`\n\nПример: `123456789 🌱 Новичок`', { parse_mode: 'Markdown' });
+      await ctx.reply('❌ Формат: ID_пользователя Название_титула\n\nПример: 123456789 🌱 Новичок');
       return;
     }
     
@@ -2396,7 +2396,7 @@ async function handleAdminGiveTitle(ctx, user, text) {
     // Проверяем, есть ли уже такой титул
     const userTitles = targetUser.titles || [];
     if (userTitles.includes(titleName)) {
-      await ctx.reply(`❌ У пользователя \`${targetUser.firstName || targetUser.username || userId}\` уже есть титул \`${titleName}\``, { parse_mode: 'Markdown' });
+      await ctx.reply(`❌ У пользователя ${targetUser.firstName || targetUser.username || userId} уже есть титул ${titleName}`);
       return;
     }
     
@@ -2412,7 +2412,7 @@ async function handleAdminGiveTitle(ctx, user, text) {
     // Очищаем кеш
     userCache.delete(userId);
     
-    await ctx.reply(`✅ Титул \`${titleName}\` выдан пользователю \`${targetUser.firstName || targetUser.username || userId}\``, { parse_mode: 'Markdown' });
+    await ctx.reply(`✅ Титул ${titleName} выдан пользователю ${targetUser.firstName || targetUser.username || userId}`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -2434,7 +2434,7 @@ async function handleAdminRemoveTitle(ctx, user, text) {
   try {
     const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
-      await ctx.reply('❌ Формат: `ID_пользователя Название_титула`\n\nПример: `123456789 🌱 Новичок`', { parse_mode: 'Markdown' });
+      await ctx.reply('❌ Формат: ID_пользователя Название_титула\n\nПример: 123456789 🌱 Новичок');
       return;
     }
     
@@ -2456,7 +2456,7 @@ async function handleAdminRemoveTitle(ctx, user, text) {
     // Проверяем, есть ли такой титул
     const userTitles = targetUser.titles || [];
     if (!userTitles.includes(titleName)) {
-      await ctx.reply(`❌ У пользователя \`${targetUser.firstName || targetUser.username || userId}\` нет титула \`${titleName}\``, { parse_mode: 'Markdown' });
+      await ctx.reply(`❌ У пользователя ${targetUser.firstName || targetUser.username || userId} нет титула ${titleName}`);
       return;
     }
     
@@ -2482,7 +2482,7 @@ async function handleAdminRemoveTitle(ctx, user, text) {
     // Очищаем кеш
     userCache.delete(userId);
     
-    await ctx.reply(`✅ Титул \`${titleName}\` забран у пользователя \`${targetUser.firstName || targetUser.username || userId}\``, { parse_mode: 'Markdown' });
+    await ctx.reply(`✅ Титул ${titleName} забран у пользователя ${targetUser.firstName || targetUser.username || userId}`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -5151,79 +5151,87 @@ async function showAchievementsMenu(ctx, user) {
   }
 }
 function getAchievementsList(user) {
+  // Убеждаемся, что все необходимые поля существуют
+  const farmCount = user.farm?.farmCount || 0;
+  const magnumCoins = user.magnumCoins || 0;
+  const level = user.level || 1;
+  const referralsCount = user.referralsCount || 0;
+  const dailyStreak = user.dailyBonus?.streak || 0;
+  const totalExchanges = user.exchange?.totalExchanges || 0;
+  
   return [
-          {
-        id: 'first_farm',
-        title: '🌾 Первый фарм',
-        description: 'Выполните первый фарм',
-        condition: user.farm?.farmCount >= 1,
-        progress: user.farm?.farmCount || 0,
-        target: 1,
-        reward: '10 Magnum Coins'
-      },
-      {
-        id: 'farm_master',
-        title: '👑 Мастер фарма',
-        description: 'Выполните 100 фармов',
-        condition: user.farm?.farmCount >= 100,
-        progress: user.farm?.farmCount || 0,
-        target: 100,
-        reward: '500 Magnum Coins'
-      },
-      {
-        id: 'magnum_collector',
-        title: '🪙 Коллекционер Magnum',
-        description: 'Накопите 1000 Magnum Coins',
-        condition: user.magnumCoins >= 1000,
-        progress: user.magnumCoins || 0,
-        target: 1000,
-        reward: '200 Magnum Coins'
-      },
-      {
-        id: 'exchange_trader',
-        title: '💱 Трейдер',
-        description: 'Выполните 50 обменов',
-        condition: user.exchange?.totalExchanges >= 50,
-        progress: user.exchange?.totalExchanges || 0,
-        target: 50,
-        reward: '300 Magnum Coins'
-      },
-      {
-        id: 'level_10',
-        title: '⭐ Уровень 10',
-        description: 'Достигните 10 уровня',
-        condition: user.level >= 10,
-        progress: user.level || 1,
-        target: 10,
-        reward: '100 Magnum Coins'
-      },
-      {
-        id: 'level_50',
-        title: '⭐⭐ Уровень 50',
-        description: 'Достигните 50 уровня',
-        condition: user.level >= 50,
-        progress: user.level || 1,
-        target: 50,
-        reward: '1000 Magnum Coins'
-      },
-      {
-        id: 'referral_king',
-        title: '👥 Король рефералов',
-        description: 'Пригласите 10 рефералов',
-        condition: user.referralsCount >= 10,
-        progress: user.referralsCount || 0,
-        target: 10,
-        reward: '400 Magnum Coins'
-      },
-      {
-        id: 'daily_streak',
-        title: '🔥 Серия дней',
-        description: 'Получите бонус 7 дней подряд',
-        condition: user.dailyBonus?.streak >= 7,
-        progress: user.dailyBonus?.streak || 0,
-        target: 7,
-        reward: '150 Magnum Coins'
-      }
+    {
+      id: 'first_farm',
+      title: '🌾 Первый фарм',
+      description: 'Выполните первый фарм',
+      condition: farmCount >= 1,
+      progress: farmCount,
+      target: 1,
+      reward: '10 Magnum Coins'
+    },
+    {
+      id: 'farm_master',
+      title: '👑 Мастер фарма',
+      description: 'Выполните 100 фармов',
+      condition: farmCount >= 100,
+      progress: farmCount,
+      target: 100,
+      reward: '500 Magnum Coins'
+    },
+    {
+      id: 'magnum_collector',
+      title: '🪙 Коллекционер Magnum',
+      description: 'Накопите 1000 Magnum Coins',
+      condition: magnumCoins >= 1000,
+      progress: magnumCoins,
+      target: 1000,
+      reward: '200 Magnum Coins'
+    },
+    {
+      id: 'exchange_trader',
+      title: '💱 Трейдер',
+      description: 'Выполните 50 обменов',
+      condition: totalExchanges >= 50,
+      progress: totalExchanges,
+      target: 50,
+      reward: '300 Magnum Coins'
+    },
+    {
+      id: 'level_10',
+      title: '⭐ Уровень 10',
+      description: 'Достигните 10 уровня',
+      condition: level >= 10,
+      progress: level,
+      target: 10,
+      reward: '100 Magnum Coins'
+    },
+    {
+      id: 'level_50',
+      title: '⭐⭐ Уровень 50',
+      description: 'Достигните 50 уровня',
+      condition: level >= 50,
+      progress: level,
+      target: 50,
+      reward: '1000 Magnum Coins'
+    },
+    {
+      id: 'referral_king',
+      title: '👥 Король рефералов',
+      description: 'Пригласите 10 рефералов',
+      condition: referralsCount >= 10,
+      progress: referralsCount,
+      target: 10,
+      reward: '400 Magnum Coins'
+    },
+    {
+      id: 'daily_streak',
+      title: '🔥 Серия дней',
+      description: 'Получите бонус 7 дней подряд',
+      condition: dailyStreak >= 7,
+      progress: dailyStreak,
+      target: 7,
+      reward: '150 Magnum Coins'
+    }
   ];
 }
 async function showAchievementsProgress(ctx, user) {
