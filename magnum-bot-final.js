@@ -1,6 +1,53 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const { MongoClient, ObjectId } = require('mongodb');
+const express = require('express');
+const path = require('path');
+
+// Создаем Express приложение для WebApp
+const app = express();
+const PORT = process.env.PORT || 8080;
+
+// Настройка статических файлов для WebApp
+app.use('/webapp', express.static(path.join(__dirname, 'webapp')));
+
+// Маршрут для WebApp
+app.get('/webapp', (req, res) => {
+    res.sendFile(path.join(__dirname, 'webapp', 'index.html'));
+});
+
+// API маршрут для проверки доступа к WebApp
+app.get('/api/webapp/check-access', async (req, res) => {
+    try {
+        const userId = req.query.user_id;
+        if (!userId) {
+            return res.json({ access: false, reason: 'No user ID provided' });
+        }
+
+        // Проверяем, является ли пользователь админом
+        const isAdmin = config.ADMIN_IDS.includes(parseInt(userId));
+        const webappEnabled = process.env.WEBAPP_ENABLED === 'true';
+        const adminOnly = process.env.WEBAPP_ADMIN_ONLY === 'true';
+
+        if (!webappEnabled) {
+            return res.json({ access: false, reason: 'WebApp disabled' });
+        }
+
+        if (adminOnly && !isAdmin) {
+            return res.json({ access: false, reason: 'Admin only' });
+        }
+
+        res.json({ access: true, isAdmin });
+    } catch (error) {
+        console.error('WebApp access check error:', error);
+        res.status(500).json({ access: false, reason: 'Server error' });
+    }
+});
+
+// Запускаем Express сервер
+app.listen(PORT, () => {
+    console.log(`🌐 WebApp сервер запущен на порту ${PORT}`);
+});
 
 // Импорт модулей удален - все функции перенесены в основной файл
 
@@ -7347,6 +7394,55 @@ bot.start(async (ctx) => {
       stack: error.stack
     });
     await ctx.reply('❌ Произошла ошибка. Попробуйте позже.');
+  }
+});
+
+// Команда для открытия WebApp
+bot.command('webapp', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) {
+      await ctx.reply('❌ Пользователь не найден');
+      return;
+    }
+
+    // Проверяем доступ к WebApp
+    const webappEnabled = process.env.WEBAPP_ENABLED === 'true';
+    const adminOnly = process.env.WEBAPP_ADMIN_ONLY === 'true';
+    const isAdmin = config.ADMIN_IDS.includes(user.id);
+
+    if (!webappEnabled) {
+      await ctx.reply('🚧 WebApp временно недоступен');
+      return;
+    }
+
+    if (adminOnly && !isAdmin) {
+      await ctx.reply('🔒 WebApp доступен только администраторам');
+      return;
+    }
+
+    // Создаем WebApp кнопку
+    const webappUrl = process.env.WEBAPP_URL || `https://${process.env.RAILWAY_STATIC_URL || 'your-app.railway.app'}/webapp`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.webApp('🎮 Открыть WebApp', webappUrl)]
+    ]);
+
+    await ctx.reply(
+      '🎮 *Magnum Stars WebApp*\n\n' +
+      '✨ Современный интерфейс\n' +
+      '⚡ Быстрая работа\n' +
+      '🎯 Улучшенный UX\n\n' +
+      'Нажмите кнопку ниже, чтобы открыть WebApp:',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+
+  } catch (error) {
+    logError(error, 'WebApp команда');
+    await ctx.reply('❌ Ошибка открытия WebApp');
   }
 });
 
