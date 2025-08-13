@@ -320,11 +320,7 @@ function formatTime(seconds) {
   return `${secs}с`;
 }
 
-function getUserRank(user) {
-  const level = user.level || 1;
-  
-  console.log(`🔍 getUserRank вызвана для пользователя ${user.id}, уровень: ${level}`);
-  
+function getRankByLevel(level) {
   // Система рангов на основе уровней
   if (level >= 100) return '👑 Император';
   if (level >= 80) return '⚜️ Король';
@@ -336,6 +332,14 @@ function getUserRank(user) {
   if (level >= 10) return '🏹 Лучник';
   if (level >= 5) return '⚔️ Боец';
   return '🛡️ Рекрут';
+}
+
+function getUserRank(user) {
+  const level = user.level || 1;
+  
+  console.log(`🔍 getUserRank вызвана для пользователя ${user.id}, уровень: ${level}`);
+  
+  return getRankByLevel(level);
 }
 
 function getRankRequirements() {
