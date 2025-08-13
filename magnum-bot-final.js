@@ -320,6 +320,18 @@ function formatTime(seconds) {
   return `${secs}с`;
 }
 
+function calculateExperienceToNextLevel(level) {
+  // Базовый опыт для 1 уровня
+  let baseExperience = 100;
+  
+  // Рассчитываем опыт для указанного уровня
+  for (let i = 1; i < level; i++) {
+    baseExperience = Math.floor(baseExperience * 1.2);
+  }
+  
+  return baseExperience;
+}
+
 function getRankByLevel(level) {
   // Система рангов на основе уровней
   if (level >= 100) return '👑 Император';
