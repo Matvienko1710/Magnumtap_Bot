@@ -1483,6 +1483,42 @@ async function showFarmMenu(ctx, user) {
   });
 }
 
+// ==================== ВЫВОД СРЕДСТВ ====================
+async function showWithdrawalMenu(ctx, user) {
+  const withdrawal = user.withdrawal || { withdrawalCount: 0, totalWithdrawn: 0 };
+  
+  const keyboard = Markup.inlineKeyboard([
+    [
+      Markup.button.callback('💰 Вывести Magnum Coins', 'withdrawal_mc'),
+      Markup.button.callback('⭐ Вывести Stars', 'withdrawal_stars')
+    ],
+    [
+      Markup.button.callback('📊 Статистика выводов', 'withdrawal_stats'),
+      Markup.button.callback('📋 История выводов', 'withdrawal_history')
+    ],
+    [Markup.button.callback('🔙 Назад', 'main_menu')]
+  ]);
+  
+  const message = 
+    `💰 *Вывод средств*\n\n` +
+    `💎 *Доступно для вывода:*\n` +
+    `├ Magnum Coins: ${formatNumber(user.magnumCoins)}\n` +
+    `└ Stars: ${formatNumber(user.stars)}\n\n` +
+    `📊 *Статистика выводов:*\n` +
+    `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
+    `└ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Magnum Coins\n\n` +
+    `💡 *Информация:*\n` +
+    `├ Минимальная сумма: 10 Magnum Coins\n` +
+    `├ Комиссия: 5%\n` +
+    `└ Обработка: до 24 часов\n\n` +
+    `🎯 Выберите действие:`;
+  
+  await ctx.editMessageText(message, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard.reply_markup
+  });
+}
+
 async function doFarm(ctx, user) {
   try {
     log(`🌾 Попытка фарма для пользователя ${user.id}`);
@@ -7252,6 +7288,157 @@ bot.action('exchange_all', async (ctx) => {
   }
 });
 
+// Вывод средств
+bot.action('withdrawal', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showWithdrawalMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню вывода средств');
+  }
+});
+
+// Обработчики вывода средств
+bot.action('withdrawal_mc', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    if (user.magnumCoins < 10) {
+      await ctx.answerCbQuery('❌ Минимальная сумма для вывода: 10 Magnum Coins');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'withdrawing_mc', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'withdrawal')]
+    ]);
+    
+    await ctx.editMessageText(
+      `💰 *Вывод Magnum Coins*\n\n` +
+      `💎 Доступно: ${formatNumber(user.magnumCoins)} Magnum Coins\n` +
+      `💸 Комиссия: 5%\n\n` +
+      `Введите сумму для вывода:\n\n` +
+      `💡 *Пример:* 100, 500, 1000\n\n` +
+      `⚠️ *Внимание:* Минимум 10 Magnum Coins!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Вывод Magnum Coins');
+    await ctx.answerCbQuery('❌ Ошибка вывода Magnum Coins');
+  }
+});
+
+bot.action('withdrawal_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    if (user.stars < 1000) {
+      await ctx.answerCbQuery('❌ Минимальная сумма для вывода: 1000 Stars');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'withdrawing_stars', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'withdrawal')]
+    ]);
+    
+    await ctx.editMessageText(
+      `⭐ *Вывод Stars*\n\n` +
+      `💎 Доступно: ${formatNumber(user.stars)} Stars\n` +
+      `💸 Комиссия: 5%\n\n` +
+      `Введите сумму для вывода:\n\n` +
+      `💡 *Пример:* 1000, 5000, 10000\n\n` +
+      `⚠️ *Внимание:* Минимум 1000 Stars!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Вывод Stars');
+    await ctx.answerCbQuery('❌ Ошибка вывода Stars');
+  }
+});
+
+bot.action('withdrawal_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const withdrawal = user.withdrawal || { withdrawalCount: 0, totalWithdrawn: 0 };
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'withdrawal')]
+    ]);
+    
+    const message = 
+      `📊 *Статистика выводов*\n\n` +
+      `💰 *Общая статистика:*\n` +
+      `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
+      `├ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Magnum Coins\n` +
+      `└ Средний вывод: ${withdrawal.withdrawalCount > 0 ? formatNumber(withdrawal.totalWithdrawn / withdrawal.withdrawalCount) : '0.00'} Magnum Coins\n\n` +
+      `💡 *Информация:*\n` +
+      `├ Комиссия за вывод: 5%\n` +
+      `├ Минимум Magnum Coins: 10\n` +
+      `├ Минимум Stars: 1000\n` +
+      `└ Обработка: до 24 часов`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Статистика выводов');
+    await ctx.answerCbQuery('❌ Ошибка показа статистики выводов');
+  }
+});
+
+bot.action('withdrawal_history', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'withdrawal')]
+    ]);
+    
+    const message = 
+      `📋 *История выводов*\n\n` +
+      `📝 История выводов недоступна.\n\n` +
+      `💡 *Информация:*\n` +
+      `├ История выводов будет доступна в будущих обновлениях\n` +
+      `├ Все выводы обрабатываются вручную\n` +
+      `└ Свяжитесь с поддержкой для уточнения статуса`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'История выводов');
+    await ctx.answerCbQuery('❌ Ошибка показа истории выводов');
+  }
+});
+
 // Достижения
 bot.action('achievements', async (ctx) => {
   try {
@@ -7762,6 +7949,272 @@ bot.action('admin_balance', async (ctx) => {
   }
 });
 
+// Обработчики для управления пользователями
+bot.action('admin_search_user', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'searching_user', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_users')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🔍 *Поиск пользователя*\n\n` +
+      `Введите ID пользователя для поиска:\n\n` +
+      `💡 *Пример:* 123456789\n\n` +
+      `⚠️ *Внимание:* Введите только цифры!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Поиск пользователя');
+    await ctx.answerCbQuery('❌ Ошибка поиска пользователя');
+  }
+});
+
+bot.action('admin_top_users', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminTopUsers(ctx, user);
+  } catch (error) {
+    logError(error, 'Топ пользователей');
+    await ctx.answerCbQuery('❌ Ошибка показа топа пользователей');
+  }
+});
+
+bot.action('admin_ban_user', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'banning_user', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_users')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🚫 *Блокировка пользователя*\n\n` +
+      `Введите ID пользователя для блокировки:\n\n` +
+      `💡 *Пример:* 123456789\n\n` +
+      `⚠️ *Внимание:* Пользователь будет заблокирован!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Блокировка пользователя');
+    await ctx.answerCbQuery('❌ Ошибка блокировки пользователя');
+  }
+});
+
+bot.action('admin_unban_user', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'unbanning_user', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_users')]
+    ]);
+    
+    await ctx.editMessageText(
+      `✅ *Разблокировка пользователя*\n\n` +
+      `Введите ID пользователя для разблокировки:\n\n` +
+      `💡 *Пример:* 123456789\n\n` +
+      `⚠️ *Внимание:* Пользователь будет разблокирован!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Разблокировка пользователя');
+    await ctx.answerCbQuery('❌ Ошибка разблокировки пользователя');
+  }
+});
+
+// Обработчики для управления балансами
+bot.action('admin_add_magnum', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'adding_magnum', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_balance')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➕ *Добавление Magnum Coins*\n\n` +
+      `Введите ID пользователя и количество:\n\n` +
+      `💡 *Формат:* ID количество\n` +
+      `💡 *Пример:* 123456789 1000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Добавление Magnum Coins');
+    await ctx.answerCbQuery('❌ Ошибка добавления Magnum Coins');
+  }
+});
+
+bot.action('admin_remove_magnum', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'removing_magnum', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_balance')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➖ *Удаление Magnum Coins*\n\n` +
+      `Введите ID пользователя и количество:\n\n` +
+      `💡 *Формат:* ID количество\n` +
+      `💡 *Пример:* 123456789 1000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Удаление Magnum Coins');
+    await ctx.answerCbQuery('❌ Ошибка удаления Magnum Coins');
+  }
+});
+
+bot.action('admin_add_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'adding_stars', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_balance')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➕ *Добавление Stars*\n\n` +
+      `Введите ID пользователя и количество:\n\n` +
+      `💡 *Формат:* ID количество\n` +
+      `💡 *Пример:* 123456789 1000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Добавление Stars');
+    await ctx.answerCbQuery('❌ Ошибка добавления Stars');
+  }
+});
+
+bot.action('admin_remove_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'removing_stars', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_balance')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➖ *Удаление Stars*\n\n` +
+      `Введите ID пользователя и количество:\n\n` +
+      `💡 *Формат:* ID количество\n` +
+      `💡 *Пример:* 123456789 1000\n\n` +
+      `⚠️ *Внимание:* Операция необратима!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Удаление Stars');
+    await ctx.answerCbQuery('❌ Ошибка удаления Stars');
+  }
+});
+
 bot.action('admin_posts', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7783,6 +8236,22 @@ bot.action('admin_promocodes', async (ctx) => {
     logError(error, 'Управление промокодами (обработчик)');
   }
 });
+
+bot.action('admin_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки бота');
+    await ctx.answerCbQuery('❌ Ошибка настроек бота');
+  }
+});
+
 bot.action('admin_cache', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -8153,6 +8622,53 @@ bot.action('admin_commission_stats', async (ctx) => {
   } catch (error) {
     logError(error, 'Статистика комиссий');
     await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_promocodes_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Получаем статистику промокодов
+    const promocodes = await db.collection('promocodes').find({}).toArray();
+    const totalPromocodes = promocodes.length;
+    const activePromocodes = promocodes.filter(p => p.isActive && (!p.expiresAt || p.expiresAt > new Date())).length;
+    const expiredPromocodes = promocodes.filter(p => p.expiresAt && p.expiresAt <= new Date()).length;
+    const totalActivations = promocodes.reduce((sum, p) => sum + (p.totalActivations || 0), 0);
+    const totalRewards = promocodes.reduce((sum, p) => sum + (p.totalRewards || 0), 0);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
+    ]);
+    
+    const message = 
+      `📊 *Статистика промокодов*\n\n` +
+      `🎫 *Общая статистика:*\n` +
+      `├ Всего промокодов: \`${totalPromocodes}\`\n` +
+      `├ Активных: \`${activePromocodes}\`\n` +
+      `├ Истекших: \`${expiredPromocodes}\`\n` +
+      `├ Всего активаций: \`${totalActivations}\`\n` +
+      `└ Всего наград: \`${formatNumber(totalRewards)}\` Magnum Coins\n\n` +
+      `📈 *Средние показатели:*\n` +
+      `├ Средние активации: \`${totalPromocodes > 0 ? (totalActivations / totalPromocodes).toFixed(1) : '0'}\`\n` +
+      `├ Средняя награда: \`${totalActivations > 0 ? formatNumber(totalRewards / totalActivations) : '0.00'}\` Magnum Coins\n` +
+      `└ Эффективность: \`${totalPromocodes > 0 ? ((activePromocodes / totalPromocodes) * 100).toFixed(1) : '0'}%\`\n\n` +
+      `💡 *Информация:*\n` +
+      `├ Промокоды создаются администраторами\n` +
+      `├ Каждый промокод можно использовать один раз\n` +
+      `└ Истекшие промокоды автоматически деактивируются`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Статистика промокодов');
+    await ctx.answerCbQuery('❌ Ошибка показа статистики промокодов');
   }
 });
 
