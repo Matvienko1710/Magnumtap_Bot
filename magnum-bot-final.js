@@ -5227,12 +5227,10 @@ async function performExchange(ctx, user, amount) {
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
     
-    // Автоматически обновляем меню биржи только для callback queries
-    if (ctx.callbackQuery) {
-      const updatedUser = await getUser(ctx.from.id);
-      if (updatedUser) {
-        await showExchangeMenu(ctx, updatedUser);
-      }
+    // Автоматически обновляем меню биржи после успешного обмена
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showExchangeMenu(ctx, updatedUser);
     }
   } catch (error) {
     logError(error, 'Обмен Magnum Coins на Stars');
@@ -5348,16 +5346,14 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       `✅ Обмен выполнен! ${formatNumber(starsAmount)} Stars → ${formatNumber(mcToReceive)} Magnum Coins\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
     );
     
-    // Автоматически обновляем меню биржи только для callback queries
-    if (ctx.callbackQuery) {
-      const updatedUser = await getUser(ctx.from.id);
-      if (updatedUser) {
-        await showExchangeMenu(ctx, updatedUser);
-      }
+    // Автоматически обновляем меню биржи после успешного обмена
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showExchangeMenu(ctx, updatedUser);
     }
   } catch (error) {
     logError(error, 'Обмен валют');
-    await ctx.answerCbQuery('❌ Ошибка обмена');
+    await ctx.reply('❌ Ошибка обмена');
   }
 }
 
