@@ -1,6 +1,7 @@
-// Инициализация Telegram WebApp (если доступен)
+// Инициализация Telegram WebApp
 let tg = null;
 let userId = null;
+let username = 'Пользователь';
 
 try {
     tg = window.Telegram?.WebApp;
@@ -8,8 +9,10 @@ try {
         tg.expand();
         tg.ready();
         userId = tg.initDataUnsafe?.user?.id;
+        username = tg.initDataUnsafe?.user?.first_name || 'Пользователь';
         console.log('✅ Telegram WebApp API доступен');
         console.log('👤 User ID:', userId);
+        console.log('👤 Username:', username);
     } else {
         console.log('⚠️ Telegram WebApp API недоступен, работаем в автономном режиме');
     }
@@ -51,14 +54,23 @@ let gameState = {
             { id: 'rich_player', name: 'Богач', description: 'Накопите 10000 MC', target: 10000, progress: 0, reward: 500, completed: false },
             { id: 'click_master', name: 'Мастер кликов', description: 'Сделайте 1000 кликов', target: 1000, progress: 0, reward: 200, completed: false }
         ]
+    },
+    settings: {
+        notifications: true,
+        sound: true,
+        autoSave: true
     }
 };
 
 // DOM элементы
 const elements = {
+    username: document.getElementById('username'),
+    level: document.getElementById('level'),
+    expFill: document.getElementById('expFill'),
     magnumCoins: document.getElementById('magnumCoins'),
     stars: document.getElementById('stars'),
-    level: document.getElementById('level'),
+    mcChange: document.getElementById('mcChange'),
+    starsChange: document.getElementById('starsChange'),
     clickCount: document.getElementById('clickCount'),
     cps: document.getElementById('cps'),
     clickerBtn: document.getElementById('clickerBtn'),
@@ -69,6 +81,7 @@ const elements = {
     farmCooldown: document.getElementById('farmCooldown'),
     farmReward: document.getElementById('farmReward'),
     farmBtn: document.getElementById('farmBtn'),
+    farmField: document.getElementById('farmField'),
     
     // Биржа
     exchangeRate: document.getElementById('exchangeRate'),
@@ -77,6 +90,7 @@ const elements = {
     exchangeResult: document.getElementById('exchangeResult'),
     exchangeResultCurrency: document.getElementById('exchangeResultCurrency'),
     exchangeBtn: document.getElementById('exchangeBtn'),
+    rateChange: document.getElementById('rateChange'),
     
     // Майнер
     minerStatus: document.getElementById('minerStatus'),
@@ -84,6 +98,7 @@ const elements = {
     minerLevel: document.getElementById('minerLevel'),
     minerBtn: document.getElementById('minerBtn'),
     minerUpgradeList: document.getElementById('minerUpgradeList'),
+    minerMachine: document.getElementById('minerMachine'),
     
     // Рефералы
     referralsCount: document.getElementById('referralsCount'),
@@ -100,7 +115,10 @@ const elements = {
     notificationsToggle: document.getElementById('notificationsToggle'),
     soundToggle: document.getElementById('soundToggle'),
     autoSaveToggle: document.getElementById('autoSaveToggle'),
-    resetDataBtn: document.getElementById('resetDataBtn')
+    resetDataBtn: document.getElementById('resetDataBtn'),
+    
+    // Уведомления
+    notificationsContainer: document.getElementById('notificationsContainer')
 };
 
 // Инициализация
@@ -113,13 +131,15 @@ document.addEventListener('DOMContentLoaded', function() {
     startMiner();
     updateFarmCooldown();
     renderAllSections();
-    updateConnectionStatus('WebApp готов к работе', 'connected');
+    updateConnectionStatus('connected');
+    showNotification('WebApp готов к работе!', 'success');
 });
 
 // Инициализация игры
 function initGame() {
-    console.log('🎮 Инициализация WebApp кликера...');
-    updateConnectionStatus('Загрузка игры...', 'connecting');
+    console.log('🎮 Инициализация WebApp...');
+    elements.username.textContent = username;
+    updateConnectionStatus('connecting');
 }
 
 // Настройка обработчиков событий
@@ -128,7 +148,7 @@ function setupEventListeners() {
     elements.clickerBtn.addEventListener('click', handleClick);
     
     // Навигация
-    document.querySelectorAll('.nav-btn').forEach(btn => {
+    document.querySelectorAll('.nav-item').forEach(btn => {
         btn.addEventListener('click', () => switchSection(btn.dataset.section));
     });
     
@@ -153,6 +173,9 @@ function setupEventListeners() {
     
     // Настройки
     elements.resetDataBtn.addEventListener('click', resetData);
+    elements.notificationsToggle.addEventListener('change', saveSettings);
+    elements.soundToggle.addEventListener('change', saveSettings);
+    elements.autoSaveToggle.addEventListener('change', saveSettings);
     
     // Обработка видимости страницы
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -161,7 +184,7 @@ function setupEventListeners() {
 // Переключение секций
 function switchSection(sectionName) {
     // Убираем активный класс со всех кнопок и секций
-    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
     
     // Добавляем активный класс к выбранной кнопке и секции
@@ -170,6 +193,15 @@ function switchSection(sectionName) {
     
     // Обновляем контент секции
     updateSectionContent(sectionName);
+    
+    // Haptic feedback
+    if (tg?.HapticFeedback) {
+        try {
+            tg.HapticFeedback.impactOccurred('light');
+        } catch (error) {
+            console.log('Haptic feedback недоступен');
+        }
+    }
 }
 
 // Обновление контента секции
@@ -180,6 +212,7 @@ function updateSectionContent(sectionName) {
             break;
         case 'farm':
             updateFarmCooldown();
+            updateFarmVisual();
             break;
         case 'exchange':
             updateExchangeRate();
@@ -211,9 +244,13 @@ function handleClick() {
     }, 100);
     
     // Добавление монет и опыта
+    const oldCoins = gameState.magnumCoins;
     gameState.magnumCoins += gameState.cps;
     gameState.clickCount++;
     gameState.experience += 1;
+    
+    // Показываем изменение баланса
+    showBalanceChange('mc', gameState.magnumCoins - oldCoins);
     
     // Проверка повышения уровня
     checkLevelUp();
@@ -239,6 +276,16 @@ function handleClick() {
     }
 }
 
+// Показ изменения баланса
+function showBalanceChange(type, amount) {
+    const element = type === 'mc' ? elements.mcChange : elements.starsChange;
+    element.textContent = amount > 0 ? `+${formatNumber(amount)}` : `${formatNumber(amount)}`;
+    element.style.color = amount > 0 ? 'var(--success-color)' : 'var(--danger-color)';
+    element.style.animation = 'none';
+    element.offsetHeight; // Trigger reflow
+    element.style.animation = 'fadeInOut 2s ease-in-out';
+}
+
 // Проверка повышения уровня
 function checkLevelUp() {
     const requiredExp = gameState.level * 100;
@@ -252,6 +299,8 @@ function checkLevelUp() {
         
         console.log(`🎉 Уровень повышен! Новый уровень: ${gameState.level}`);
         console.log(`💰 Награда за уровень: +${levelReward} MC`);
+        
+        showNotification(`🎉 Уровень повышен! +${levelReward} MC`, 'success');
         
         // Haptic feedback
         if (tg?.HapticFeedback) {
@@ -269,12 +318,10 @@ let autoClickerInterval;
 
 function startAutoClicker() {
     autoClickerInterval = setInterval(() => {
-        if (!document.hidden) {
+        if (!document.hidden && gameState.upgrades.autoClicker.level > 0) {
             const autoClickerBonus = gameState.upgrades.autoClicker.level * 0.1;
-            if (autoClickerBonus > 0) {
-                gameState.magnumCoins += autoClickerBonus;
-                updateUI();
-            }
+            gameState.magnumCoins += autoClickerBonus;
+            updateUI();
         }
     }, 1000);
 }
@@ -303,6 +350,9 @@ function toggleMiner() {
     gameState.minerActive = !gameState.minerActive;
     updateMinerInfo();
     saveUserData();
+    
+    const status = gameState.minerActive ? 'включен' : 'выключен';
+    showNotification(`⛏️ Майнер ${status}`, gameState.minerActive ? 'success' : 'warning');
 }
 
 // Фарм
@@ -320,9 +370,11 @@ function handleFarm() {
         
         updateUI();
         updateFarmCooldown();
+        updateFarmVisual();
         saveUserData();
         
         console.log(`🌾 Фарм собран! +${farmReward} MC`);
+        showNotification(`🌾 Урожай собран! +${farmReward} MC`, 'success');
         
         // Haptic feedback
         if (tg?.HapticFeedback) {
@@ -357,10 +409,43 @@ function updateFarmCooldown() {
     }
 }
 
+function updateFarmVisual() {
+    const crops = elements.farmField.querySelectorAll('.crop');
+    const now = Date.now();
+    const farmCooldown = 10 * 60 * 1000;
+    
+    crops.forEach((crop, index) => {
+        if (gameState.farmLastUsed && (now - gameState.farmLastUsed) < farmCooldown) {
+            const timeSinceFarm = now - gameState.farmLastUsed;
+            const growthTime = farmCooldown / crops.length;
+            const shouldBeGrown = timeSinceFarm > (index * growthTime);
+            crop.setAttribute('data-grown', shouldBeGrown.toString());
+        } else {
+            crop.setAttribute('data-grown', 'false');
+        }
+    });
+}
+
 // Биржа
 function updateExchangeRate() {
     const rate = 0.001; // 1 MC = 0.001 Stars
     elements.exchangeRate.textContent = `1 MC = ${rate} ⭐`;
+    
+    // Имитация изменения курса
+    const change = (Math.random() - 0.5) * 10;
+    const changeElement = elements.rateChange;
+    const icon = changeElement.querySelector('i');
+    const text = changeElement.querySelector('span');
+    
+    if (change > 0) {
+        icon.className = 'fas fa-arrow-up';
+        text.textContent = `+${change.toFixed(1)}%`;
+        changeElement.style.color = 'var(--success-color)';
+    } else {
+        icon.className = 'fas fa-arrow-down';
+        text.textContent = `${change.toFixed(1)}%`;
+        changeElement.style.color = 'var(--danger-color)';
+    }
 }
 
 function updateExchangeResult() {
@@ -384,26 +469,30 @@ function handleExchange() {
     const fromCurrency = elements.exchangeFrom.value;
     
     if (amount <= 0) {
-        alert('Введите сумму больше 0');
+        showNotification('Введите сумму больше 0', 'error');
         return;
     }
     
     if (fromCurrency === 'mc') {
         if (amount > gameState.magnumCoins) {
-            alert('Недостаточно Magnum Coins');
+            showNotification('Недостаточно Magnum Coins', 'error');
             return;
         }
         const result = amount * 0.001;
         gameState.magnumCoins -= amount;
         gameState.stars += result;
+        showBalanceChange('mc', -amount);
+        showBalanceChange('stars', result);
     } else {
         if (amount > gameState.stars) {
-            alert('Недостаточно Stars');
+            showNotification('Недостаточно Stars', 'error');
             return;
         }
         const result = amount / 0.001;
         gameState.stars -= amount;
         gameState.magnumCoins += result;
+        showBalanceChange('stars', -amount);
+        showBalanceChange('mc', result);
     }
     
     updateUI();
@@ -412,6 +501,7 @@ function handleExchange() {
     updateExchangeResult();
     
     console.log(`🔄 Обмен выполнен: ${amount} ${fromCurrency.toUpperCase()}`);
+    showNotification(`🔄 Обмен выполнен!`, 'success');
 }
 
 // Задания
@@ -431,7 +521,7 @@ function updateTasks(taskId, progress) {
             if (task.progress >= task.target) {
                 task.completed = true;
                 gameState.magnumCoins += task.reward;
-                console.log(`✅ Задание выполнено: ${task.name} (+${task.reward} MC)`);
+                showNotification(`✅ Задание выполнено: ${task.name} (+${task.reward} MC)`, 'success');
             }
         }
     });
@@ -444,7 +534,7 @@ function updateTasks(taskId, progress) {
                 task.completed = true;
                 gameState.magnumCoins += task.reward;
                 gameState.achievementsCompleted++;
-                console.log(`🏆 Достижение разблокировано: ${task.name} (+${task.reward} MC)`);
+                showNotification(`🏆 Достижение разблокировано: ${task.name} (+${task.reward} MC)`, 'success');
             }
         }
     });
@@ -513,7 +603,7 @@ function updateReferralsInfo() {
 function copyReferralLink() {
     elements.referralLink.select();
     document.execCommand('copy');
-    alert('Реферальная ссылка скопирована!');
+    showNotification('Реферальная ссылка скопирована!', 'success');
 }
 
 // Достижения
@@ -536,11 +626,18 @@ function renderAchievements() {
 
 // Настройки
 function updateSettings() {
-    // Загружаем настройки из localStorage
-    const settings = JSON.parse(localStorage.getItem('magnumStarsSettings') || '{}');
-    elements.notificationsToggle.checked = settings.notifications !== false;
-    elements.soundToggle.checked = settings.sound !== false;
-    elements.autoSaveToggle.checked = settings.autoSave !== false;
+    elements.notificationsToggle.checked = gameState.settings.notifications;
+    elements.soundToggle.checked = gameState.settings.sound;
+    elements.autoSaveToggle.checked = gameState.settings.autoSave;
+}
+
+function saveSettings() {
+    gameState.settings.notifications = elements.notificationsToggle.checked;
+    gameState.settings.sound = elements.soundToggle.checked;
+    gameState.settings.autoSave = elements.autoSaveToggle.checked;
+    
+    localStorage.setItem('magnumStarsSettings', JSON.stringify(gameState.settings));
+    showNotification('Настройки сохранены', 'success');
 }
 
 function resetData() {
@@ -558,6 +655,11 @@ function updateUI() {
     elements.level.textContent = gameState.level;
     elements.clickCount.textContent = formatNumber(gameState.clickCount);
     elements.cps.textContent = formatNumber(gameState.cps);
+    
+    // Обновляем полосу опыта
+    const requiredExp = gameState.level * 100;
+    const expPercent = (gameState.experience / requiredExp) * 100;
+    elements.expFill.style.width = `${expPercent}%`;
 }
 
 // Обновление информации майнера
@@ -565,8 +667,17 @@ function updateMinerInfo() {
     elements.minerStatus.textContent = gameState.minerActive ? 'Включен' : 'Выключен';
     elements.minerIncome.textContent = `${calculateMinerIncome().toFixed(3)} MC/мин`;
     elements.minerLevel.textContent = gameState.minerLevel;
-    elements.minerBtn.textContent = gameState.minerActive ? '⛏️ Выключить майнер' : '⛏️ Включить майнер';
-    elements.minerBtn.className = `miner-btn ${gameState.minerActive ? 'active' : ''}`;
+    elements.minerBtn.innerHTML = gameState.minerActive ? 
+        '<i class="fas fa-stop"></i> Выключить майнер' : 
+        '<i class="fas fa-play"></i> Включить майнер';
+    elements.minerBtn.className = `action-btn miner-btn ${gameState.minerActive ? 'active' : ''}`;
+    
+    // Анимация майнера
+    if (gameState.minerActive) {
+        elements.minerMachine.classList.add('active');
+    } else {
+        elements.minerMachine.classList.remove('active');
+    }
     
     renderMinerUpgrades();
 }
@@ -616,6 +727,7 @@ function buyMinerUpgrade(upgradeId) {
         saveUserData();
         
         console.log(`✅ Куплено улучшение майнера: ${getMinerUpgradeName(upgradeId)} (уровень ${upgrade.level})`);
+        showNotification(`✅ Куплено улучшение майнера: ${getMinerUpgradeName(upgradeId)}`, 'success');
         
         // Haptic feedback
         if (tg?.HapticFeedback) {
@@ -701,6 +813,7 @@ function buyUpgrade(upgradeId) {
         saveUserData();
         
         console.log(`✅ Куплено улучшение: ${getUpgradeName(upgradeId)} (уровень ${upgrade.level})`);
+        showNotification(`✅ Куплено улучшение: ${getUpgradeName(upgradeId)}`, 'success');
         
         // Haptic feedback
         if (tg?.HapticFeedback) {
@@ -727,7 +840,7 @@ async function loadUserData() {
                     gameState.level = result.data.level;
                     gameState.experience = result.data.experience;
                     console.log('📥 Данные загружены с сервера');
-                    updateConnectionStatus('Подключено к боту', 'connected');
+                    updateConnectionStatus('connected');
                 }
             } else {
                 console.log('⚠️ Не удалось загрузить данные с сервера, используем локальные');
@@ -752,10 +865,16 @@ function loadLocalData() {
             gameState = { ...gameState, ...data };
             console.log('📥 Данные загружены из localStorage');
         }
-        updateConnectionStatus('Автономный режим', 'connected');
+        
+        const savedSettings = localStorage.getItem('magnumStarsSettings');
+        if (savedSettings) {
+            gameState.settings = { ...gameState.settings, ...JSON.parse(savedSettings) };
+        }
+        
+        updateConnectionStatus('connected');
     } catch (error) {
         console.log('❌ Ошибка загрузки локальных данных:', error);
-        updateConnectionStatus('Ошибка загрузки', 'error');
+        updateConnectionStatus('error');
     }
 }
 
@@ -764,6 +883,7 @@ async function saveUserData() {
     try {
         // Сохраняем локально
         localStorage.setItem('magnumStarsWebApp', JSON.stringify(gameState));
+        localStorage.setItem('magnumStarsSettings', JSON.stringify(gameState.settings));
         
         // Синхронизируем с сервером если есть userId
         if (userId) {
@@ -804,29 +924,47 @@ function handleVisibilityChange() {
 }
 
 // Обновление статуса подключения
-function updateConnectionStatus(message, status) {
-    const statusElement = elements.connectionStatus;
-    const indicator = statusElement.querySelector('.status-indicator');
-    const text = statusElement.querySelector('span');
-    
-    text.textContent = message;
+function updateConnectionStatus(status) {
+    const statusDot = elements.connectionStatus.querySelector('.status-dot');
     
     // Удаляем старые классы
-    indicator.className = 'status-indicator';
+    statusDot.className = 'status-dot';
     
     // Добавляем новый класс
     if (status === 'connected') {
-        indicator.classList.add('connected');
+        statusDot.classList.add('connected');
     } else if (status === 'connecting') {
-        indicator.classList.add('connecting');
+        statusDot.classList.add('connecting');
     } else if (status === 'error') {
-        indicator.classList.add('error');
+        statusDot.classList.add('error');
     }
+}
+
+// Показ уведомлений
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'times-circle'}"></i>
+        <span>${message}</span>
+    `;
+    
+    elements.notificationsContainer.appendChild(notification);
+    
+    // Удаляем уведомление через 3 секунды
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
 }
 
 // Периодическая синхронизация с сервером
 setInterval(() => {
-    if (userId && !document.hidden) {
+    if (userId && !document.hidden && gameState.settings.autoSave) {
         saveUserData();
     }
 }, 30000); // Синхронизация каждые 30 секунд
@@ -834,4 +972,30 @@ setInterval(() => {
 // Обновление фарма каждую секунду
 setInterval(() => {
     updateFarmCooldown();
+    updateFarmVisual();
 }, 1000);
+
+// Добавляем CSS анимации
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes fadeInOut {
+        0%, 100% { opacity: 0; transform: translateY(-10px); }
+        50% { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes slideOut {
+        from {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+    }
+    
+    .miner-machine.active .miner-gear {
+        animation: rotate 1s linear infinite;
+    }
+`;
+document.head.appendChild(style);
