@@ -839,6 +839,17 @@ async function loadUserData() {
                     gameState.stars = result.data.stars;
                     gameState.level = result.data.level;
                     gameState.experience = result.data.experience;
+                    gameState.clickCount = result.data.clickCount || 0;
+                    gameState.upgrades = result.data.upgrades || gameState.upgrades;
+                    gameState.minerUpgrades = result.data.minerUpgrades || gameState.minerUpgrades;
+                    gameState.tasks = result.data.tasks || gameState.tasks;
+                    gameState.settings = result.data.settings || gameState.settings;
+                    
+                    // Обновляем CPS на основе улучшений
+                    if (gameState.upgrades.clickPower) {
+                        gameState.cps = 1 + gameState.upgrades.clickPower.level;
+                    }
+                    
                     console.log('📥 Данные загружены с сервера');
                     updateConnectionStatus('connected');
                 }
@@ -897,7 +908,12 @@ async function saveUserData() {
                     magnumCoins: gameState.magnumCoins,
                     stars: gameState.stars,
                     level: gameState.level,
-                    experience: gameState.experience
+                    experience: gameState.experience,
+                    clickCount: gameState.clickCount,
+                    upgrades: gameState.upgrades,
+                    minerUpgrades: gameState.minerUpgrades,
+                    tasks: gameState.tasks,
+                    settings: gameState.settings
                 })
             });
             
