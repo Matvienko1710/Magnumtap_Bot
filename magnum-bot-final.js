@@ -1885,7 +1885,7 @@ async function showWithdrawalMenu(ctx, user) {
     `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
     `└ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Magnum Coins\n\n` +
     `💡 *Информация:*\n` +
-    `├ Минимальная сумма MC: 10 Magnum Coins\n` +
+    `├ 🚧 Вывод MC: в разработке\n` +
     `├ Минимальная сумма Stars: 15 Stars\n` +
     `├ Комиссия: 5%\n` +
     `└ Обработка: до 24 часов\n\n` +
@@ -9613,37 +9613,31 @@ bot.action('withdrawal_mc', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    if (user.magnumCoins < 10) {
-      await ctx.answerCbQuery('❌ Минимальная сумма для вывода: 10 Magnum Coins');
-      return;
-    }
-    
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'withdrawing_mc', updatedAt: new Date() } }
-    );
-    
-    userCache.delete(user.id);
+    await ctx.answerCbQuery('🚧 Функция в разработке! Скоро будет доступна.');
     
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Отмена', 'withdrawal')]
+      [Markup.button.callback('🔙 Назад', 'withdrawal')]
     ]);
     
     await ctx.editMessageText(
       `💰 *Вывод Magnum Coins*\n\n` +
-      `💎 Доступно: ${formatNumber(user.magnumCoins)} Magnum Coins\n` +
-      `💸 Комиссия: 5%\n\n` +
-      `Введите сумму для вывода:\n\n` +
-      `💡 *Пример:* 100, 500, 1000\n\n` +
-      `⚠️ *Внимание:* Минимум 10 Magnum Coins!`,
+      `🚧 *Функция в разработке*\n\n` +
+      `⚙️ Мы работаем над системой вывода Magnum Coins.\n` +
+      `📅 Скоро эта функция будет доступна!\n\n` +
+      `💡 *Что будет доступно:*\n` +
+      `├ Минимальная сумма: 10 Magnum Coins\n` +
+      `├ Комиссия: 5%\n` +
+      `├ Обработка: до 24 часов\n` +
+      `└ Безопасные переводы\n\n` +
+      `🔔 Следите за обновлениями!`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
       }
     );
   } catch (error) {
-    logError(error, 'Вывод Magnum Coins');
-    await ctx.answerCbQuery('❌ Ошибка вывода Magnum Coins');
+    logError(error, 'Вывод Magnum Coins (в разработке)');
+    await ctx.answerCbQuery('❌ Ошибка показа информации');
   }
 });
 
@@ -9705,7 +9699,7 @@ bot.action('withdrawal_stats', async (ctx) => {
       `└ Средний вывод: ${withdrawal.withdrawalCount > 0 ? formatNumber(withdrawal.totalWithdrawn / withdrawal.withdrawalCount) : '0.00'} Magnum Coins\n\n` +
       `💡 *Информация:*\n` +
       `├ Комиссия за вывод: 5%\n` +
-      `├ Минимум Magnum Coins: 10\n` +
+      `├ 🚧 Вывод MC: в разработке\n` +
       `├ Минимум Stars: 15\n` +
       `└ Обработка: до 24 часов`;
     
