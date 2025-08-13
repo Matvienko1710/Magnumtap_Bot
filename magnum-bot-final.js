@@ -12699,8 +12699,8 @@ async function handleWithdrawalMC(ctx, user, text) {
         
         const keyboard = Markup.inlineKeyboard([
           [
-            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
-            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+            Markup.button.callback('✅ Одобрить', `approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `reject_${withdrawalRequest._id}`)
           ]
         ]);
         
@@ -12736,8 +12736,8 @@ async function handleWithdrawalMC(ctx, user, text) {
       try {
         const keyboard = Markup.inlineKeyboard([
           [
-            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
-            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+            Markup.button.callback('✅ Одобрить', `approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `reject_${withdrawalRequest._id}`)
           ]
         ]);
         
@@ -12870,8 +12870,8 @@ async function handleWithdrawalStars(ctx, user, text) {
         
         const keyboard = Markup.inlineKeyboard([
           [
-            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
-            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+            Markup.button.callback('✅ Одобрить', `approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `reject_${withdrawalRequest._id}`)
           ]
         ]);
         
@@ -12907,8 +12907,8 @@ async function handleWithdrawalStars(ctx, user, text) {
       try {
         const keyboard = Markup.inlineKeyboard([
           [
-            Markup.button.callback('✅ Одобрить', `withdrawal_approve_${withdrawalRequest._id}`),
-            Markup.button.callback('❌ Отклонить', `withdrawal_reject_${withdrawalRequest._id}`)
+            Markup.button.callback('✅ Одобрить', `approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `reject_${withdrawalRequest._id}`)
           ]
         ]);
         
@@ -13107,7 +13107,7 @@ bot.command('test_channel', async (ctx) => {
 });
 
 // ==================== ОБРАБОТКА ЗАЯВОК НА ВЫВОД ====================
-bot.action(/^withdrawal_approve_(.+)$/, async (ctx) => {
+bot.action(/^approve_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
@@ -13185,7 +13185,7 @@ bot.action(/^withdrawal_approve_(.+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^withdrawal_reject_(.+)$/, async (ctx) => {
+bot.action(/^reject_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
@@ -13211,16 +13211,16 @@ bot.action(/^withdrawal_reject_(.+)$/, async (ctx) => {
     // Показываем кнопки с причинами отклонения
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🚫 Недостаточно средств', `withdrawal_reject_reason_${requestId}_insufficient_funds`),
-        Markup.button.callback('🚫 Подозрительная активность', `withdrawal_reject_reason_${requestId}_suspicious_activity`)
+        Markup.button.callback('🚫 Недостаточно средств', `reject_${requestId}_funds`),
+        Markup.button.callback('🚫 Подозрительная активность', `reject_${requestId}_suspicious`)
       ],
       [
-        Markup.button.callback('🚫 Нарушение правил', `withdrawal_reject_reason_${requestId}_rules_violation`),
-        Markup.button.callback('🚫 Техническая ошибка', `withdrawal_reject_reason_${requestId}_technical_error`)
+        Markup.button.callback('🚫 Нарушение правил', `reject_${requestId}_rules`),
+        Markup.button.callback('🚫 Не включены платные сообщения', `reject_${requestId}_premium`)
       ],
       [
-        Markup.button.callback('🚫 Другая причина', `withdrawal_reject_reason_${requestId}_other`),
-        Markup.button.callback('🔙 Назад', `withdrawal_reject_cancel_${requestId}`)
+        Markup.button.callback('🚫 Другая причина', `reject_${requestId}_other`),
+        Markup.button.callback('🔙 Назад', `cancel_${requestId}`)
       ]
     ]);
     
@@ -13240,7 +13240,7 @@ bot.action(/^withdrawal_reject_(.+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^withdrawal_reject_reason_(.+)_(.+)$/, async (ctx) => {
+bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
@@ -13266,10 +13266,10 @@ bot.action(/^withdrawal_reject_reason_(.+)_(.+)$/, async (ctx) => {
     
     // Определяем текст причины
     const reasonTexts = {
-      'insufficient_funds': 'Недостаточно средств в резерве',
-      'suspicious_activity': 'Подозрительная активность',
-      'rules_violation': 'Нарушение правил использования',
-      'technical_error': 'Техническая ошибка',
+      'funds': 'Недостаточно средств в резерве',
+      'suspicious': 'Подозрительная активность',
+      'rules': 'Нарушение правил использования',
+      'premium': 'Не включены платные сообщения',
       'other': 'Другая причина'
     };
     
@@ -13345,7 +13345,7 @@ bot.action(/^withdrawal_reject_reason_(.+)_(.+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^withdrawal_reject_cancel_(.+)$/, async (ctx) => {
+bot.action(/^cancel_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
@@ -13358,8 +13358,8 @@ bot.action(/^withdrawal_reject_cancel_(.+)$/, async (ctx) => {
     // Возвращаем к исходному сообщению с кнопками одобрения/отклонения
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('✅ Одобрить', `withdrawal_approve_${requestId}`),
-        Markup.button.callback('❌ Отклонить', `withdrawal_reject_${requestId}`)
+        Markup.button.callback('✅ Одобрить', `approve_${requestId}`),
+        Markup.button.callback('❌ Отклонить', `reject_${requestId}`)
       ]
     ]);
     
