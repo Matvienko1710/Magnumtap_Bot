@@ -246,6 +246,26 @@ body {
     100% { opacity: 1; }
 }
 
+/* Информационная секция */
+.info-section {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 20px;
+    text-align: center;
+}
+
+.info-section p {
+    margin: 8px 0;
+    color: #2c3e50;
+    font-size: 0.9rem;
+}
+
+.info-section p:first-child {
+    font-weight: bold;
+    color: #3498db;
+}
+
 /* Адаптивность */
 @media (max-width: 480px) {
     .container {
