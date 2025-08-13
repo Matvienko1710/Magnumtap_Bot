@@ -69,6 +69,10 @@ const config = {
 
 // ==================== КОНФИГУРАЦИЯ ====================
 
+// Глобальные переменные для хранения курса за 24 часа
+let exchangeRate24h = null;
+let lastRateUpdate = null;
+
 // Функция для расчета динамического курса обмена
 async function calculateExchangeRate() {
   try {
@@ -96,6 +100,16 @@ async function calculateExchangeRate() {
     
     const dynamicRate = config.BASE_EXCHANGE_RATE * multiplier;
     
+    // Обновляем курс за 24 часа только раз в день
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    if (!lastRateUpdate || lastRateUpdate < oneDayAgo) {
+      exchangeRate24h = dynamicRate;
+      lastRateUpdate = now;
+      console.log(`📅 Обновлен курс за 24 часа: ${dynamicRate.toFixed(6)}`);
+    }
+    
     console.log(`💱 Расчет курса обмена:`, {
       magnumCoinsReserve: formatNumber(magnumCoinsReserve),
       starsReserve: formatNumber(starsReserve),
@@ -103,7 +117,8 @@ async function calculateExchangeRate() {
       logRatio: ratio > 1 ? (Math.log(ratio) / Math.log(10)).toFixed(4) : 'N/A',
       multiplier: multiplier.toFixed(4),
       baseRate: config.BASE_EXCHANGE_RATE,
-      dynamicRate: dynamicRate.toFixed(6)
+      dynamicRate: dynamicRate.toFixed(6),
+      rate24h: exchangeRate24h ? exchangeRate24h.toFixed(6) : 'N/A'
     });
     
     return dynamicRate;
@@ -4761,31 +4776,25 @@ async function showExchangeMenu(ctx, user) {
     
 
     
-    // Получаем историю курсов
-    const exchangeHistory = await db.collection('exchangeHistory')
-      .find({ type: 'rate_update' })
-      .sort({ timestamp: -1 })
-      .limit(5)
-      .toArray();
-    
-    // Рассчитываем изменение курса
+    // Рассчитываем изменение курса за 24 часа
     let priceChange = 0;
     let priceChangePercent = 0;
-    if (exchangeHistory.length >= 2) {
-      const currentPrice = exchangeRate;
-      const previousPrice = exchangeHistory[1].rate || 0.001;
-      priceChange = currentPrice - previousPrice;
-      priceChangePercent = previousPrice > 0 ? ((priceChange / previousPrice) * 100) : 0;
-    }
+    let priceChangeIcon = '📈';
+    let priceChangeColor = '🟢';
     
-    // Проверяем на NaN и корректность данных
-    if (isNaN(priceChange) || isNaN(priceChangePercent)) {
-      priceChange = 0;
-      priceChangePercent = 0;
+    if (exchangeRate24h !== null) {
+      priceChange = exchangeRate - exchangeRate24h;
+      priceChangePercent = exchangeRate24h > 0 ? ((priceChange / exchangeRate24h) * 100) : 0;
+      
+      // Проверяем на NaN и корректность данных
+      if (isNaN(priceChange) || isNaN(priceChangePercent)) {
+        priceChange = 0;
+        priceChangePercent = 0;
+      }
+      
+      priceChangeIcon = priceChange >= 0 ? '📈' : '📉';
+      priceChangeColor = priceChange >= 0 ? '🟢' : '🔴';
     }
-    
-    const priceChangeIcon = priceChange >= 0 ? '📈' : '📉';
-    const priceChangeColor = priceChange >= 0 ? '🟢' : '🔴';
     
     // Форматируем изменение цены с правильными знаками
     const formatPriceChange = (change, percent) => {
@@ -4828,7 +4837,7 @@ async function showExchangeMenu(ctx, user) {
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `📊 *Текущий курс:*\n` +
       `├ ${priceChangeIcon} 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ ${priceChangeColor} Изменение: ${exchangeHistory.length >= 2 ? formatPriceChange(priceChange, priceChangePercent) : 'Нет данных'}\n` +
+      `├ ${priceChangeColor} Изменение за 24ч: ${exchangeRate24h !== null ? formatPriceChange(priceChange, priceChangePercent) : 'Нет данных'}\n` +
       `├ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n` +
       `└ 📅 Обновлено: ${new Date().toLocaleTimeString('ru-RU')}\n\n` +
       `🏦 *Резерв биржи:*\n` +
