@@ -4676,16 +4676,7 @@ async function showExchangeMenu(ctx, user) {
     const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
-    // Рассчитываем примеры с комиссией
-    const commission10 = (10 * config.EXCHANGE_COMMISSION) / 100;
-    const commission50 = (50 * config.EXCHANGE_COMMISSION) / 100;
-    const commission100 = (100 * config.EXCHANGE_COMMISSION) / 100;
-    const commission500 = (500 * config.EXCHANGE_COMMISSION) / 100;
-    
-    const stars10 = ((10 - commission10) * exchangeRate).toFixed(6);
-    const stars50 = ((50 - commission50) * exchangeRate).toFixed(6);
-    const stars100 = ((100 - commission100) * exchangeRate).toFixed(6);
-    const stars500 = ((500 - commission500) * exchangeRate).toFixed(6);
+
     
     // Получаем историю курсов
     const exchangeHistory = await db.collection('exchangeHistory')
@@ -4729,14 +4720,6 @@ async function showExchangeMenu(ctx, user) {
         Markup.button.callback('⭐ Ввести сумму Stars → MC', 'exchange_custom_stars')
       ],
       [
-        Markup.button.callback(`🪙 10 MC → ${stars10} Stars`, 'exchange_10'),
-        Markup.button.callback(`🪙 50 MC → ${stars50} Stars`, 'exchange_50')
-      ],
-      [
-        Markup.button.callback(`🪙 100 MC → ${stars100} Stars`, 'exchange_100'),
-        Markup.button.callback(`🪙 500 MC → ${stars500} Stars`, 'exchange_500')
-      ],
-      [
         Markup.button.callback('🪙 Все Magnum Coins', 'exchange_all'),
         Markup.button.callback('📊 Статистика обменов', 'exchange_stats')
       ],
@@ -4747,6 +4730,9 @@ async function showExchangeMenu(ctx, user) {
       [
         Markup.button.callback('⚙️ Настройки биржи', 'exchange_settings'),
         Markup.button.callback('📰 Новости биржи', 'exchange_news')
+      ],
+      [
+        Markup.button.callback('🔄 Обновить', 'exchange_refresh')
       ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
@@ -5132,6 +5118,12 @@ async function performExchange(ctx, user, amount) {
     await ctx.answerCbQuery(
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
+    
+    // Автоматически обновляем меню биржи
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showExchangeMenu(ctx, updatedUser);
+    }
   } catch (error) {
     logError(error, 'Обмен Magnum Coins на Stars');
     await ctx.answerCbQuery('❌ Ошибка обмена');
@@ -8918,6 +8910,10 @@ bot.action('farm', async (ctx) => {
 // Обмен
 bot.action('exchange', async (ctx) => {
   try {
+    // Очищаем кеш для получения свежих данных
+    userCache.delete(ctx.from.id);
+    statsCache.delete('reserve');
+    
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
@@ -9000,48 +8996,7 @@ bot.action('exchange_custom_stars', async (ctx) => {
   }
 });
 
-bot.action('exchange_10', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 10);
-  } catch (error) {
-    logError(error, 'Обмен 10 Magnum Coins');
-  }
-});
 
-bot.action('exchange_50', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 50);
-  } catch (error) {
-    logError(error, 'Обмен 50 Magnum Coins');
-  }
-});
-
-bot.action('exchange_100', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 100);
-  } catch (error) {
-    logError(error, 'Обмен 100 Magnum Coins');
-  }
-});
-bot.action('exchange_500', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await performExchange(ctx, user, 500);
-  } catch (error) {
-    logError(error, 'Обмен 500 Magnum Coins');
-  }
-});
 bot.action('exchange_all', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -9105,6 +9060,27 @@ bot.action('exchange_news', async (ctx) => {
   } catch (error) {
     logError(error, 'Новости биржи');
     await ctx.answerCbQuery('❌ Ошибка загрузки новостей');
+  }
+});
+
+bot.action('exchange_refresh', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Очищаем кеш для получения свежих данных
+    userCache.delete(user.id);
+    statsCache.delete('reserve');
+    
+    // Получаем обновленного пользователя
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showExchangeMenu(ctx, updatedUser);
+      await ctx.answerCbQuery('✅ Биржа обновлена!');
+    }
+  } catch (error) {
+    logError(error, 'Обновление биржи');
+    await ctx.answerCbQuery('❌ Ошибка обновления');
   }
 });
 
@@ -11956,7 +11932,7 @@ async function handleExchangeCustomMC(ctx, user, text) {
       return;
     }
     
-    // Выполняем обмен
+    // Выполняем обмен (автоматически обновит меню)
     await performExchange(ctx, user, amount);
     
   } catch (error) {
@@ -11984,7 +11960,7 @@ async function handleExchangeCustomStars(ctx, user, text) {
       return;
     }
     
-    // Выполняем обмен Stars на MC
+    // Выполняем обмен Stars на MC (автоматически обновит меню)
     await performStarsToMCExchange(ctx, user, starsAmount);
     
   } catch (error) {
