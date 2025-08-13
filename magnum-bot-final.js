@@ -286,15 +286,15 @@ function setCachedStats(key, data) {
 function formatNumber(num) {
   // Проверяем, что num является числом
   if (num === null || num === undefined || isNaN(num)) {
-    return '0';
+    return '0,00';
   }
   
   // Преобразуем в число на всякий случай
   num = Number(num);
   
-  // Форматируем число с разделителями тысяч
+  // Форматируем число с разделителями тысяч и всегда 2 знаками после запятой
   return num.toLocaleString('ru-RU', {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
