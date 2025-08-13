@@ -5306,11 +5306,11 @@ async function showTasksAchievements(ctx, user) {
     
     // Система достижений
     const achievements = [
-      { id: 'first_task', title: '🎯 Первое задание', description: 'Выполните первое задание', requirement: 1, reward: 10 },
-      { id: 'task_master', title: '🎯 Мастер заданий', description: 'Выполните 10 заданий', requirement: 10, reward: 50 },
-      { id: 'task_expert', title: '🎯 Эксперт заданий', description: 'Выполните 25 заданий', requirement: 25, reward: 100 },
-      { id: 'task_legend', title: '🎯 Легенда заданий', description: 'Выполните 50 заданий', requirement: 50, reward: 250 },
-      { id: 'task_god', title: '🎯 Бог заданий', description: 'Выполните 100 заданий', requirement: 100, reward: 500 }
+      { id: 'first_task', title: '🎯 Первое задание', description: 'Выполните первое задание', requirement: 1, reward: 100 },
+      { id: 'task_master', title: '🎯 Мастер заданий', description: 'Выполните 10 заданий', requirement: 10, reward: 500 },
+      { id: 'task_expert', title: '🎯 Эксперт заданий', description: 'Выполните 25 заданий', requirement: 25, reward: 1500 },
+      { id: 'task_legend', title: '🎯 Легенда заданий', description: 'Выполните 50 заданий', requirement: 50, reward: 5000 },
+      { id: 'task_god', title: '🎯 Бог заданий', description: 'Выполните 100 заданий', requirement: 100, reward: 15000 }
     ];
     
     // Проверяем достижения
