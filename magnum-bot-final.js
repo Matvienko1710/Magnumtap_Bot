@@ -7760,7 +7760,6 @@ bot.action('admin_debug_ranks', async (ctx) => {
   }
 });
 
-<<<<<<< HEAD
 bot.action('admin_test_progress', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -7790,9 +7789,6 @@ bot.action('admin_force_level_check', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка проверки уровня');
   }
 });
-
-=======
->>>>>>> origin/main
 bot.action('admin_reserve_add_mc', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
