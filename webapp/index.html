@@ -31,6 +31,13 @@
                     <div class="stat-label">Stars</div>
                 </div>
             </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-info">
+                    <div class="stat-value" id="level">1</div>
+                    <div class="stat-label">Уровень</div>
+                </div>
+            </div>
         </div>
 
         <!-- Основная кнопка кликера -->
@@ -47,11 +54,208 @@
             </div>
         </div>
 
-        <!-- Улучшения -->
-        <div class="upgrades">
-            <h3>🚀 Улучшения</h3>
-            <div class="upgrade-list" id="upgradeList">
-                <!-- Улучшения будут добавлены через JavaScript -->
+        <!-- Навигация -->
+        <div class="navigation">
+            <div class="nav-grid">
+                <button class="nav-btn" data-section="clicker">
+                    <div class="nav-icon">⚡</div>
+                    <div class="nav-text">Кликер</div>
+                </button>
+                <button class="nav-btn" data-section="farm">
+                    <div class="nav-icon">🌾</div>
+                    <div class="nav-text">Фарм</div>
+                </button>
+                <button class="nav-btn" data-section="exchange">
+                    <div class="nav-icon">📈</div>
+                    <div class="nav-text">Биржа</div>
+                </button>
+                <button class="nav-btn" data-section="miner">
+                    <div class="nav-icon">⛏️</div>
+                    <div class="nav-text">Майнер</div>
+                </button>
+                <button class="nav-btn" data-section="tasks">
+                    <div class="nav-icon">📋</div>
+                    <div class="nav-text">Задания</div>
+                </button>
+                <button class="nav-btn" data-section="referrals">
+                    <div class="nav-icon">👥</div>
+                    <div class="nav-text">Рефералы</div>
+                </button>
+                <button class="nav-btn" data-section="achievements">
+                    <div class="nav-icon">🏆</div>
+                    <div class="nav-text">Достижения</div>
+                </button>
+                <button class="nav-btn" data-section="settings">
+                    <div class="nav-icon">⚙️</div>
+                    <div class="nav-text">Настройки</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Секции контента -->
+        <div class="content-sections">
+            <!-- Секция кликера -->
+            <div class="content-section active" id="clicker-section">
+                <h3>🚀 Улучшения кликера</h3>
+                <div class="upgrade-list" id="upgradeList">
+                    <!-- Улучшения будут добавлены через JavaScript -->
+                </div>
+            </div>
+
+            <!-- Секция фарма -->
+            <div class="content-section" id="farm-section">
+                <h3>🌾 Фарм</h3>
+                <div class="farm-info">
+                    <div class="farm-stats">
+                        <div class="farm-stat">
+                            <span>Время до следующего фарма:</span>
+                            <span id="farmCooldown">Готово</span>
+                        </div>
+                        <div class="farm-stat">
+                            <span>Награда за фарм:</span>
+                            <span id="farmReward">0.01 MC</span>
+                        </div>
+                    </div>
+                    <button class="farm-btn" id="farmBtn">🌾 Собрать урожай</button>
+                </div>
+            </div>
+
+            <!-- Секция биржи -->
+            <div class="content-section" id="exchange-section">
+                <h3>📈 Биржа</h3>
+                <div class="exchange-info">
+                    <div class="exchange-rate">
+                        <span>Курс обмена:</span>
+                        <span id="exchangeRate">1 MC = 0.001 ⭐</span>
+                    </div>
+                    <div class="exchange-form">
+                        <div class="exchange-input-group">
+                            <label>Отправить:</label>
+                            <input type="number" id="exchangeAmount" placeholder="0" min="0">
+                            <select id="exchangeFrom">
+                                <option value="mc">Magnum Coins</option>
+                                <option value="stars">Stars</option>
+                            </select>
+                        </div>
+                        <div class="exchange-result">
+                            <span>Получить:</span>
+                            <span id="exchangeResult">0</span>
+                            <span id="exchangeResultCurrency">Stars</span>
+                        </div>
+                        <button class="exchange-btn" id="exchangeBtn">🔄 Обменять</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Секция майнера -->
+            <div class="content-section" id="miner-section">
+                <h3>⛏️ Майнер</h3>
+                <div class="miner-info">
+                    <div class="miner-status">
+                        <span>Статус:</span>
+                        <span id="minerStatus">Выключен</span>
+                    </div>
+                    <div class="miner-stats">
+                        <div class="miner-stat">
+                            <span>Доход в минуту:</span>
+                            <span id="minerIncome">0.01 MC</span>
+                        </div>
+                        <div class="miner-stat">
+                            <span>Уровень:</span>
+                            <span id="minerLevel">1</span>
+                        </div>
+                    </div>
+                    <button class="miner-btn" id="minerBtn">⛏️ Включить майнер</button>
+                    <div class="miner-upgrades">
+                        <h4>Улучшения майнера</h4>
+                        <div class="miner-upgrade-list" id="minerUpgradeList">
+                            <!-- Улучшения майнера будут добавлены через JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Секция заданий -->
+            <div class="content-section" id="tasks-section">
+                <h3>📋 Задания</h3>
+                <div class="tasks-info">
+                    <div class="tasks-tabs">
+                        <button class="task-tab active" data-tab="daily">Ежедневные</button>
+                        <button class="task-tab" data-tab="achievements">Достижения</button>
+                    </div>
+                    <div class="tasks-content">
+                        <div class="task-list" id="dailyTasks">
+                            <!-- Ежедневные задания будут добавлены через JavaScript -->
+                        </div>
+                        <div class="task-list hidden" id="achievementTasks">
+                            <!-- Достижения будут добавлены через JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Секция рефералов -->
+            <div class="content-section" id="referrals-section">
+                <h3>👥 Рефералы</h3>
+                <div class="referrals-info">
+                    <div class="referral-stats">
+                        <div class="referral-stat">
+                            <span>Всего рефералов:</span>
+                            <span id="referralsCount">0</span>
+                        </div>
+                        <div class="referral-stat">
+                            <span>Заработок с рефералов:</span>
+                            <span id="referralEarnings">0 MC</span>
+                        </div>
+                    </div>
+                    <div class="referral-link">
+                        <label>Ваша реферальная ссылка:</label>
+                        <div class="link-container">
+                            <input type="text" id="referralLink" readonly>
+                            <button class="copy-btn" id="copyReferralBtn">📋</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Секция достижений -->
+            <div class="content-section" id="achievements-section">
+                <h3>🏆 Достижения</h3>
+                <div class="achievements-info">
+                    <div class="achievements-stats">
+                        <div class="achievement-stat">
+                            <span>Выполнено:</span>
+                            <span id="achievementsCompleted">0</span>
+                        </div>
+                        <div class="achievement-stat">
+                            <span>Всего:</span>
+                            <span id="achievementsTotal">0</span>
+                        </div>
+                    </div>
+                    <div class="achievements-list" id="achievementsList">
+                        <!-- Достижения будут добавлены через JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Секция настроек -->
+            <div class="content-section" id="settings-section">
+                <h3>⚙️ Настройки</h3>
+                <div class="settings-info">
+                    <div class="setting-item">
+                        <label>Уведомления:</label>
+                        <input type="checkbox" id="notificationsToggle" checked>
+                    </div>
+                    <div class="setting-item">
+                        <label>Звуковые эффекты:</label>
+                        <input type="checkbox" id="soundToggle" checked>
+                    </div>
+                    <div class="setting-item">
+                        <label>Автосохранение:</label>
+                        <input type="checkbox" id="autoSaveToggle" checked>
+                    </div>
+                    <button class="settings-btn" id="resetDataBtn">🔄 Сбросить данные</button>
+                </div>
             </div>
         </div>
 
@@ -64,8 +268,8 @@
         <!-- Информация о подключении -->
         <div class="info-section">
             <p>💡 Это WebApp версия Magnum Stars</p>
-            <p>🎮 Кликайте по кнопке для получения монет</p>
-            <p>🚀 Покупайте улучшения для увеличения дохода</p>
+            <p>🎮 Все функции бота доступны в WebApp</p>
+            <p>🚀 Прогресс синхронизируется с ботом</p>
         </div>
     </div>
 
