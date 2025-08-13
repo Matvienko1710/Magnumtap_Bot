@@ -615,9 +615,21 @@ function ensureUserFields(user) {
       dailyTasks: [],
       sponsorTasks: [],
       lastDailyTasksReset: null,
-      completedTasksCount: 0,
-      totalTaskRewards: 0
+      completedTasks: 0,
+      totalTaskEarnings: 0
     };
+  }
+  
+  // Миграция для старых пользователей
+  if (user.tasks && (user.tasks.completedTasksCount !== undefined || user.tasks.totalTaskRewards !== undefined)) {
+    if (user.tasks.completedTasksCount !== undefined) {
+      user.tasks.completedTasks = user.tasks.completedTasksCount;
+      delete user.tasks.completedTasksCount;
+    }
+    if (user.tasks.totalTaskRewards !== undefined) {
+      user.tasks.totalTaskEarnings = user.tasks.totalTaskRewards;
+      delete user.tasks.totalTaskRewards;
+    }
   }
   
   // Проверяем и инициализируем поддержку
@@ -776,8 +788,8 @@ async function getUser(id, ctx = null) {
           dailyTasks: [],
           sponsorTasks: [],
           lastDailyTasksReset: null,
-          completedTasksCount: 0,
-          totalTaskRewards: 0
+          completedTasks: 0,
+          totalTaskEarnings: 0
         },
         support: {
           ticketsCount: 0,
@@ -5451,7 +5463,9 @@ async function claimDailyTaskReward(ctx, user, taskId) {
         $inc: { 
           magnumCoins: task.reward,
           totalEarnedMagnumCoins: task.reward,
-          experience: Math.floor(task.reward * 5)
+          experience: Math.floor(task.reward * 5),
+          'tasks.completedTasks': 1,
+          'tasks.totalTaskEarnings': task.reward
         },
         $set: { 
           [`tasks.dailyTasks.${taskId}.claimed`]: true,
