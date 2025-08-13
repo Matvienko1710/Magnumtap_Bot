@@ -286,15 +286,15 @@ function setCachedStats(key, data) {
 function formatNumber(num) {
   // Проверяем, что num является числом
   if (num === null || num === undefined || isNaN(num)) {
-    return '0';
+    return '0,00';
   }
   
   // Преобразуем в число на всякий случай
   num = Number(num);
   
-  // Форматируем число с разделителями тысяч
+  // Форматируем число с разделителями тысяч и всегда 2 знаками после запятой
   return num.toLocaleString('ru-RU', {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
@@ -318,6 +318,18 @@ function formatTime(seconds) {
     return `${minutes}м ${secs}с`;
   }
   return `${secs}с`;
+}
+
+function calculateExperienceToNextLevel(level) {
+  // Базовый опыт для 1 уровня
+  let baseExperience = 100;
+  
+  // Рассчитываем опыт для указанного уровня
+  for (let i = 1; i < level; i++) {
+    baseExperience = Math.floor(baseExperience * 1.2);
+  }
+  
+  return baseExperience;
 }
 
 function getRankByLevel(level) {
