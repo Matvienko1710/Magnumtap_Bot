@@ -5021,13 +5021,13 @@ async function performExchange(ctx, user, amount) {
     
     if (amount > user.magnumCoins) {
       log(`❌ Недостаточно Magnum Coins для пользователя ${user.id}`);
-      await ctx.answerCbQuery('❌ Недостаточно Magnum Coins для обмена!');
+      await ctx.reply('❌ Недостаточно Magnum Coins для обмена!');
       return;
     }
     
     if (amount <= 0) {
       log(`❌ Некорректная сумма обмена для пользователя ${user.id}`);
-      await ctx.answerCbQuery('❌ Некорректная сумма обмена!');
+      await ctx.reply('❌ Некорректная сумма обмена!');
       return;
     }
     
@@ -5035,7 +5035,7 @@ async function performExchange(ctx, user, amount) {
     const exchangeLimit = getExchangeLimitByRank(user.level);
     if (amount > exchangeLimit) {
       log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${amount} > ${exchangeLimit}`);
-      await ctx.answerCbQuery(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC (зависит от ранга)`);
+      await ctx.reply(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC (зависит от ранга)`);
       return;
     }
     
@@ -5053,7 +5053,7 @@ async function performExchange(ctx, user, amount) {
     
     if (starsToReceive > availableStars) {
       log(`❌ Недостаточно Stars в резерве для пользователя ${user.id}`);
-      await ctx.answerCbQuery('❌ Недостаточно Stars в резерве для обмена!');
+      await ctx.reply('❌ Недостаточно Stars в резерве для обмена!');
       return;
     }
     
@@ -5119,7 +5119,7 @@ async function performExchange(ctx, user, amount) {
     
     log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission})`);
     log(`💰 Комиссия ${commission} MC добавлена в резерв биржи`);
-    await ctx.answerCbQuery(
+    await ctx.reply(
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
     
@@ -5130,7 +5130,7 @@ async function performExchange(ctx, user, amount) {
     }
   } catch (error) {
     logError(error, 'Обмен Magnum Coins на Stars');
-    await ctx.answerCbQuery('❌ Ошибка обмена');
+    await ctx.reply('❌ Ошибка обмена');
   }
 }
 
@@ -5141,13 +5141,13 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     
     if (starsAmount > user.stars) {
       log(`❌ Недостаточно Stars для пользователя ${user.id}`);
-      await ctx.answerCbQuery('❌ Недостаточно Stars для обмена!');
+      await ctx.reply('❌ Недостаточно Stars для обмена!');
       return;
     }
     
     if (starsAmount <= 0) {
       log(`❌ Некорректная сумма обмена для пользователя ${user.id}`);
-      await ctx.answerCbQuery('❌ Некорректная сумма обмена!');
+      await ctx.reply('❌ Некорректная сумма обмена!');
       return;
     }
     
@@ -5157,7 +5157,7 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     const exchangeLimit = getExchangeLimitByRank(user.level);
     if (mcEquivalent > exchangeLimit) {
       log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${mcEquivalent} MC эквивалент > ${exchangeLimit}`);
-      await ctx.answerCbQuery(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC эквивалент (зависит от ранга)`);
+      await ctx.reply(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC эквивалент (зависит от ранга)`);
       return;
     }
     
@@ -5172,7 +5172,7 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     
     if (mcToReceive > availableMC) {
       log(`❌ Недостаточно Magnum Coins в резерве для пользователя ${user.id}`);
-      await ctx.answerCbQuery('❌ Недостаточно Magnum Coins в резерве для обмена!');
+      await ctx.reply('❌ Недостаточно Magnum Coins в резерве для обмена!');
       return;
     }
     
@@ -5239,7 +5239,7 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     
     log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${starsAmount} Stars → ${mcToReceive} Magnum Coins (курс: ${exchangeRate}, комиссия: ${commission} Stars)`);
     log(`💰 Комиссия ${commission} Stars добавлена в резерв биржи`);
-    await ctx.answerCbQuery(
+    await ctx.reply(
       `✅ Обмен выполнен! ${formatNumber(starsAmount)} Stars → ${formatNumber(mcToReceive)} Magnum Coins\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
     );
     
