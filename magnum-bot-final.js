@@ -12935,6 +12935,96 @@ async function handleWithdrawalStars(ctx, user, text) {
   }
 }
 
+// ==================== ТЕСТИРОВАНИЕ КАНАЛА ПОДДЕРЖКИ ====================
+bot.command('set_channel', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.reply('❌ Доступ запрещен');
+      return;
+    }
+    
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+      await ctx.reply('📝 Использование: /set_channel @channel_name\n\n💡 Примеры:\n├ /set_channel @magnumsupported\n├ /set_channel -1001234567890\n└ /set_channel (пусто для отключения)');
+      return;
+    }
+    
+    const channelName = args[1];
+    
+    if (channelName === 'off' || channelName === 'disable') {
+      // Отключаем канал поддержки
+      config.WITHDRAWAL_CHANNEL = null;
+      await ctx.reply('✅ Канал поддержки отключен. Заявки будут отправляться только админам.');
+      return;
+    }
+    
+    await ctx.reply(`🔍 Проверка канала ${channelName}...`);
+    
+    try {
+      const chat = await bot.telegram.getChat(channelName);
+      
+      // Проверяем права бота
+      const botMember = await bot.telegram.getChatMember(channelName, bot.botInfo.id);
+      
+      if (!botMember.can_post_messages) {
+        await ctx.reply(`❌ Бот не имеет прав на отправку сообщений в канал ${channelName}\n\n💡 Убедитесь, что бот добавлен как администратор с правами на отправку сообщений.`);
+        return;
+      }
+      
+      // Устанавливаем канал
+      config.WITHDRAWAL_CHANNEL = channelName;
+      
+      await ctx.reply(`✅ Канал поддержки установлен: ${channelName}\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n├ Username: ${chat.username || 'N/A'}\n└ Права бота: ✅ Может отправлять сообщения`);
+      
+    } catch (error) {
+      await ctx.reply(`❌ Ошибка доступа к каналу ${channelName}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Канал существует\n├ Бот добавлен в канал\n├ Бот имеет права администратора`);
+    }
+    
+  } catch (error) {
+    logError(error, 'Установка канала поддержки');
+    await ctx.reply('❌ Ошибка установки канала');
+  }
+});
+
+bot.command('test_channel', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.reply('❌ Доступ запрещен');
+      return;
+    }
+    
+    const testChannel = '@magnumsupported';
+    
+    await ctx.reply(`🔍 Тестирование канала ${testChannel}...`);
+    
+    try {
+      const chat = await bot.telegram.getChat(testChannel);
+      await ctx.reply(`✅ Канал ${testChannel} найден!\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n└ Username: ${chat.username || 'N/A'}`);
+      
+      // Пробуем отправить тестовое сообщение
+      const testMessage = await bot.telegram.sendMessage(
+        testChannel,
+        `🧪 *Тестовое сообщение*\n\n` +
+        `📅 Дата: ${new Date().toLocaleString('ru-RU')}\n` +
+        `🤖 Бот: @${bot.botInfo.username}\n` +
+        `✅ Канал работает корректно!`,
+        { parse_mode: 'Markdown' }
+      );
+      
+      await ctx.reply(`✅ Тестовое сообщение отправлено в канал!\n\n🆔 ID сообщения: ${testMessage.message_id}`);
+      
+    } catch (error) {
+      await ctx.reply(`❌ Ошибка доступа к каналу ${testChannel}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n├ Канал существует и доступен`);
+    }
+    
+  } catch (error) {
+    logError(error, 'Тестирование канала поддержки');
+    await ctx.reply('❌ Ошибка тестирования канала');
+  }
+});
+
 // ==================== ОБРАБОТКА ЗАЯВОК НА ВЫВОД ====================
 bot.action(/^withdrawal_approve_(.+)$/, async (ctx) => {
   try {
