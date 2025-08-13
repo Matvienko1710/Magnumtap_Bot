@@ -1419,11 +1419,19 @@ async function showMinerMenu(ctx, user) {
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
+  // Получаем информацию о титуле
+  const titlesList = getTitlesList(user);
+  const mainTitle = user.mainTitle || '🌱 Новичок';
+  const currentTitle = titlesList.find(t => t.name === mainTitle);
+  const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
+  const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
+
   const message = 
     `⛏️ *Майнер*\n\n` +
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level || 1}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
+    `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
     `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins${lastRewardText}\n\n` +
