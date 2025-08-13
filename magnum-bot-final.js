@@ -292,11 +292,14 @@ function formatNumber(num) {
   // Преобразуем в число на всякий случай
   num = Number(num);
   
-  // Форматируем число с разделителями тысяч и всегда 2 знаками после запятой
-  return num.toLocaleString('ru-RU', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+  // Разделяем на целую и дробную части
+  const [integerPart, decimalPart = '00'] = num.toFixed(2).split('.');
+  
+  // Добавляем разделители тысяч к целой части
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  // Возвращаем отформатированное число с запятой в качестве десятичного разделителя
+  return `${formattedInteger},${decimalPart}`;
 }
 
 function formatTime(seconds) {
