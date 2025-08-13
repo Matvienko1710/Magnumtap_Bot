@@ -43,7 +43,8 @@ const config = {
   FARM_BASE_REWARD: 0.01,
   DAILY_BONUS_BASE: 3,
   REFERRAL_BONUS: 50,
-  MINER_REWARD_PER_HOUR: 0.1,
+  MINER_REWARD_PER_MINUTE: 0.01, // Базовая награда за минуту
+  MINER_REWARD_PER_HOUR: 0.1, // Оставляем для обратной совместимости
   EXCHANGE_COMMISSION: 2.5,
   MIN_WITHDRAWAL: 100,
   MAX_WITHDRAWAL: 10000,
@@ -311,6 +312,8 @@ function formatTime(seconds) {
 function getUserRank(user) {
   const level = user.level || 1;
   
+  console.log(`🔍 getUserRank вызвана для пользователя ${user.id}, уровень: ${level}`);
+  
   // Система рангов на основе уровней
   if (level >= 100) return '👑 Император';
   if (level >= 80) return '⚜️ Король';
@@ -339,9 +342,13 @@ function getRankRequirements() {
   ];
 }
 
-function getRankProgress(user) {
-  const level = user.level || 1;
+async function getRankProgress(user) {
+  // Получаем актуальные данные пользователя из базы
+  const freshUser = await getUser(user.id);
+  const level = freshUser ? (freshUser.level || 1) : (user.level || 1);
   const ranks = getRankRequirements();
+  
+  console.log(`🔍 getRankProgress вызвана для пользователя ${user.id}, уровень: ${level}`);
   
   // Находим текущий ранг
   let currentRank = ranks[0];
@@ -357,6 +364,8 @@ function getRankProgress(user) {
     }
   }
   
+  console.log(`🔍 Найден текущий ранг: ${currentRank.name} (${currentRank.level})`);
+  console.log(`🔍 Следующий ранг: ${nextRank ? nextRank.name + ' (' + nextRank.level + ')' : 'Нет'}`);
   // Если достигнут максимальный ранг
   if (!nextRank) {
     const result = {
@@ -367,15 +376,7 @@ function getRankProgress(user) {
       isMax: true
     };
     
-    // Логируем для отладки
-    if (user.id) {
-      console.log(`🎯 Ранг прогресс для пользователя ${user.id}: Максимальный ранг достигнут`, {
-        level,
-        currentRank: currentRank.name,
-        result
-      });
-    }
-    
+    console.log(`🎯 Пользователь ${user.id} достиг максимального ранга:`, result);
     return result;
   }
   
@@ -400,6 +401,7 @@ function getRankProgress(user) {
   const levelDifference = nextRank.level - currentRank.level;
   const userProgress = level - currentRank.level;
   
+  console.log(`🔍 Расчет прогресса: levelDifference=${levelDifference}, userProgress=${userProgress}`);
   if (levelDifference <= 0) {
     console.error('Ошибка в расчете прогресса ранга: levelDifference <= 0', {
       currentRank,
@@ -428,18 +430,16 @@ function getRankProgress(user) {
     isMax: false
   };
   
-  // Логируем для отладки прогресса ранга
-  if (user.id && (progress === 100 || progress === 0)) {
-    console.log(`🎯 Ранг прогресс для пользователя ${user.id}:`, {
-      level,
-      currentRank: currentRank.name,
-      nextRank: nextRank.name,
-      progress,
-      remaining,
-      userProgress,
-      levelDifference
-    });
-  }
+  console.log(`🎯 Результат расчета прогресса для пользователя ${user.id}:`, {
+    level,
+    currentRank: currentRank.name,
+    nextRank: nextRank.name,
+    progress,
+    remaining,
+    userProgress,
+    levelDifference,
+    calculation: `(${userProgress} / ${levelDifference}) * 100 = ${progress}%`
+  });
   
   return result;
 }
@@ -448,8 +448,60 @@ function isAdmin(userId) {
   return config.ADMIN_IDS.includes(userId);
 }
 
+// Функция для проверки и повышения уровня пользователя
+async function checkAndUpdateLevel(user) {
+  try {
+    console.log(`🔍 Проверка уровня для пользователя ${user.id}: опыт ${user.experience}/${user.experienceToNextLevel}, уровень ${user.level}`);
+    
+    let levelUp = false;
+    let newLevel = user.level || 1;
+    let newExperience = user.experience || 0;
+    let newExperienceToNextLevel = user.experienceToNextLevel || 100;
+    
+    // Проверяем, достиг ли пользователь следующего уровня
+    while (newExperience >= newExperienceToNextLevel) {
+      levelUp = true;
+      newExperience -= newExperienceToNextLevel;
+      newLevel++;
+      
+      // Увеличиваем требуемый опыт для следующего уровня
+      newExperienceToNextLevel = Math.floor(newExperienceToNextLevel * 1.2);
+      
+      console.log(`🎉 Пользователь ${user.id} повысил уровень до ${newLevel}! Осталось опыта: ${newExperience}/${newExperienceToNextLevel}`);
+    }
+    
+    // Если уровень повысился, обновляем в базе данных
+    if (levelUp) {
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { 
+          $set: { 
+            level: newLevel,
+            experience: newExperience,
+            experienceToNextLevel: newExperienceToNextLevel,
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      // Обновляем кеш
+      user.level = newLevel;
+      user.experience = newExperience;
+      user.experienceToNextLevel = newExperienceToNextLevel;
+      setCachedUser(user.id, user);
+      
+      console.log(`✅ Уровень пользователя ${user.id} обновлен: ${newLevel}, опыт: ${newExperience}/${newExperienceToNextLevel}`);
+    }
+    
+    return { levelUp, newLevel, newExperience, newExperienceToNextLevel };
+  } catch (error) {
+    console.error(`❌ Ошибка при проверке уровня пользователя ${user.id}:`, error);
+    return { levelUp: false, newLevel: user.level, newExperience: user.experience, newExperienceToNextLevel: user.experienceToNextLevel };
+  }
+}
+
 // Функция для отладки прогресса ранга
-function debugRankProgress(user) {
+async function debugRankProgress(user) {
   const level = user.level || 1;
   const ranks = getRankRequirements();
   
@@ -486,6 +538,10 @@ function debugRankProgress(user) {
   } else {
     console.log(`└ Пользователь достиг максимального ранга`);
   }
+  
+  // Тестируем функцию getRankProgress
+  const rankProgress = await getRankProgress(user);
+  console.log(`🔍 Результат getRankProgress:`, rankProgress);
 }
 // ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
 // Функция для проверки и инициализации недостающих полей пользователя
@@ -938,7 +994,7 @@ async function handleReferral(userId, referrerId) {
 }
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 async function showMainMenu(ctx, user) {
-  const rankProgress = getRankProgress(user);
+  const rankProgress = await getRankProgress(user);
   
   // Создаем базовые кнопки
   const buttons = [
@@ -1004,7 +1060,7 @@ async function showMainMenu(ctx, user) {
 }
 
 async function showMainMenuStart(ctx, user) {
-  const rankProgress = getRankProgress(user);
+  const rankProgress = await getRankProgress(user);
   
   // Создаем базовые кнопки
   const buttons = [
@@ -1085,15 +1141,19 @@ async function showMinerMenu(ctx, user) {
   const miner = user.miner;
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
-  const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+  
+  // Рассчитываем текущую награду с учетом курса и количества майнеров
+  const currentReward = await calculateMinerReward(efficiency);
+  const rewardPerMinute = currentReward;
+  const rewardPerHour = currentReward * 60; // Примерная награда за час
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
   let lastRewardText = '';
   
   if (miner.lastReward) {
     const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
-    if (timeSince < 3600) {
-      const remaining = 3600 - timeSince;
+    if (timeSince < 60) {
+      const remaining = 60 - timeSince;
       lastRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
     }
   }
@@ -1117,6 +1177,7 @@ async function showMinerMenu(ctx, user) {
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
+    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Magnum Coins${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
@@ -1152,7 +1213,7 @@ async function startMiner(ctx, user) {
     userCache.delete(user.id);
     
     log(`✅ Майнер успешно запущен для пользователя ${user.id}`);
-    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Magnum Coins каждый час.');
+    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Magnum Coins каждую минуту.');
     
     log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
     // Обновляем меню майнера
@@ -1210,7 +1271,10 @@ async function showMinerUpgrade(ctx, user) {
     // Расчет стоимости улучшения
     const upgradeCost = currentLevel * 100; // 100 Magnum Coins за уровень
     const newEfficiency = currentEfficiency + 0.1;
-    const newRewardPerHour = config.MINER_REWARD_PER_HOUR * newEfficiency;
+    
+    // Рассчитываем новую награду с учетом курса и количества майнеров
+    const newRewardPerMinute = await calculateMinerReward(newEfficiency);
+    const newRewardPerHour = newRewardPerMinute * 60;
     
     const canUpgrade = user.magnumCoins >= upgradeCost;
     
@@ -1228,7 +1292,7 @@ async function showMinerUpgrade(ctx, user) {
       `⬆️ *Улучшение майнера*\n\n` +
       `📊 *Текущий уровень:* ${currentLevel}\n` +
       `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
-      `💰 *Текущая награда/час:* ${formatNumber(config.MINER_REWARD_PER_HOUR * currentEfficiency)} Magnum Coins\n\n` +
+      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency)) * 60)} Magnum Coins\n\n` +
       `📈 *После улучшения:*\n` +
       `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
       `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Magnum Coins\n\n` +
@@ -1255,7 +1319,11 @@ async function showMinerStats(ctx, user) {
     const miner = user.miner;
     const isActive = miner.active || false;
     const efficiency = miner.efficiency || 1;
-    const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+    
+    // Рассчитываем текущую награду с учетом курса и количества майнеров
+    const currentReward = await calculateMinerReward(efficiency);
+    const rewardPerMinute = currentReward;
+    const rewardPerHour = currentReward * 60;
     
     let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
     let lastRewardText = '';
@@ -1263,8 +1331,8 @@ async function showMinerStats(ctx, user) {
     
     if (miner.lastReward) {
       const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
-      if (timeSince < 3600) {
-        const remaining = 3600 - timeSince;
+      if (timeSince < 60) {
+        const remaining = 60 - timeSince;
         nextRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
       } else {
         nextRewardText = `\n✅ Готов к получению награды!`;
@@ -1280,13 +1348,15 @@ async function showMinerStats(ctx, user) {
       `📈 *Уровень:* ${miner.level || 1}\n` +
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
       `📊 *Статус:* ${statusText}\n` +
+      `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
       `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
       `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins\n` +
       `⏰ *Последняя награда:* ${miner.lastReward ? miner.lastReward.toLocaleString('ru-RU') : 'Нет'}\n` +
       `${nextRewardText}\n\n` +
       `📈 *Информация:*\n` +
       `• Майнер работает автоматически\n` +
-      `• Награды выдаются каждый час\n` +
+      `• Награды выдаются каждую минуту\n` +
+      `• Награда зависит от курса обмена и количества майнеров\n` +
       `• Эффективность увеличивается с улучшениями\n` +
       `• Можно улучшать за Magnum Coins`;
     
@@ -1455,6 +1525,15 @@ async function doFarm(ctx, user) {
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
+      if (levelResult.levelUp) {
+        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+      }
+    }
+    
     log(`✅ Фарм успешно завершен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins`);
     await ctx.answerCbQuery(
       `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Magnum Coins`
@@ -1602,15 +1681,19 @@ async function updateMinerMenu(ctx, user) {
   const miner = user.miner;
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
-  const rewardPerHour = config.MINER_REWARD_PER_HOUR * efficiency;
+  
+  // Рассчитываем текущую награду с учетом курса и количества майнеров
+  const currentReward = await calculateMinerReward(efficiency);
+  const rewardPerMinute = currentReward;
+  const rewardPerHour = currentReward * 60;
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
   let lastRewardText = '';
   
   if (miner.lastReward) {
     const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
-    if (timeSince < 3600) {
-      const remaining = 3600 - timeSince;
+    if (timeSince < 60) {
+      const remaining = 60 - timeSince;
       lastRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
     }
   }
@@ -1634,6 +1717,7 @@ async function updateMinerMenu(ctx, user) {
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
+    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined)} Magnum Coins${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
@@ -2205,6 +2289,15 @@ async function claimBonus(ctx, user) {
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
+      if (levelResult.levelUp) {
+        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+      }
+    }
+    
     log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins, серия: ${newStreak} дней`);
     await ctx.answerCbQuery(
       `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Magnum Coins, серия: ${newStreak} дней`
@@ -2575,6 +2668,8 @@ async function showAdminDebugRanks(ctx, user) {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔍 Проверить пользователя', 'admin_debug_user_rank')],
       [Markup.button.callback('📊 Статистика рангов', 'admin_rank_stats')],
+      [Markup.button.callback('🧪 Тест прогресса', 'admin_test_progress')],
+      [Markup.button.callback('⚡ Принудительная проверка уровня', 'admin_force_level_check')],
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
@@ -2589,6 +2684,8 @@ async function showAdminDebugRanks(ctx, user) {
     message += `\n🔧 *Доступные действия:*\n`;
     message += `├ 🔍 Проверить пользователя - отладка конкретного пользователя\n`;
     message += `├ 📊 Статистика рангов - детальная статистика\n`;
+    message += `├ 🧪 Тест прогресса - тестирование расчета прогресса\n`;
+    message += `├ ⚡ Принудительная проверка уровня - обновить уровни всех пользователей\n`;
     message += `└ 🔙 Назад - вернуться в админ панель\n\n`;
     message += `🎯 Выберите действие:`;
     
@@ -2604,6 +2701,113 @@ async function showAdminDebugRanks(ctx, user) {
   }
 }
 
+// Функция для тестирования прогресса рангов
+async function showAdminTestProgress(ctx, user) {
+  try {
+    log(`🧪 Показ теста прогресса рангов для админа ${user.id}`);
+    
+    const ranks = getRankRequirements();
+    let message = `🧪 *Тест расчета прогресса рангов*\n\n`;
+    
+    // Тестируем разные уровни
+    const testLevels = [1, 3, 7, 12, 18, 25, 35, 50, 70, 90, 100];
+    
+    message += `📊 *Тестовые уровни:*\n`;
+    
+    for (const level of testLevels) {
+      const testUser = { id: 'test', level: level };
+      const rankProgress = await getRankProgress(testUser);
+      
+      if (rankProgress.isMax) {
+        message += `├ Уровень ${level}: ${rankProgress.current.name} (Максимальный ранг)\n`;
+      } else {
+        message += `├ Уровень ${level}: ${rankProgress.current.name} → ${rankProgress.next.name} (${rankProgress.progress}%)\n`;
+      }
+    }
+    
+    message += `\n🔍 *Детальный расчет для уровня 7:*\n`;
+    const testUser7 = { id: 'test', level: 7 };
+    const rankProgress7 = await getRankProgress(testUser7);
+    message += `├ Текущий ранг: ${rankProgress7.current.name} (${rankProgress7.current.level})\n`;
+    message += `├ Следующий ранг: ${rankProgress7.next.name} (${rankProgress7.next.level})\n`;
+    message += `├ Прогресс: ${rankProgress7.progress}%\n`;
+    message += `└ Осталось: ${rankProgress7.remaining} уровней\n\n`;
+    
+    message += `🎯 Выберите действие:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+  } catch (error) {
+    logError(error, `Показ теста прогресса рангов для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа теста прогресса');
+  }
+}
+
+// Функция для принудительной проверки уровня всех пользователей
+async function showAdminForceLevelCheck(ctx, user) {
+  try {
+    log(`⚡ Принудительная проверка уровня для админа ${user.id}`);
+    
+    // Получаем всех пользователей
+    const allUsers = await db.collection('users').find({}).toArray();
+    let updatedCount = 0;
+    let levelUpCount = 0;
+    
+    message = `⚡ *Принудительная проверка уровня*\n\n`;
+    message += `🔍 Проверяем ${allUsers.length} пользователей...\n\n`;
+    
+    await ctx.editMessageText(message, { parse_mode: 'Markdown' });
+    
+    for (const dbUser of allUsers) {
+      try {
+        const levelResult = await checkAndUpdateLevel(dbUser);
+        if (levelResult.levelUp) {
+          levelUpCount++;
+          log(`🎉 Пользователь ${dbUser.id} повысил уровень до ${levelResult.newLevel}!`);
+        }
+        updatedCount++;
+        
+        // Обновляем сообщение каждые 10 пользователей
+        if (updatedCount % 10 === 0) {
+          message = `⚡ *Принудительная проверка уровня*\n\n`;
+          message += `🔍 Проверено: ${updatedCount}/${allUsers.length} пользователей\n`;
+          message += `🎉 Повысили уровень: ${levelUpCount} пользователей\n\n`;
+          message += `⏳ Продолжаем проверку...`;
+          
+          await ctx.editMessageText(message, { parse_mode: 'Markdown' });
+        }
+      } catch (error) {
+        logError(error, `Проверка уровня пользователя ${dbUser.id}`);
+      }
+    }
+    
+    message = `⚡ *Принудительная проверка уровня завершена*\n\n`;
+    message += `✅ Проверено: ${updatedCount} пользователей\n`;
+    message += `🎉 Повысили уровень: ${levelUpCount} пользователей\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Принудительная проверка уровня завершена: ${updatedCount} пользователей, ${levelUpCount} повышений`);
+  } catch (error) {
+    logError(error, `Принудительная проверка уровня для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка принудительной проверки уровня');
+  }
+}
 // Функции обработки управления резервом
 async function handleAdminAddReserveMC(ctx, user, text) {
   try {
@@ -2887,7 +3091,7 @@ async function showAdminSettings(ctx, user) {
       `├ 🎯 Базовая награда фарма: \`${config.FARM_BASE_REWARD}\` Magnum Coins\n` +
       `├ ⏰ Кулдаун фарма: \`${config.FARM_COOLDOWN}\` секунд\n` +
       `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
-      `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_HOUR}\` Magnum Coins/час\n` +
+      `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins/мин\n` +
       `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Magnum Coins\n` +
       `├ 💸 Комиссия обмена: \`${config.EXCHANGE_COMMISSION}%\`\n` +
       `└ 📢 Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n\n` +
@@ -3075,7 +3279,7 @@ async function showAdminMinerSettings(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('💰 Награда за час', 'admin_miner_reward'),
+        Markup.button.callback('💰 Базовая награда', 'admin_miner_reward'),
         Markup.button.callback('⚡ Эффективность', 'admin_miner_efficiency')
       ],
       [
@@ -3088,10 +3292,10 @@ async function showAdminMinerSettings(ctx, user) {
     const message = 
       `⛏️ *Настройки майнера*\n\n` +
       `💰 *Текущие настройки:*\n` +
-      `├ Награда за час: \`${config.MINER_REWARD_PER_HOUR}\` Magnum Coins\n` +
+      `├ Базовая награда за минуту: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins\n` +
       `├ Базовая эффективность: \`1.0\`\n` +
       `├ Максимальная эффективность: \`5.0\`\n` +
-      `└ Максимальная награда: \`${config.MINER_REWARD_PER_HOUR * 5}\` Magnum Coins/час\n\n` +
+      `└ Максимальная базовая награда: \`${config.MINER_REWARD_PER_MINUTE * 5}\` Magnum Coins/мин\n\n` +
       `📊 *Статистика пользователя:*\n` +
       `├ Уровень майнера: \`${user.miner?.level || 1}\`\n` +
       `├ Эффективность: \`${user.miner?.efficiency || 1.0}\`\n` +
@@ -3348,37 +3552,94 @@ async function showAdminUnbanUser(ctx, user) {
 }
 
 // ==================== ОБРАБОТКА МАЙНЕРА ====================
+// Функция для расчета награды майнера с учетом курса и количества активных майнеров
+async function calculateMinerReward(userEfficiency = 1) {
+  try {
+    // Получаем количество активных майнеров
+    const activeMinersCount = await db.collection('users').countDocuments({
+      'miner.active': true
+    });
+    
+    // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
+    
+    // Базовая награда за минуту
+    let baseReward = config.MINER_REWARD_PER_MINUTE;
+    
+    // Множитель на основе курса обмена (чем выше курс, тем больше награда)
+    const exchangeMultiplier = Math.max(0.5, Math.min(3.0, exchangeRate / config.BASE_EXCHANGE_RATE));
+    
+    // Множитель на основе количества активных майнеров (чем больше майнеров, тем меньше награда)
+    const minersMultiplier = Math.max(0.3, Math.min(2.0, 1 / Math.sqrt(activeMinersCount + 1)));
+    
+    // Итоговая награда
+    const finalReward = baseReward * exchangeMultiplier * minersMultiplier * userEfficiency;
+    
+    console.log(`⛏️ Расчет награды майнера:`, {
+      baseReward: baseReward.toFixed(4),
+      exchangeRate: exchangeRate.toFixed(6),
+      exchangeMultiplier: exchangeMultiplier.toFixed(3),
+      activeMiners: activeMinersCount,
+      minersMultiplier: minersMultiplier.toFixed(3),
+      userEfficiency: userEfficiency.toFixed(2),
+      finalReward: finalReward.toFixed(4)
+    });
+    
+    return Math.max(0.001, finalReward); // Минимальная награда 0.001
+  } catch (error) {
+    console.error('❌ Ошибка расчета награды майнера:', error);
+    return config.MINER_REWARD_PER_MINUTE * userEfficiency;
+  }
+}
+
 async function processMinerRewards() {
   try {
     const now = new Date();
-    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const minuteAgo = new Date(now.getTime() - 60 * 1000); // 1 минута назад
     
     const activeMiners = await db.collection('users').find({
       'miner.active': true,
-      'miner.lastReward': { $lt: hourAgo }
+      'miner.lastReward': { $lt: minuteAgo }
     }).toArray();
     
+    console.log(`⛏️ Обработка наград майнера: найдено ${activeMiners.length} активных майнеров`);
+    
     for (const user of activeMiners) {
-      const reward = config.MINER_REWARD_PER_HOUR * user.miner.efficiency;
-      
-      await db.collection('users').updateOne(
-        { id: user.id },
-        { 
-          $inc: { 
-            magnumCoins: reward,
-            totalEarnedMagnumCoins: reward,
-            experience: Math.floor(reward * 5),
-            'miner.totalMined': reward
-          },
-          $set: { 
-            'miner.lastReward': now,
-            updatedAt: new Date()
+      try {
+        // Рассчитываем награду с учетом курса и количества майнеров
+        const reward = await calculateMinerReward(user.miner.efficiency);
+        
+        await db.collection('users').updateOne(
+          { id: user.id },
+          { 
+            $inc: { 
+              magnumCoins: reward,
+              totalEarnedMagnumCoins: reward,
+              experience: Math.floor(reward * 5),
+              'miner.totalMined': reward
+            },
+            $set: { 
+              'miner.lastReward': now,
+              updatedAt: new Date()
+            }
+          }
+        );
+        
+        userCache.delete(user.id);
+        
+        // Проверяем и обновляем уровень пользователя
+        const updatedUser = await getUser(user.id);
+        if (updatedUser) {
+          const levelResult = await checkAndUpdateLevel(updatedUser);
+          if (levelResult.levelUp) {
+            log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
           }
         }
-      );
-      
-      userCache.delete(user.id);
-      log(`⛏️ Майнер награда: ${user.id} +${reward} Magnum Coins`);
+        
+        log(`⛏️ Майнер награда: ${user.id} +${reward.toFixed(4)} Magnum Coins`);
+      } catch (error) {
+        logError(error, `Обработка награды майнера для пользователя ${user.id}`);
+      }
     }
   } catch (error) {
     logError(error, 'Обработка наград майнера');
@@ -4948,7 +5209,10 @@ async function showRanksMenu(ctx, user) {
   try {
     log(`⚔️ Показ меню рангов для пользователя ${user.id}`);
     
-    const rankProgress = getRankProgress(user);
+    // Отладка прогресса ранга
+    await debugRankProgress(user);
+    
+    const rankProgress = await getRankProgress(user);
     const ranks = getRankRequirements();
     
     // Дополнительная проверка для отладки
@@ -5553,15 +5817,15 @@ async function handleAdminSetMinerReward(ctx, user, text) {
     
     // Обновляем настройку в базе данных
     await db.collection('config').updateOne(
-      { key: 'MINER_REWARD_PER_HOUR' },
+      { key: 'MINER_REWARD_PER_MINUTE' },
       { $set: { value: newReward, updatedAt: new Date() } },
       { upsert: true }
     );
     
     // Обновляем конфиг в памяти
-    config.MINER_REWARD_PER_HOUR = newReward;
+    config.MINER_REWARD_PER_MINUTE = newReward;
     
-    await ctx.reply(`✅ Награда майнера изменена на ${newReward} Magnum Coins в час`);
+    await ctx.reply(`✅ Базовая награда майнера изменена на ${newReward} Magnum Coins в минуту`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -5947,13 +6211,16 @@ bot.action('faq_miner', async (ctx) => {
     const message = 
       `⛏️ *FAQ - Майнер*\n\n` +
       `*❓ Что такое майнер?*\n` +
-      `Майнер - это автоматический способ заработка Magnum Coins. Он работает в фоновом режиме и приносит награды каждый час.\n\n` +
+      `Майнер - это автоматический способ заработка Magnum Coins. Он работает в фоновом режиме и приносит награды каждую минуту.\n\n` +
       `*❓ Как запустить майнер?*\n` +
       `Перейдите в раздел "Фарм" → "⛏️ Майнер" и нажмите "▶️ Запустить майнер".\n\n` +
       `*❓ Как часто майнер приносит награды?*\n` +
-      `Майнер приносит награды каждые 60 минут (1 час).\n\n` +
+      `Майнер приносит награды каждую минуту.\n\n` +
           `*❓ Сколько Magnum Coins я получаю от майнера?*\n` +
-    `За час работы майнер приносит ${config.MINER_REWARD_PER_HOUR || 10} Magnum Coins. Награда зависит от уровня майнера.\n\n` +
+    `Награда майнера динамическая и зависит от:\n` +
+    `• Курса обмена Magnum Coins\n` +
+    `• Количества активных майнеров\n` +
+    `• Уровня вашего майнера\n\n` +
       `*❓ Как улучшить майнер?*\n` +
       `Майнер можно улучшить, потратив Magnum Coins. Улучшения увеличивают эффективность и награды.\n\n` +
       `*❓ Что такое эффективность майнера?*\n` +
@@ -7493,6 +7760,39 @@ bot.action('admin_debug_ranks', async (ctx) => {
   }
 });
 
+<<<<<<< HEAD
+bot.action('admin_test_progress', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminTestProgress(ctx, user);
+  } catch (error) {
+    logError(error, 'Тест прогресса рангов');
+    await ctx.answerCbQuery('❌ Ошибка теста прогресса');
+  }
+});
+
+bot.action('admin_force_level_check', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminForceLevelCheck(ctx, user);
+  } catch (error) {
+    logError(error, 'Принудительная проверка уровня');
+    await ctx.answerCbQuery('❌ Ошибка проверки уровня');
+  }
+});
+
+=======
+>>>>>>> origin/main
 bot.action('admin_reserve_add_mc', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -8161,7 +8461,7 @@ bot.action('admin_miner_reward', async (ctx) => {
       { $set: { adminState: 'setting_miner_reward', updatedAt: new Date() } }
     );
     
-    await ctx.reply('⛏️ Введите новую награду майнера (в Magnum Coins за час):');
+    await ctx.reply('⛏️ Введите новую базовую награду майнера (в Magnum Coins за минуту):');
   } catch (error) {
     logError(error, 'Установка награды майнера (обработчик)');
   }
@@ -8238,11 +8538,11 @@ async function startBot() {
       statsCacheTTL: config.STATS_CACHE_TTL
     });
     
-    // Запускаем обработку майнера каждые 30 минут
+    // Запускаем обработку майнера каждую минуту
     setInterval(() => {
       console.log('⛏️ Запуск обработки наград майнера по расписанию');
       processMinerRewards();
-    }, 30 * 60 * 1000);
+    }, 60 * 1000); // 1 минута
     
     // Очистка кеша каждые 5 минут
     setInterval(() => {
