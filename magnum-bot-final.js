@@ -11234,7 +11234,13 @@ bot.action('admin_create_post_with_button', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    user.adminState = 'creating_post_with_button';
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_post_with_button', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
     await ctx.editMessageText(
       `📝 *Создание поста с кнопкой*\n\n` +
       `Отправьте текст поста в следующем сообщении.\n\n` +
@@ -11254,8 +11260,13 @@ bot.action('admin_create_post_no_button', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_post_no_button', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
     
-    user.adminState = 'creating_post_no_button';
     await ctx.editMessageText(
       `📝 *Создание поста без кнопки*\n\n` +
       `Отправьте текст поста в следующем сообщении.\n\n` +
@@ -11273,7 +11284,13 @@ bot.action('admin_create_promocode', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    user.adminState = 'creating_promocode';
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_promocode', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
     await ctx.editMessageText(
       `🎫 *Создание промокода*\n\n` +
       `Отправьте данные промокода в формате:\n` +
@@ -11305,7 +11322,13 @@ bot.action('enter_promocode', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    user.adminState = 'entering_promocode';
+    // Сохраняем adminState в базе данных
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'entering_promocode', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
     await ctx.editMessageText(
       `🎫 *Ввод промокода*\n\n` +
       `Отправьте промокод в следующем сообщении.\n\n` +
