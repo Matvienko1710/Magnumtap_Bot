@@ -9083,6 +9083,21 @@ bot.action('admin_bonus_series', async (ctx) => {
   } catch (error) { logError(error, 'Серия бонусов (обработчик)'); }
 });
 
+bot.action('admin_cooldowns', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminCooldowns(ctx, user);
+  } catch (error) {
+    logError(error, 'Кулдауны (обработчик)');
+    await ctx.answerCbQuery('❌ Ошибка показа кулдаунов');
+  }
+});
+
 bot.action('admin_cooldown_bonus', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); if (!user) return;
