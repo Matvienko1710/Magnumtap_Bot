@@ -1595,6 +1595,9 @@ async function doFarm(ctx, user) {
       }
     }
     
+    // Обновляем прогресс ежедневного задания "Фармер дня"
+    await updateDailyTaskProgress(user, 'daily_farm', 1);
+    
     log(`✅ Фарм успешно завершен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins`);
     await ctx.answerCbQuery(
       `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Magnum Coins`
@@ -2365,6 +2368,9 @@ async function claimBonus(ctx, user) {
         log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
       }
     }
+    
+    // Обновляем прогресс ежедневного задания "Бонус дня"
+    await updateDailyTaskProgress(user, 'daily_bonus', 1);
     
     log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins, серия: ${newStreak} дней`);
     await ctx.answerCbQuery(
@@ -3988,6 +3994,9 @@ async function performExchange(ctx, user, amount) {
     log(`🗑️ Очистка кеша для пользователя ${user.id}`);
     userCache.delete(user.id);
     
+    // Обновляем прогресс ежедневного задания "Трейдер дня"
+    await updateDailyTaskProgress(user, 'daily_exchange', 1);
+    
     log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission})`);
     await ctx.answerCbQuery(
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
@@ -5156,9 +5165,22 @@ async function showDailyTasks(ctx, user) {
     const dailyTasks = getDailyTasks();
     const userTasks = user.tasks?.dailyTasks || {};
     
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад', 'tasks')]
-    ]);
+    // Создаем кнопки для получения наград
+    const buttons = [];
+    dailyTasks.forEach((task) => {
+      const userTask = userTasks[task.id] || {};
+      const progress = userTask.progress || 0;
+      const isCompleted = progress >= task.target;
+      const isClaimed = userTask.claimed || false;
+      
+      if (isCompleted && !isClaimed) {
+        buttons.push([Markup.button.callback(`🎁 Получить награду: ${task.title}`, `claim_daily_${task.id}`)]);
+      }
+    });
+    
+    buttons.push([Markup.button.callback('🔙 Назад', 'tasks')]);
+    
+    const keyboard = Markup.inlineKeyboard(buttons);
     
     let message = `📅 *Ежедневные задания*\n\n`;
     message += `🔄 *Эти задания обновляются каждый день!*\n\n`;
@@ -5174,7 +5196,7 @@ async function showDailyTasks(ctx, user) {
       message += `├ ${task.description}\n`;
       message += `├ Прогресс: \`${progress}/${task.target}\`\n`;
       message += `├ Награда: \`${task.reward}\` Magnum Coins\n`;
-      message += `└ ${isCompleted ? '✅ Выполнено' : '🔄 В процессе'}\n\n`;
+      message += `└ ${isCompleted ? (isClaimed ? '✅ Выполнено и получено' : '🎁 Готово к получению!') : '🔄 В процессе'}\n\n`;
     });
     
     message += `💡 *Как выполнить:*\n`;
@@ -5419,6 +5441,129 @@ function getDailyTasks() {
       reward: 30
     }
   ];
+}
+
+// Функция для обновления прогресса ежедневных заданий
+async function updateDailyTaskProgress(user, taskType, amount = 1) {
+  try {
+    const today = new Date().toDateString();
+    const userTasks = user.tasks?.dailyTasks || {};
+    
+    // Проверяем, нужно ли сбросить задания (новый день)
+    const lastReset = user.lastDailyTasksReset;
+    const shouldReset = !lastReset || lastReset.toDateString() !== today;
+    
+    if (shouldReset) {
+      // Сбрасываем прогресс на новый день
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { 
+          $set: { 
+            'tasks.dailyTasks': {},
+            lastDailyTasksReset: new Date(),
+            updatedAt: new Date()
+          }
+        }
+      );
+      user.tasks = user.tasks || {};
+      user.tasks.dailyTasks = {};
+      user.lastDailyTasksReset = new Date();
+    }
+    
+    // Обновляем прогресс для конкретного задания
+    const currentProgress = userTasks[taskType]?.progress || 0;
+    const newProgress = currentProgress + amount;
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          [`tasks.dailyTasks.${taskType}.progress`]: newProgress,
+          [`tasks.dailyTasks.${taskType}.lastUpdated`]: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Обновляем кеш
+    if (!user.tasks) user.tasks = {};
+    if (!user.tasks.dailyTasks) user.tasks.dailyTasks = {};
+    user.tasks.dailyTasks[taskType] = {
+      progress: newProgress,
+      lastUpdated: new Date()
+    };
+    
+    console.log(`📅 Обновлен прогресс ежедневного задания ${taskType}: ${newProgress}`);
+    
+  } catch (error) {
+    console.error('❌ Ошибка обновления прогресса ежедневного задания:', error);
+  }
+}
+
+// Функция для получения награды за ежедневное задание
+async function claimDailyTaskReward(ctx, user, taskId) {
+  try {
+    const dailyTasks = getDailyTasks();
+    const task = dailyTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено!');
+      return;
+    }
+    
+    const userTasks = user.tasks?.dailyTasks || {};
+    const userTask = userTasks[taskId] || {};
+    const progress = userTask.progress || 0;
+    const isClaimed = userTask.claimed || false;
+    
+    if (progress < task.target) {
+      await ctx.answerCbQuery('❌ Задание еще не выполнено!');
+      return;
+    }
+    
+    if (isClaimed) {
+      await ctx.answerCbQuery('❌ Награда уже получена!');
+      return;
+    }
+    
+    // Выдаем награду
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: task.reward,
+          totalEarnedMagnumCoins: task.reward,
+          experience: Math.floor(task.reward * 5)
+        },
+        $set: { 
+          [`tasks.dailyTasks.${taskId}.claimed`]: true,
+          [`tasks.dailyTasks.${taskId}.claimedAt`]: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Обновляем кеш
+    userCache.delete(user.id);
+    
+    // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
+      if (levelResult.levelUp) {
+        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+      }
+    }
+    
+    await ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} Magnum Coins`);
+    
+    // Обновляем меню ежедневных заданий
+    await showDailyTasks(ctx, updatedUser || user);
+    
+  } catch (error) {
+    logError(error, 'Получение награды за ежедневное задание');
+    await ctx.answerCbQuery('❌ Ошибка получения награды');
+  }
 }
 
 async function checkTaskCompletion(ctx, user, task) {
@@ -7896,6 +8041,19 @@ bot.action('tasks_daily', async (ctx) => {
     await showDailyTasks(ctx, user);
   } catch (error) {
     logError(error, 'Ежедневные задания');
+  }
+});
+
+// Обработчики получения наград за ежедневные задания
+bot.action(/^claim_daily_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const taskId = ctx.match[1];
+    await claimDailyTaskReward(ctx, user, taskId);
+  } catch (error) {
+    logError(error, 'Получение награды ежедневного задания');
   }
 });
 
