@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnum Stars - WebApp</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Заголовок -->
+        <header class="header">
+            <h1>🎯 Magnum Stars</h1>
+            <p class="subtitle">WebApp версия</p>
+        </header>
+
+        <!-- Статистика -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-icon">🪙</div>
+                <div class="stat-info">
+                    <div class="stat-value" id="magnumCoins">0</div>
+                    <div class="stat-label">Magnum Coins</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-info">
+                    <div class="stat-value" id="stars">0</div>
+                    <div class="stat-label">Stars</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Основная кнопка кликера -->
+        <div class="clicker-section">
+            <button class="clicker-btn" id="clickerBtn">
+                <div class="clicker-icon">⚡</div>
+                <div class="clicker-text">КЛИК!</div>
+            </button>
+            <div class="clicker-info">
+                <div class="clicker-stats">
+                    <span>Кликов: <span id="clickCount">0</span></span>
+                    <span>CPS: <span id="cps">1</span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Улучшения -->
+        <div class="upgrades">
+            <h3>🚀 Улучшения</h3>
+            <div class="upgrade-list" id="upgradeList">
+                <!-- Улучшения будут добавлены через JavaScript -->
+            </div>
+        </div>
+
+        <!-- Статус подключения -->
+        <div class="connection-status" id="connectionStatus">
+            <div class="status-indicator"></div>
+            <span>Подключение к боту...</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
