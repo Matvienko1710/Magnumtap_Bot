@@ -2305,6 +2305,51 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
 }
 
 // ==================== АДМИН ТИТУЛЫ ====================
+async function showAdminRanksMenu(ctx, user) {
+  try {
+    log(`⭐ Показ управления рангами для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⭐ Выдать ранг', 'admin_give_rank')
+      ],
+      [
+        Markup.button.callback('📊 Статистика рангов', 'admin_ranks_stats')
+      ],
+      [
+        Markup.button.callback('🔙 Назад', 'admin')
+      ]
+    ]);
+    
+    const message = 
+      `⭐ *Управление рангами*\n\n` +
+      `Здесь вы можете управлять рангами пользователей.\n\n` +
+      `📋 *Доступные функции:*\n` +
+      `├ ⭐ Выдать ранг - установить уровень пользователя\n` +
+      `└ 📊 Статистика рангов - просмотр распределения рангов\n\n` +
+      `📋 *Система рангов:*\n` +
+      `├ 1-4: 🌱 Новичок\n` +
+      `├ 5-9: ⚔️ Боец\n` +
+      `├ 10-19: 🏹 Лучник\n` +
+      `├ 20-34: 🛡️ Рыцарь\n` +
+      `├ 35-49: ⚔️ Воин\n` +
+      `├ 50-74: 🦸 Герой\n` +
+      `├ 75-99: 🏆 Легенда\n` +
+      `└ 100+: 👑 Император\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Меню управления рангами показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления рангами для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления рангами');
+  }
+}
+
 async function showAdminTitles(ctx, user) {
   try {
     log(`👑 Показ управления титулами для админа ${user.id}`);
@@ -2924,6 +2969,9 @@ async function showAdminPanel(ctx, user) {
       ],
       [
         Markup.button.callback('👑 Управление титулами', 'admin_titles'),
+        Markup.button.callback('⭐ Управление рангами', 'admin_ranks')
+      ],
+      [
         Markup.button.callback('📢 Рассылка', 'admin_broadcast')
       ],
       [
@@ -2948,6 +2996,7 @@ async function showAdminPanel(ctx, user) {
       `├ 📝 Управление постами - создание постов в канал\n` +
       `├ 🎫 Управление промокодами - создание промокодов\n` +
       `├ 👑 Управление титулами - выдача и забор титулов\n` +
+      `├ ⭐ Управление рангами - выдача и изменение рангов\n` +
       `├ 📢 Рассылка - отправка сообщений\n` +
       `├ 🗳️ Управление голосованием - создание и управление голосованиями\n` +
       `├ 🔄 Обновление кеша - очистка кеша\n` +
@@ -4777,13 +4826,26 @@ async function showExchangeMenu(ctx, user) {
       `(зависит от ранга)\n\n` +
       `🎯 Выберите сумму для обмена или действие:`;
     
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
+    // Проверяем тип контекста для правильного метода отправки
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    } else {
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    }
   } catch (error) {
     logError(error, 'Показ биржи');
-    await ctx.answerCbQuery('❌ Ошибка загрузки биржи');
+    // Проверяем тип контекста для правильного метода ответа
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('❌ Ошибка загрузки биржи');
+    } else {
+      await ctx.reply('❌ Ошибка загрузки биржи');
+    }
   }
 }
 // Функция для показа графика курса
@@ -5139,10 +5201,12 @@ async function performExchange(ctx, user, amount) {
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
     
-    // Автоматически обновляем меню биржи
-    const updatedUser = await getUser(ctx.from.id);
-    if (updatedUser) {
-      await showExchangeMenu(ctx, updatedUser);
+    // Автоматически обновляем меню биржи только для callback queries
+    if (ctx.callbackQuery) {
+      const updatedUser = await getUser(ctx.from.id);
+      if (updatedUser) {
+        await showExchangeMenu(ctx, updatedUser);
+      }
     }
   } catch (error) {
     logError(error, 'Обмен Magnum Coins на Stars');
@@ -5259,10 +5323,12 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       `✅ Обмен выполнен! ${formatNumber(starsAmount)} Stars → ${formatNumber(mcToReceive)} Magnum Coins\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
     );
     
-    // Обновляем меню обмена
-    const updatedUser = await getUser(ctx.from.id);
-    if (updatedUser) {
-      await showExchangeMenu(ctx, updatedUser);
+    // Автоматически обновляем меню биржи только для callback queries
+    if (ctx.callbackQuery) {
+      const updatedUser = await getUser(ctx.from.id);
+      if (updatedUser) {
+        await showExchangeMenu(ctx, updatedUser);
+      }
     }
   } catch (error) {
     logError(error, 'Обмен валют');
@@ -7821,6 +7887,94 @@ async function handleAdminAnswerTicket(ctx, user, text) {
   } catch (error) {
     console.error(`❌ Ошибка ответа админа ${user.id} на тикет:`, error);
     await ctx.reply('❌ Ошибка отправки ответа. Попробуйте позже.');
+  }
+}
+
+// ==================== ВЫДАЧА РАНГА ====================
+async function handleAdminGiveRank(ctx, user, text) {
+  try {
+    log(`⭐ Админ ${user.id} выдает ранг: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Парсим данные
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply('❌ Неверный формат! Используйте: ID УРОВЕНЬ\n\n💡 Пример: 123456789 50');
+      return;
+    }
+    
+    const targetUserId = parseInt(parts[0]);
+    const newLevel = parseInt(parts[1]);
+    
+    // Валидация данных
+    if (!targetUserId || targetUserId <= 0) {
+      await ctx.reply('❌ Некорректный ID пользователя!');
+      return;
+    }
+    
+    if (!newLevel || newLevel <= 0 || newLevel > 1000) {
+      await ctx.reply('❌ Уровень должен быть от 1 до 1000!');
+      return;
+    }
+    
+    // Ищем пользователя
+    const targetUser = await db.collection('users').findOne({ id: targetUserId });
+    if (!targetUser) {
+      await ctx.reply(`❌ Пользователь с ID ${targetUserId} не найден!`);
+      return;
+    }
+    
+    const oldLevel = targetUser.level || 1;
+    const oldRank = getRankByLevel(oldLevel);
+    const newRank = getRankByLevel(newLevel);
+    
+    // Обновляем пользователя
+    await db.collection('users').updateOne(
+      { id: targetUserId },
+      { 
+        $set: { 
+          level: newLevel,
+          experience: 0,
+          experienceToNextLevel: calculateExperienceToNextLevel(newLevel),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш целевого пользователя
+    userCache.delete(targetUserId);
+    
+    // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_ranks')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Ранг успешно выдан!*\n\n` +
+      `👤 *Пользователь:* ${getDisplayName(targetUser)} (ID: ${targetUserId})\n` +
+      `📊 *Изменения:*\n` +
+      `├ Старый уровень: \`${oldLevel}\` (${oldRank})\n` +
+      `├ Новый уровень: \`${newLevel}\` (${newRank})\n` +
+      `└ Опыт: сброшен до 0\n\n` +
+      `📅 Выдано: ${new Date().toLocaleString('ru-RU')}\n\n` +
+      `🎯 Ранг обновлен!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Ранг успешно выдан админом ${user.id} пользователю ${targetUserId}: ${oldLevel} → ${newLevel}`);
+    
+  } catch (error) {
+    logError(error, `Выдача ранга админом ${user.id}`);
+    await ctx.reply('❌ Ошибка выдачи ранга. Попробуйте позже.');
   }
 }
 
@@ -10463,6 +10617,148 @@ bot.action('admin_remove_title', async (ctx) => {
   }
 });
 
+bot.action('admin_ranks', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminRanksMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление рангами');
+    await ctx.answerCbQuery('❌ Ошибка управления рангами');
+  }
+});
+
+bot.action('admin_give_rank', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'giving_rank', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_ranks')]
+    ]);
+    
+    await ctx.editMessageText(
+      `⭐ Выдача ранга\n\n` +
+      `Введите ID пользователя и уровень:\n\n` +
+      `💡 Формат: ID Уровень\n` +
+      `💡 Пример: 123456789 50\n\n` +
+      `📋 Доступные ранги:\n` +
+      `├ 1-4: 🌱 Новичок\n` +
+      `├ 5-9: ⚔️ Боец\n` +
+      `├ 10-19: 🏹 Лучник\n` +
+      `├ 20-34: 🛡️ Рыцарь\n` +
+      `├ 35-49: ⚔️ Воин\n` +
+      `├ 50-74: 🦸 Герой\n` +
+      `├ 75-99: 🏆 Легенда\n` +
+      `└ 100+: 👑 Император\n\n` +
+      `⚠️ Внимание: Уровень определяет ранг автоматически!`,
+      {
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Выдача ранга');
+    await ctx.answerCbQuery('❌ Ошибка выдачи ранга');
+  }
+});
+
+bot.action('admin_ranks_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminRanksStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика рангов');
+    await ctx.answerCbQuery('❌ Ошибка статистики рангов');
+  }
+});
+
+// Функция для показа статистики рангов
+async function showAdminRanksStats(ctx, user) {
+  try {
+    log(`📊 Показ статистики рангов для админа ${user.id}`);
+    
+    // Получаем статистику рангов
+    const ranksStats = await db.collection('users').aggregate([
+      {
+        $group: {
+          _id: {
+            $switch: {
+              branches: [
+                { case: { $lt: ['$level', 5] }, then: '🌱 Новичок (1-4)' },
+                { case: { $lt: ['$level', 10] }, then: '⚔️ Боец (5-9)' },
+                { case: { $lt: ['$level', 20] }, then: '🏹 Лучник (10-19)' },
+                { case: { $lt: ['$level', 35] }, then: '🛡️ Рыцарь (20-34)' },
+                { case: { $lt: ['$level', 50] }, then: '⚔️ Воин (35-49)' },
+                { case: { $lt: ['$level', 75] }, then: '🦸 Герой (50-74)' },
+                { case: { $lt: ['$level', 100] }, then: '🏆 Легенда (75-99)' }
+              ],
+              default: '👑 Император (100+)'
+            }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id': 1 } }
+    ]).toArray();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_ranks')]
+    ]);
+    
+    let message = `📊 *Статистика рангов*\n\n`;
+    
+    if (ranksStats.length > 0) {
+      message += `📈 *Распределение пользователей по рангам:*\n\n`;
+      
+      ranksStats.forEach((rank, index) => {
+        message += `${rank._id}: \`${rank.count}\` пользователей\n`;
+      });
+      
+      // Общая статистика
+      const totalUsers = ranksStats.reduce((sum, rank) => sum + rank.count, 0);
+      const maxRank = ranksStats.reduce((max, rank) => rank.count > max.count ? rank : max, ranksStats[0]);
+      
+      message += `\n📊 *Общая статистика:*\n`;
+      message += `├ Всего пользователей: \`${totalUsers}\`\n`;
+      message += `├ Самый популярный ранг: \`${maxRank._id}\` (\`${maxRank.count}\`)\n`;
+      message += `└ Процент от общего: \`${((maxRank.count / totalUsers) * 100).toFixed(1)}%\`\n`;
+    } else {
+      message += `❌ Нет данных о рангах пользователей`;
+    }
+    
+    message += `\n\n🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Статистика рангов показана для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ статистики рангов для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа статистики рангов');
+  }
+}
+
 bot.action('admin_titles_stats', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -11862,6 +12158,9 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'reporting_bug') {
           console.log(`🐛 Пользователь ${ctx.from.id} сообщает об ошибке: "${text}"`);
           await handleBugReport(ctx, user, text);
+        } else if (user.adminState === 'giving_rank') {
+          console.log(`⭐ Админ ${ctx.from.id} выдает ранг: "${text}"`);
+          await handleAdminGiveRank(ctx, user, text);
         } else if (user.adminState === 'adding_reserve_mc') {
           console.log(`➕ Админ ${ctx.from.id} добавляет Magnum Coins в резерв: "${text}"`);
           await handleAdminAddReserveMC(ctx, user, text);
