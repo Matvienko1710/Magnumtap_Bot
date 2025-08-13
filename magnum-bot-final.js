@@ -1525,7 +1525,7 @@ async function showMinerUpgrade(ctx, user) {
     
     // Расчет стоимости улучшения
     const upgradeCost = currentLevel * 100; // 100 Magnum Coins за уровень
-    const newEfficiency = currentEfficiency + 0.1;
+    const newEfficiency = currentEfficiency + 0.2;
     
     // Рассчитываем новую награду с учетом курса, количества майнеров и титула
     const newRewardPerMinute = await calculateMinerReward(newEfficiency, user);
@@ -1652,7 +1652,7 @@ async function upgradeMiner(ctx, user) {
     
     // Обновляем майнер
     const newLevel = currentLevel + 1;
-    const newEfficiency = currentEfficiency + 0.1;
+    const newEfficiency = currentEfficiency + 0.2;
     
     log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
