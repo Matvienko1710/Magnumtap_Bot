@@ -3,10 +3,21 @@ const { Telegraf, Markup } = require('telegraf');
 const { MongoClient, ObjectId } = require('mongodb');
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 
 // Создаем Express приложение для WebApp
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// Middleware для логирования запросов
+app.use((req, res, next) => {
+    console.log(`🌐 [${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+});
+
+// Middleware для обработки JSON
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Настройка статических файлов для WebApp
 app.use('/webapp', express.static(path.join(__dirname, 'webapp')));
@@ -22,7 +33,21 @@ app.get('/', (req, res) => {
 
 // Маршрут для WebApp
 app.get('/webapp', (req, res) => {
-    res.sendFile(path.join(__dirname, 'webapp', 'index.html'));
+    try {
+        const filePath = path.join(__dirname, 'webapp', 'index.html');
+        console.log(`📄 Отправка WebApp файла: ${filePath}`);
+        res.sendFile(filePath, (err) => {
+            if (err) {
+                console.error('❌ Ошибка отправки WebApp файла:', err);
+                res.status(500).json({ error: 'WebApp file not found' });
+            } else {
+                console.log('✅ WebApp файл отправлен успешно');
+            }
+        });
+    } catch (error) {
+        console.error('❌ Ошибка в маршруте /webapp:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // API маршрут будет добавлен после определения конфигурации
@@ -12301,9 +12326,23 @@ async function startBot() {
     await bot.launch();
     console.log('🚀 Magnum Stars Bot запущен успешно!');
     
+    // Проверяем существование файлов WebApp
+    const fs = require('fs');
+    const webappPath = path.join(__dirname, 'webapp');
+    const indexPath = path.join(webappPath, 'index.html');
+    const stylesPath = path.join(webappPath, 'styles.css');
+    const scriptPath = path.join(webappPath, 'script.js');
+
+    console.log('📁 Проверка файлов WebApp...');
+    console.log('📁 Путь к WebApp:', webappPath);
+    console.log('📄 index.html:', fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден');
+    console.log('🎨 styles.css:', fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден');
+    console.log('⚡ script.js:', fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден');
+
     // Запускаем Express сервер после успешного запуска бота
     const server = app.listen(PORT, () => {
         console.log(`🌐 WebApp сервер запущен на порту ${PORT}`);
+        console.log(`🌐 WebApp доступен по адресу: http://localhost:${PORT}/webapp`);
     });
 
     // Обработка ошибок сервера
@@ -12316,6 +12355,26 @@ async function startBot() {
         console.log('🛑 Остановка Express сервера...');
         server.close(() => {
             console.log('✅ Express сервер остановлен');
+        });
+    });
+
+    // Обработчик ошибок Express
+    app.use((error, req, res, next) => {
+        console.error('❌ Express ошибка:', error);
+        res.status(500).json({ 
+            error: 'Internal server error',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    // Обработчик 404 ошибок
+    app.use((req, res) => {
+        console.log(`❌ 404: ${req.method} ${req.path}`);
+        res.status(404).json({ 
+            error: 'Not found',
+            path: req.path,
+            timestamp: new Date().toISOString()
         });
     });
     
