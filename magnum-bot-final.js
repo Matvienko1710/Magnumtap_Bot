@@ -9655,15 +9655,23 @@ async function handleUserEnterPromocode(ctx, user, text) {
       }
     );
     
+    // Получаем обновленную информацию о промокоде для уведомления
+    const updatedPromocode = await db.collection('promocodes').findOne({ code: promocode });
+    
     // Отправляем уведомление в чат @magnumtapchat
     try {
       const chatId = '@magnumtapchat';
+      const remainingActivations = updatedPromocode ? (updatedPromocode.maxActivations - updatedPromocode.activations) : 0;
+      const activationStatus = remainingActivations > 0 ? `🟢 Активен (${updatedPromocode.activations}/${updatedPromocode.maxActivations})` : '🔴 Закончились активации';
+      
       const notificationMessage = 
         `🎫 *Новая активация промокода!*\n\n` +
+        `🆔 *ID промокода:* \`${updatedPromocode._id}\`\n` +
         `👤 Пользователь: ${user.firstName || 'Неизвестно'} ${user.username ? `(@${user.username})` : ''}\n` +
         `🆔 ID: \`${user.id}\`\n` +
         `🎫 Промокод: \`${promocode}\`\n` +
         `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+        `📊 Статус: ${activationStatus}\n` +
         `📅 Время: ${new Date().toLocaleString('ru-RU')}\n\n` +
         `🎉 Поздравляем с активацией промокода!`;
       
