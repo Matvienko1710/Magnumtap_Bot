@@ -43,6 +43,7 @@ const config = {
   FARM_BASE_REWARD: 0.01,
   DAILY_BONUS_BASE: 3,
   REFERRAL_BONUS: 50,
+  REFERRAL_REWARD: 100, // Награда за каждого реферала
   MINER_REWARD_PER_MINUTE: 0.01, // Базовая награда за минуту
   MINER_REWARD_PER_HOUR: 0.1, // Оставляем для обратной совместимости
   EXCHANGE_COMMISSION: 2.5,
