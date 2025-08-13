@@ -1592,7 +1592,8 @@ async function showMinerStats(ctx, user) {
     
     // Получаем информацию о титуле
     const titlesList = getTitlesList(user);
-    const currentTitle = titlesList.find(t => t.name === user.mainTitle);
+    const mainTitle = user.mainTitle || '🌱 Новичок';
+    const currentTitle = titlesList.find(t => t.name === mainTitle);
     const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
     const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
@@ -1600,7 +1601,7 @@ async function showMinerStats(ctx, user) {
       `📊 *Статистика майнера*\n\n` +
       `📈 *Уровень:* ${miner.level || 1}\n` +
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
-      `👑 *Титул:* ${user.mainTitle}${titleBonusText}\n` +
+      `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
       `📊 *Статус:* ${statusText}\n` +
       `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
       `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
@@ -2007,7 +2008,8 @@ async function updateMinerMenu(ctx, user) {
   
   // Получаем информацию о титуле
   const titlesList = getTitlesList(user);
-  const currentTitle = titlesList.find(t => t.name === user.mainTitle);
+  const mainTitle = user.mainTitle || '🌱 Новичок';
+  const currentTitle = titlesList.find(t => t.name === mainTitle);
   const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
   const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
@@ -2016,7 +2018,7 @@ async function updateMinerMenu(ctx, user) {
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level || 1}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
-    `👑 *Титул:* ${user.mainTitle}${titleBonusText}\n` +
+    `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
     `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
     `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins${lastRewardText}\n\n` +
