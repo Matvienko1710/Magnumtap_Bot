@@ -5235,6 +5235,86 @@ async function showTasksProgress(ctx, user) {
   }
 }
 
+async function showTasksAchievements(ctx, user) {
+  try {
+    log(`🏆 Показ достижений в заданиях для пользователя ${user.id}`);
+    
+    const tasks = user.tasks || {};
+    const completedTasks = tasks.completedTasks || 0;
+    const totalEarnings = tasks.totalTaskEarnings || 0;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'tasks')]
+    ]);
+    
+    let message = `🏆 *Достижения в заданиях*\n\n`;
+    
+    // Система достижений
+    const achievements = [
+      { id: 'first_task', title: '🎯 Первое задание', description: 'Выполните первое задание', requirement: 1, reward: 10 },
+      { id: 'task_master', title: '🎯 Мастер заданий', description: 'Выполните 10 заданий', requirement: 10, reward: 50 },
+      { id: 'task_expert', title: '🎯 Эксперт заданий', description: 'Выполните 25 заданий', requirement: 25, reward: 100 },
+      { id: 'task_legend', title: '🎯 Легенда заданий', description: 'Выполните 50 заданий', requirement: 50, reward: 250 },
+      { id: 'task_god', title: '🎯 Бог заданий', description: 'Выполните 100 заданий', requirement: 100, reward: 500 }
+    ];
+    
+    // Проверяем достижения
+    const userAchievements = tasks.achievements || {};
+    
+    message += `📊 *Ваша статистика:*\n`;
+    message += `├ Выполнено заданий: \`${completedTasks}\`\n`;
+    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
+    message += `└ Получено достижений: \`${Object.keys(userAchievements).length}\`\n\n`;
+    
+    message += `🏆 *Достижения:*\n`;
+    
+    achievements.forEach(achievement => {
+      const isCompleted = userAchievements[achievement.id]?.completed || false;
+      const isClaimed = userAchievements[achievement.id]?.claimed || false;
+      const progress = Math.min(100, Math.round((completedTasks / achievement.requirement) * 100));
+      
+      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
+      
+      message += `${status} *${achievement.title}*\n`;
+      message += `├ ${achievement.description}\n`;
+      message += `├ Прогресс: \`${completedTasks}/${achievement.requirement}\` (\`${progress}%\`)\n`;
+      message += `├ Награда: \`${achievement.reward}\` Magnum Coins\n`;
+      
+      if (isCompleted && !isClaimed) {
+        message += `└ 🎁 *Готово к получению!*\n\n`;
+      } else if (isClaimed) {
+        message += `└ ✅ *Получено!*\n\n`;
+      } else {
+        message += `└ Осталось: \`${achievement.requirement - completedTasks}\` заданий\n\n`;
+      }
+    });
+    
+    // Проверяем, есть ли достижения готовые к получению
+    const readyToClaim = achievements.filter(a => 
+      userAchievements[a.id]?.completed && !userAchievements[a.id]?.claimed
+    );
+    
+    if (readyToClaim.length > 0) {
+      message += `🎁 *Готово к получению:* \`${readyToClaim.length}\` достижений\n\n`;
+    }
+    
+    message += `💡 *Информация:*\n`;
+    message += `├ Достижения получаются автоматически\n`;
+    message += `├ Награды выдаются сразу после получения\n`;
+    message += `└ Прогресс обновляется в реальном времени\n\n`;
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ достижений в заданиях');
+    await ctx.answerCbQuery('❌ Ошибка загрузки достижений');
+  }
+}
+
 // Вспомогательные функции
 function getSponsorTasks() {
   return [
@@ -7697,6 +7777,18 @@ bot.action('tasks_progress', async (ctx) => {
     logError(error, 'Прогресс заданий');
   }
 });
+
+bot.action('tasks_achievements', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showTasksAchievements(ctx, user);
+  } catch (error) {
+    logError(error, 'Достижения в заданиях');
+  }
+});
+
 // Обработка спонсорских заданий
 bot.action(/^sponsor_task_(\d+)$/, async (ctx) => {
   try {
