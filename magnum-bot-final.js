@@ -1119,7 +1119,6 @@ async function showRoadmap(ctx, user) {
         Markup.button.callback('🔥 Q3 2026 (WebApp)', 'roadmap_q3_2026')
       ],
       [
-        Markup.button.callback('📊 Голосование', 'roadmap_vote'),
         Markup.button.callback('💡 Предложения', 'roadmap_suggestions')
       ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
@@ -1340,50 +1339,7 @@ async function showRoadmapQ3_2026(ctx, user) {
   }
 }
 
-async function showRoadmapVote(ctx, user) {
-  try {
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('🏰 Гильдии', 'vote_guilds'),
-        Markup.button.callback('⚔️ PvP', 'vote_pvp')
-      ],
-      [
-        Markup.button.callback('🎲 Мини-игры', 'vote_minigames'),
-        Markup.button.callback('🎨 Кастомизация', 'vote_customization')
-      ],
-      [
-        Markup.button.callback('📈 Биржа', 'vote_exchange'),
-        Markup.button.callback('🌍 Метавселенная', 'vote_metaverse')
-      ],
-      [
-        Markup.button.callback('📱 WebApp', 'vote_webapp'),
-        Markup.button.callback('💎 NFT', 'vote_nft')
-      ],
-      [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
-    ]);
-    
-    const message = 
-      `📊 *Голосование за функции*\n\n` +
-      `🗳️ *Выберите функцию для голосования:*\n\n` +
-      `🏰 *Система гильдий* - 45% (1,234 голоса)\n` +
-      `⚔️ *PvP система* - 32% (876 голосов)\n` +
-      `🎲 *Мини-игры и турниры* - 38% (987 голосов)\n` +
-      `🎨 *Система кастомизации* - 28% (654 голоса)\n` +
-      `📈 *Расширенная биржа* - 22% (432 голоса)\n` +
-      `🌍 *Метавселенная* - 18% (321 голос)\n` +
-      `📱 *WebApp переход* - 78% (2,345 голосов) 🔥\n` +
-      `💎 *NFT интеграция* - 15% (234 голоса)\n\n` +
-      `💡 *Ваш голос поможет определить приоритеты развития!*\n` +
-      `🚀 *WebApp переход - главный приоритет!*`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'Показ голосования роадмапа');
-  }
-}
+
 
 async function showRoadmapSuggestions(ctx, user) {
   try {
@@ -2956,10 +2912,11 @@ async function showAdminPanel(ctx, user) {
         Markup.button.callback('📢 Рассылка', 'admin_broadcast')
       ],
       [
-        Markup.button.callback('🔄 Обновление кеша', 'admin_cache'),
-        Markup.button.callback('🏦 Управление резервом', 'admin_reserve')
+        Markup.button.callback('🗳️ Управление голосованием', 'admin_voting'),
+        Markup.button.callback('🔄 Обновление кеша', 'admin_cache')
       ],
       [
+        Markup.button.callback('🏦 Управление резервом', 'admin_reserve'),
         Markup.button.callback('🔍 Отладка рангов', 'admin_debug_ranks')
       ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
@@ -2977,6 +2934,7 @@ async function showAdminPanel(ctx, user) {
       `├ 🎫 Управление промокодами - создание промокодов\n` +
       `├ 👑 Управление титулами - выдача и забор титулов\n` +
       `├ 📢 Рассылка - отправка сообщений\n` +
+      `├ 🗳️ Управление голосованием - создание и управление голосованиями\n` +
       `├ 🔄 Обновление кеша - очистка кеша\n` +
       `└ 🏦 Управление резервом - управление резервом биржи\n\n` +
       `🎯 Выберите действие:`;
@@ -3176,6 +3134,297 @@ async function showAdminReserve(ctx, user) {
   } catch (error) {
     logError(error, `Показ управления резервом для админа ${user.id}`);
     await ctx.answerCbQuery('❌ Ошибка показа управления резервом');
+  }
+}
+
+// ==================== УПРАВЛЕНИЕ ГОЛОСОВАНИЕМ ====================
+async function showAdminVoting(ctx, user) {
+  try {
+    log(`🗳️ Показ управления голосованием для админа ${user.id}`);
+    
+    // Получаем активные голосования
+    const activeVotings = await db.collection('votings').find({ 
+      isActive: true 
+    }).toArray();
+    
+    // Получаем статистику голосований
+    const totalVotings = await db.collection('votings').countDocuments();
+    const totalVotes = await db.collection('votes').countDocuments();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Создать голосование', 'admin_voting_create'),
+        Markup.button.callback('📊 Активные голосования', 'admin_voting_active')
+      ],
+      [
+        Markup.button.callback('📈 Статистика голосований', 'admin_voting_stats'),
+        Markup.button.callback('⚙️ Настройки голосования', 'admin_voting_settings')
+      ],
+      [
+        Markup.button.callback('🗑️ Удалить голосование', 'admin_voting_delete'),
+        Markup.button.callback('📋 История голосований', 'admin_voting_history')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `🗳️ *Управление голосованием*\n\n` +
+      `📊 *Статистика:*\n` +
+      `├ Всего голосований: \`${totalVotings}\`\n` +
+      `├ Активных голосований: \`${activeVotings.length}\`\n` +
+      `└ Всего голосов: \`${totalVotes}\`\n\n` +
+      `🔧 *Доступные действия:*\n` +
+      `├ ➕ Создать голосование - новое голосование\n` +
+      `├ 📊 Активные голосования - управление\n` +
+      `├ 📈 Статистика голосований - аналитика\n` +
+      `├ ⚙️ Настройки голосования - конфигурация\n` +
+      `├ 🗑️ Удалить голосование - удаление\n` +
+      `└ 📋 История голосований - архив\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Управление голосованием показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления голосованием для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления голосованием');
+  }
+}
+
+// ==================== ДЕТАЛЬНЫЕ ФУНКЦИИ ГОЛОСОВАНИЯ ====================
+async function showAdminVotingCreate(ctx, user) {
+  try {
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_voting')]
+    ]);
+    
+    const message = 
+      `➕ *Создание нового голосования*\n\n` +
+      `📝 *Формат создания:*\n` +
+      `├ Название: "Название голосования"\n` +
+      `├ Описание: "Подробное описание"\n` +
+      `├ Варианты: "Вариант 1|Вариант 2|Вариант 3"\n` +
+      `├ Длительность: "7" (в днях)\n` +
+      `└ Тип: "public" или "private"\n\n` +
+      `💡 *Пример:*\n` +
+      `Название: "Выбор новой функции"\n` +
+      `Описание: "Выберите какую функцию добавить в бота"\n` +
+      `Варианты: "Система гильдий|PvP система|Мини-игры"\n` +
+      `Длительность: "7"\n` +
+      `Тип: "public"\n\n` +
+      `🎯 Отправьте данные в указанном формате:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    // Устанавливаем состояние для создания голосования
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_voting', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+  } catch (error) {
+    logError(error, 'Создание голосования');
+  }
+}
+
+async function showAdminVotingActive(ctx, user) {
+  try {
+    // Получаем активные голосования
+    const activeVotings = await db.collection('votings').find({ 
+      isActive: true 
+    }).toArray();
+    
+    let message = `📊 *Активные голосования*\n\n`;
+    
+    if (activeVotings.length === 0) {
+      message += `❌ Активных голосований нет\n\n`;
+    } else {
+      activeVotings.forEach((voting, index) => {
+        const endDate = new Date(voting.endDate);
+        const now = new Date();
+        const timeLeft = endDate.getTime() - now.getTime();
+        const daysLeft = Math.ceil(timeLeft / (1000 * 60 * 60 * 24));
+        
+        message += `${index + 1}. *${voting.title}*\n`;
+        message += `├ 📅 Осталось: ${daysLeft} дней\n`;
+        message += `├ 👥 Голосов: ${voting.totalVotes || 0}\n`;
+        message += `└ 🔗 ID: \`${voting._id}\`\n\n`;
+      });
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📈 Детали голосования', 'admin_voting_details'),
+        Markup.button.callback('⏹️ Остановить голосование', 'admin_voting_stop')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_voting')]
+    ]);
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ активных голосований');
+  }
+}
+
+async function showAdminVotingStats(ctx, user) {
+  try {
+    // Получаем статистику голосований
+    const totalVotings = await db.collection('votings').countDocuments();
+    const activeVotings = await db.collection('votings').countDocuments({ isActive: true });
+    const totalVotes = await db.collection('votes').countDocuments();
+    
+    // Получаем топ голосований по количеству голосов
+    const topVotings = await db.collection('votings')
+      .find({})
+      .sort({ totalVotes: -1 })
+      .limit(5)
+      .toArray();
+    
+    let message = `📈 *Статистика голосований*\n\n`;
+    message += `📊 *Общая статистика:*\n`;
+    message += `├ Всего голосований: \`${totalVotings}\`\n`;
+    message += `├ Активных голосований: \`${activeVotings}\`\n`;
+    message += `└ Всего голосов: \`${totalVotes}\`\n\n`;
+    
+    if (topVotings.length > 0) {
+      message += `🏆 *Топ голосований:*\n`;
+      topVotings.forEach((voting, index) => {
+        message += `${index + 1}. ${voting.title}\n`;
+        message += `├ 👥 Голосов: ${voting.totalVotes || 0}\n`;
+        message += `├ 📅 Создано: ${new Date(voting.createdAt).toLocaleDateString()}\n`;
+        message += `└ ${voting.isActive ? '🟢 Активно' : '🔴 Завершено'}\n\n`;
+      });
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_voting')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ статистики голосований');
+  }
+}
+
+async function showAdminVotingSettings(ctx, user) {
+  try {
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⏰ Настройка времени', 'admin_voting_time_settings'),
+        Markup.button.callback('👥 Настройка доступа', 'admin_voting_access_settings')
+      ],
+      [
+        Markup.button.callback('📊 Настройка отображения', 'admin_voting_display_settings'),
+        Markup.button.callback('🔒 Настройка безопасности', 'admin_voting_security_settings')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_voting')]
+    ]);
+    
+    const message = 
+      `⚙️ *Настройки голосования*\n\n` +
+      `🔧 *Доступные настройки:*\n` +
+      `├ ⏰ Настройка времени - длительность голосований\n` +
+      `├ 👥 Настройка доступа - кто может голосовать\n` +
+      `├ 📊 Настройка отображения - как показывать результаты\n` +
+      `└ 🔒 Настройка безопасности - защита от накрутки\n\n` +
+      `🎯 Выберите настройку:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек голосования');
+  }
+}
+
+async function showAdminVotingDelete(ctx, user) {
+  try {
+    // Получаем все голосования
+    const allVotings = await db.collection('votings').find({}).toArray();
+    
+    let message = `🗑️ *Удаление голосования*\n\n`;
+    
+    if (allVotings.length === 0) {
+      message += `❌ Голосований для удаления нет\n\n`;
+    } else {
+      message += `📋 *Список голосований:*\n`;
+      allVotings.forEach((voting, index) => {
+        message += `${index + 1}. *${voting.title}*\n`;
+        message += `├ 👥 Голосов: ${voting.totalVotes || 0}\n`;
+        message += `├ 📅 Создано: ${new Date(voting.createdAt).toLocaleDateString()}\n`;
+        message += `└ 🔗 ID: \`${voting._id}\`\n\n`;
+      });
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🗑️ Удалить по ID', 'admin_voting_delete_by_id'),
+        Markup.button.callback('🗑️ Удалить все', 'admin_voting_delete_all')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_voting')]
+    ]);
+    
+    message += `⚠️ *Внимание:* Удаление необратимо!\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ удаления голосований');
+  }
+}
+
+async function showAdminVotingHistory(ctx, user) {
+  try {
+    // Получаем завершенные голосования
+    const finishedVotings = await db.collection('votings')
+      .find({ isActive: false })
+      .sort({ endDate: -1 })
+      .limit(10)
+      .toArray();
+    
+    let message = `📋 *История голосований*\n\n`;
+    
+    if (finishedVotings.length === 0) {
+      message += `❌ Завершенных голосований нет\n\n`;
+    } else {
+      finishedVotings.forEach((voting, index) => {
+        const endDate = new Date(voting.endDate);
+        message += `${index + 1}. *${voting.title}*\n`;
+        message += `├ 👥 Голосов: ${voting.totalVotes || 0}\n`;
+        message += `├ 📅 Завершено: ${endDate.toLocaleDateString()}\n`;
+        message += `└ 🏆 Победитель: ${voting.winner || 'Не определен'}\n\n`;
+      });
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_voting')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ истории голосований');
   }
 }
 
@@ -8381,16 +8630,7 @@ bot.action('roadmap_q3_2026', async (ctx) => {
   }
 });
 
-bot.action('roadmap_vote', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showRoadmapVote(ctx, user);
-  } catch (error) {
-    logError(error, 'Голосование роадмапа (обработчик)');
-  }
-});
+
 
 bot.action('roadmap_suggestions', async (ctx) => {
   try {
@@ -10042,6 +10282,112 @@ bot.action('admin_debug_ranks', async (ctx) => {
   } catch (error) {
     logError(error, 'Отладка рангов');
     await ctx.answerCbQuery('❌ Ошибка отладки рангов');
+  }
+});
+
+// Обработчики управления голосованием
+bot.action('admin_voting', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVoting(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление голосованием');
+    await ctx.answerCbQuery('❌ Ошибка управления голосованием');
+  }
+});
+
+bot.action('admin_voting_create', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingCreate(ctx, user);
+  } catch (error) {
+    logError(error, 'Создание голосования');
+    await ctx.answerCbQuery('❌ Ошибка создания голосования');
+  }
+});
+
+bot.action('admin_voting_active', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingActive(ctx, user);
+  } catch (error) {
+    logError(error, 'Активные голосования');
+    await ctx.answerCbQuery('❌ Ошибка показа активных голосований');
+  }
+});
+
+bot.action('admin_voting_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingStats(ctx, user);
+  } catch (error) {
+    logError(error, 'Статистика голосований');
+    await ctx.answerCbQuery('❌ Ошибка показа статистики');
+  }
+});
+
+bot.action('admin_voting_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки голосования');
+    await ctx.answerCbQuery('❌ Ошибка показа настроек');
+  }
+});
+
+bot.action('admin_voting_delete', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingDelete(ctx, user);
+  } catch (error) {
+    logError(error, 'Удаление голосований');
+    await ctx.answerCbQuery('❌ Ошибка показа удаления');
+  }
+});
+
+bot.action('admin_voting_history', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingHistory(ctx, user);
+  } catch (error) {
+    logError(error, 'История голосований');
+    await ctx.answerCbQuery('❌ Ошибка показа истории');
   }
 });
 
