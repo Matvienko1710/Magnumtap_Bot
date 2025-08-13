@@ -37,8 +37,8 @@ const config = {
   BOT_PHOTO_URL: process.env.BOT_PHOTO_URL,
   
   // Игровые настройки
-  INITIAL_STARS: 100,
-  INITIAL_MAGNUM_COINS: 0,
+  INITIAL_STARS: 0,
+  INITIAL_MAGNUM_COINS: 1000,
   FARM_COOLDOWN: 10, // секунды
   FARM_BASE_REWARD: 0.01,
   DAILY_BONUS_BASE: 3,
