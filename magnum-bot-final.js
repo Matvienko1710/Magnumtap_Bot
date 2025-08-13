@@ -3990,7 +3990,7 @@ async function showExchangeMenu(ctx, user) {
     
     // Получаем историю курсов
     const exchangeHistory = await db.collection('exchangeHistory')
-      .find({})
+      .find({ type: 'rate_update' })
       .sort({ timestamp: -1 })
       .limit(5)
       .toArray();
@@ -4000,9 +4000,15 @@ async function showExchangeMenu(ctx, user) {
     let priceChangePercent = 0;
     if (exchangeHistory.length >= 2) {
       const currentPrice = exchangeRate;
-      const previousPrice = exchangeHistory[1].rate;
+      const previousPrice = exchangeHistory[1].rate || 0.001;
       priceChange = currentPrice - previousPrice;
-      priceChangePercent = ((priceChange / previousPrice) * 100);
+      priceChangePercent = previousPrice > 0 ? ((priceChange / previousPrice) * 100) : 0;
+    }
+    
+    // Проверяем на NaN и корректность данных
+    if (isNaN(priceChange) || isNaN(priceChangePercent)) {
+      priceChange = 0;
+      priceChangePercent = 0;
     }
     
     const priceChangeIcon = priceChange >= 0 ? '📈' : '📉';
@@ -4039,7 +4045,7 @@ async function showExchangeMenu(ctx, user) {
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `📊 *Текущий курс:*\n` +
       `├ ${priceChangeIcon} 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ ${priceChangeColor} Изменение: ${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(6)} (${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)\n` +
+      `├ ${priceChangeColor} Изменение: ${exchangeHistory.length >= 2 ? `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(6)} (${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)` : 'Нет данных'}\n` +
       `├ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n` +
       `└ 📅 Обновлено: ${new Date().toLocaleTimeString('ru-RU')}\n\n` +
       `🏦 *Резерв биржи:*\n` +
@@ -4048,7 +4054,7 @@ async function showExchangeMenu(ctx, user) {
       `📈 *Рыночные данные:*\n` +
       `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` MC\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
-      `└ Ликвидность: ${((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100).toFixed(1)}%\n\n` +
+      `└ Ликвидность: ${Math.min(100, ((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
       `🎯 Выберите сумму для обмена или действие:`;
     
     await ctx.editMessageText(message, {
