@@ -4360,9 +4360,9 @@ async function showReferralRewards(ctx, user) {
     
     // Текущие награды
     message += `💰 *Текущие награды:*\n`;
-    message += `├ За каждого реферала: \`${referralReward}\` Stars\n`;
-    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
-    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Stars\n\n`;
+    message += `├ За каждого реферала: \`${referralReward}\` Magnum Coins\n`;
+    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
+    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Magnum Coins\n\n`;
     
     // Система бонусов
     message += `🏆 *Система бонусов:*\n`;
@@ -4386,7 +4386,7 @@ async function showReferralRewards(ctx, user) {
         `Выполнено!` : 
         `Осталось: ${bonus.count - referralsCount} рефералов`;
       
-      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Stars\n`;
+      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Magnum Coins\n`;
       message += `└ ${progress}\n\n`;
     });
     
