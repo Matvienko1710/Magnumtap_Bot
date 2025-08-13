@@ -404,7 +404,11 @@ async function getRankProgress(user) {
   const levelDifference = nextRank.level - currentRank.level;
   const userProgress = level - currentRank.level;
   
-  console.log(`🔍 Расчет прогресса: levelDifference=${levelDifference}, userProgress=${userProgress}`);
+  // Добавляем прогресс опыта внутри текущего уровня
+  const experienceProgress = freshUser ? (freshUser.experience / freshUser.experienceToNextLevel) : 0;
+  const totalUserProgress = userProgress + experienceProgress;
+  
+  console.log(`🔍 Расчет прогресса: levelDifference=${levelDifference}, userProgress=${userProgress}, experienceProgress=${experienceProgress.toFixed(2)}, totalUserProgress=${totalUserProgress.toFixed(2)}`);
   if (levelDifference <= 0) {
     console.error('Ошибка в расчете прогресса ранга: levelDifference <= 0', {
       currentRank,
@@ -422,7 +426,7 @@ async function getRankProgress(user) {
     };
   }
   
-  const progress = Math.min(100, Math.max(0, Math.round((userProgress / levelDifference) * 100)));
+  const progress = Math.min(100, Math.max(0, Math.round((totalUserProgress / levelDifference) * 100)));
   const remaining = Math.max(0, nextRank.level - level);
   
   const result = {
@@ -440,8 +444,10 @@ async function getRankProgress(user) {
     progress,
     remaining,
     userProgress,
+    experienceProgress: experienceProgress.toFixed(2),
+    totalUserProgress: totalUserProgress.toFixed(2),
     levelDifference,
-    calculation: `(${userProgress} / ${levelDifference}) * 100 = ${progress}%`
+    calculation: `(${totalUserProgress.toFixed(2)} / ${levelDifference}) * 100 = ${progress}%`
   });
   
   return result;
