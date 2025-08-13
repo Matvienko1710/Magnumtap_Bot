@@ -3429,6 +3429,242 @@ async function showAdminVotingHistory(ctx, user) {
   }
 }
 
+// ==================== ДЕТАЛЬНЫЕ НАСТРОЙКИ ГОЛОСОВАНИЯ ====================
+async function showAdminVotingTimeSettings(ctx, user) {
+  try {
+    // Получаем текущие настройки времени
+    const timeSettings = await db.collection('votingSettings').findOne({ type: 'time' }) || {
+      defaultDuration: 7,
+      minDuration: 1,
+      maxDuration: 30,
+      timezone: 'UTC+3'
+    };
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⏰ Изменить длительность', 'admin_voting_change_duration'),
+        Markup.button.callback('🌍 Изменить часовой пояс', 'admin_voting_change_timezone')
+      ],
+      [
+        Markup.button.callback('📅 Установить расписание', 'admin_voting_schedule'),
+        Markup.button.callback('⏱️ Автопродление', 'admin_voting_auto_extend')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_voting_settings')]
+    ]);
+    
+    const message = 
+      `⏰ *Настройка времени голосований*\n\n` +
+      `📊 *Текущие настройки:*\n` +
+      `├ ⏱️ Длительность по умолчанию: \`${timeSettings.defaultDuration}\` дней\n` +
+      `├ 📅 Минимальная длительность: \`${timeSettings.minDuration}\` день\n` +
+      `├ 📅 Максимальная длительность: \`${timeSettings.maxDuration}\` дней\n` +
+      `└ 🌍 Часовой пояс: \`${timeSettings.timezone}\`\n\n` +
+      `🔧 *Доступные действия:*\n` +
+      `├ ⏰ Изменить длительность - настройка периодов\n` +
+      `├ 🌍 Изменить часовой пояс - временная зона\n` +
+      `├ 📅 Установить расписание - планирование голосований\n` +
+      `└ ⏱️ Автопродление - автоматическое продление\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек времени голосования');
+  }
+}
+
+async function showAdminVotingAccessSettings(ctx, user) {
+  try {
+    // Получаем текущие настройки доступа
+    const accessSettings = await db.collection('votingSettings').findOne({ type: 'access' }) || {
+      minLevel: 1,
+      minStars: 0,
+      minMagnumCoins: 0,
+      allowNewUsers: true,
+      requireVerification: false,
+      allowedTitles: ['all'],
+      blockedUsers: []
+    };
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📊 Минимальный уровень', 'admin_voting_min_level'),
+        Markup.button.callback('⭐ Минимум Stars', 'admin_voting_min_stars')
+      ],
+      [
+        Markup.button.callback('🪙 Минимум MC', 'admin_voting_min_mc'),
+        Markup.button.callback('👑 Требуемые титулы', 'admin_voting_required_titles')
+      ],
+      [
+        Markup.button.callback('✅ Верификация', 'admin_voting_verification'),
+        Markup.button.callback('🚫 Заблокированные', 'admin_voting_blocked_users')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_voting_settings')]
+    ]);
+    
+    const message = 
+      `👥 *Настройка доступа к голосованию*\n\n` +
+      `📊 *Текущие настройки:*\n` +
+      `├ 📈 Минимальный уровень: \`${accessSettings.minLevel}\`\n` +
+      `├ ⭐ Минимум Stars: \`${formatNumber(accessSettings.minStars)}\`\n` +
+      `├ 🪙 Минимум Magnum Coins: \`${formatNumber(accessSettings.minMagnumCoins)}\`\n` +
+      `├ ✅ Новые пользователи: ${accessSettings.allowNewUsers ? 'Разрешены' : 'Запрещены'}\n` +
+      `├ 🔐 Верификация: ${accessSettings.requireVerification ? 'Требуется' : 'Не требуется'}\n` +
+      `└ 👑 Требуемые титулы: \`${accessSettings.allowedTitles.join(', ')}\`\n\n` +
+      `🔧 *Доступные действия:*\n` +
+      `├ 📊 Минимальный уровень - требования по уровню\n` +
+      `├ ⭐ Минимум Stars - требования по Stars\n` +
+      `├ 🪙 Минимум MC - требования по Magnum Coins\n` +
+      `├ 👑 Требуемые титулы - ограничения по титулам\n` +
+      `├ ✅ Верификация - требование верификации\n` +
+      `└ 🚫 Заблокированные - список заблокированных\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек доступа голосования');
+  }
+}
+
+async function showAdminVotingDisplaySettings(ctx, user) {
+  try {
+    // Получаем текущие настройки отображения
+    const displaySettings = await db.collection('votingSettings').findOne({ type: 'display' }) || {
+      showResults: true,
+      showPercentages: true,
+      showVoteCounts: true,
+      showUserVotes: false,
+      showProgressBars: true,
+      showWinners: true,
+      theme: 'default',
+      language: 'ru'
+    };
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📊 Показ результатов', 'admin_voting_show_results'),
+        Markup.button.callback('📈 Показ процентов', 'admin_voting_show_percentages')
+      ],
+      [
+        Markup.button.callback('👥 Показ голосов', 'admin_voting_show_votes'),
+        Markup.button.callback('👤 Показ пользователей', 'admin_voting_show_users')
+      ],
+      [
+        Markup.button.callback('📊 Прогресс-бары', 'admin_voting_progress_bars'),
+        Markup.button.callback('🏆 Показ победителей', 'admin_voting_show_winners')
+      ],
+      [
+        Markup.button.callback('🎨 Тема оформления', 'admin_voting_theme'),
+        Markup.button.callback('🌍 Язык интерфейса', 'admin_voting_language')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_voting_settings')]
+    ]);
+    
+    const message = 
+      `📊 *Настройка отображения голосований*\n\n` +
+      `📈 *Текущие настройки:*\n` +
+      `├ 📊 Показ результатов: ${displaySettings.showResults ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 📈 Показ процентов: ${displaySettings.showPercentages ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 👥 Показ количества голосов: ${displaySettings.showVoteCounts ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 👤 Показ голосов пользователей: ${displaySettings.showUserVotes ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 📊 Прогресс-бары: ${displaySettings.showProgressBars ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 🏆 Показ победителей: ${displaySettings.showWinners ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 🎨 Тема: \`${displaySettings.theme}\`\n` +
+      `└ 🌍 Язык: \`${displaySettings.language}\`\n\n` +
+      `🔧 *Доступные действия:*\n` +
+      `├ 📊 Показ результатов - отображение итогов\n` +
+      `├ 📈 Показ процентов - процентное соотношение\n` +
+      `├ 👥 Показ голосов - количество голосов\n` +
+      `├ 👤 Показ пользователей - кто голосовал\n` +
+      `├ 📊 Прогресс-бары - визуальные индикаторы\n` +
+      `├ 🏆 Показ победителей - результаты\n` +
+      `├ 🎨 Тема оформления - дизайн\n` +
+      `└ 🌍 Язык интерфейса - локализация\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек отображения голосования');
+  }
+}
+
+async function showAdminVotingSecuritySettings(ctx, user) {
+  try {
+    // Получаем текущие настройки безопасности
+    const securitySettings = await db.collection('votingSettings').findOne({ type: 'security' }) || {
+      maxVotesPerUser: 1,
+      cooldownBetweenVotes: 0,
+      requireCaptcha: false,
+      antiSpam: true,
+      ipRestriction: false,
+      deviceRestriction: false,
+      maxVotesPerIP: 10,
+      maxVotesPerDevice: 5,
+      suspiciousActivityThreshold: 5,
+      autoBlockSuspicious: false
+    };
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🎯 Максимум голосов', 'admin_voting_max_votes'),
+        Markup.button.callback('⏰ Кулдаун голосов', 'admin_voting_vote_cooldown')
+      ],
+      [
+        Markup.button.callback('🤖 Капча', 'admin_voting_captcha'),
+        Markup.button.callback('🚫 Антиспам', 'admin_voting_antispam')
+      ],
+      [
+        Markup.button.callback('🌐 Ограничение IP', 'admin_voting_ip_restriction'),
+        Markup.button.callback('📱 Ограничение устройств', 'admin_voting_device_restriction')
+      ],
+      [
+        Markup.button.callback('⚠️ Порог подозрений', 'admin_voting_suspicious_threshold'),
+        Markup.button.callback('🔒 Автоблокировка', 'admin_voting_auto_block')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_voting_settings')]
+    ]);
+    
+    const message = 
+      `🔒 *Настройка безопасности голосований*\n\n` +
+      `🛡️ *Текущие настройки:*\n` +
+      `├ 🎯 Максимум голосов на пользователя: \`${securitySettings.maxVotesPerUser}\`\n` +
+      `├ ⏰ Кулдаун между голосами: \`${securitySettings.cooldownBetweenVotes}\` минут\n` +
+      `├ 🤖 Требование капчи: ${securitySettings.requireCaptcha ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 🚫 Антиспам защита: ${securitySettings.antiSpam ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 🌐 Ограничение по IP: ${securitySettings.ipRestriction ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 📱 Ограничение по устройствам: ${securitySettings.deviceRestriction ? '✅ Включено' : '❌ Выключено'}\n` +
+      `├ 🌐 Максимум голосов с IP: \`${securitySettings.maxVotesPerIP}\`\n` +
+      `├ 📱 Максимум голосов с устройства: \`${securitySettings.maxVotesPerDevice}\`\n` +
+      `├ ⚠️ Порог подозрительной активности: \`${securitySettings.suspiciousActivityThreshold}\`\n` +
+      `└ 🔒 Автоблокировка подозрительных: ${securitySettings.autoBlockSuspicious ? '✅ Включено' : '❌ Выключено'}\n\n` +
+      `🔧 *Доступные действия:*\n` +
+      `├ 🎯 Максимум голосов - лимит на пользователя\n` +
+      `├ ⏰ Кулдаун голосов - задержка между голосами\n` +
+      `├ 🤖 Капча - защита от ботов\n` +
+      `├ 🚫 Антиспам - защита от спама\n` +
+      `├ 🌐 Ограничение IP - защита по IP\n` +
+      `├ 📱 Ограничение устройств - защита по устройствам\n` +
+      `├ ⚠️ Порог подозрений - настройка детекции\n` +
+      `└ 🔒 Автоблокировка - автоматическая защита\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ настроек безопасности голосования');
+  }
+}
+
 // ==================== ОТЛАДКА РАНГОВ ====================
 async function showAdminDebugRanks(ctx, user) {
   try {
@@ -10359,6 +10595,413 @@ bot.action('admin_voting_settings', async (ctx) => {
   } catch (error) {
     logError(error, 'Настройки голосования');
     await ctx.answerCbQuery('❌ Ошибка показа настроек');
+  }
+});
+
+// Обработчики настроек времени голосования
+bot.action('admin_voting_time_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingTimeSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки времени голосования');
+    await ctx.answerCbQuery('❌ Ошибка показа настроек времени');
+  }
+});
+
+bot.action('admin_voting_change_duration', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'voting_change_duration', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_voting_time_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `⏰ *Изменение длительности голосований*\n\n` +
+      `Введите новые значения в формате:\n` +
+      `\`по_умолчанию мин макс\`\n\n` +
+      `💡 *Пример:* \`7 1 30\`\n` +
+      `├ 7 - длительность по умолчанию (дни)\n` +
+      `├ 1 - минимальная длительность (дни)\n` +
+      `└ 30 - максимальная длительность (дни)\n\n` +
+      `⚠️ *Внимание:* Все значения должны быть числами!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Изменение длительности голосования');
+    await ctx.answerCbQuery('❌ Ошибка изменения длительности');
+  }
+});
+
+bot.action('admin_voting_change_timezone', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'voting_change_timezone', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_voting_time_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🌍 *Изменение часового пояса*\n\n` +
+      `Введите новый часовой пояс:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ UTC+3 (Москва)\n` +
+      `├ UTC+0 (Лондон)\n` +
+      `├ UTC-5 (Нью-Йорк)\n` +
+      `└ UTC+8 (Пекин)\n\n` +
+      `⚠️ *Внимание:* Используйте формат UTC+X или UTC-X!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Изменение часового пояса голосования');
+    await ctx.answerCbQuery('❌ Ошибка изменения часового пояса');
+  }
+});
+
+// Обработчики настроек доступа голосования
+bot.action('admin_voting_access_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingAccessSettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки доступа голосования');
+    await ctx.answerCbQuery('❌ Ошибка показа настроек доступа');
+  }
+});
+
+bot.action('admin_voting_min_level', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'voting_min_level', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_voting_access_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `📊 *Установка минимального уровня для голосования*\n\n` +
+      `Введите минимальный уровень пользователя:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 1 - все пользователи\n` +
+      `├ 5 - только с 5 уровня\n` +
+      `├ 10 - только с 10 уровня\n` +
+      `└ 20 - только с 20 уровня\n\n` +
+      `⚠️ *Внимание:* Уровень должен быть от 1 до 100!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Установка минимального уровня голосования');
+    await ctx.answerCbQuery('❌ Ошибка установки уровня');
+  }
+});
+
+bot.action('admin_voting_min_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'voting_min_stars', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_voting_access_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `⭐ *Установка минимального количества Stars для голосования*\n\n` +
+      `Введите минимальное количество Stars:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 0 - без ограничений\n` +
+      `├ 1000 - минимум 1K Stars\n` +
+      `├ 10000 - минимум 10K Stars\n` +
+      `└ 100000 - минимум 100K Stars\n\n` +
+      `⚠️ *Внимание:* Значение должно быть положительным числом!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Установка минимального количества Stars');
+    await ctx.answerCbQuery('❌ Ошибка установки Stars');
+  }
+});
+
+// Обработчики настроек отображения голосования
+bot.action('admin_voting_display_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingDisplaySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки отображения голосования');
+    await ctx.answerCbQuery('❌ Ошибка показа настроек отображения');
+  }
+});
+
+bot.action('admin_voting_show_results', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Переключаем настройку
+    const currentSettings = await db.collection('votingSettings').findOne({ type: 'display' }) || {
+      showResults: true,
+      showPercentages: true,
+      showVoteCounts: true,
+      showUserVotes: false,
+      showProgressBars: true,
+      showWinners: true,
+      theme: 'default',
+      language: 'ru'
+    };
+    
+    const newValue = !currentSettings.showResults;
+    
+    await db.collection('votingSettings').updateOne(
+      { type: 'display' },
+      { $set: { showResults: newValue } },
+      { upsert: true }
+    );
+    
+    await ctx.answerCbQuery(`✅ Показ результатов ${newValue ? 'включен' : 'выключен'}`);
+    await showAdminVotingDisplaySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение показа результатов');
+    await ctx.answerCbQuery('❌ Ошибка переключения');
+  }
+});
+
+bot.action('admin_voting_show_percentages', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Переключаем настройку
+    const currentSettings = await db.collection('votingSettings').findOne({ type: 'display' }) || {
+      showResults: true,
+      showPercentages: true,
+      showVoteCounts: true,
+      showUserVotes: false,
+      showProgressBars: true,
+      showWinners: true,
+      theme: 'default',
+      language: 'ru'
+    };
+    
+    const newValue = !currentSettings.showPercentages;
+    
+    await db.collection('votingSettings').updateOne(
+      { type: 'display' },
+      { $set: { showPercentages: newValue } },
+      { upsert: true }
+    );
+    
+    await ctx.answerCbQuery(`✅ Показ процентов ${newValue ? 'включен' : 'выключен'}`);
+    await showAdminVotingDisplaySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение показа процентов');
+    await ctx.answerCbQuery('❌ Ошибка переключения');
+  }
+});
+
+// Обработчики настроек безопасности голосования
+bot.action('admin_voting_security_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminVotingSecuritySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Настройки безопасности голосования');
+    await ctx.answerCbQuery('❌ Ошибка показа настроек безопасности');
+  }
+});
+
+bot.action('admin_voting_max_votes', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'voting_max_votes', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_voting_security_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎯 *Установка максимального количества голосов на пользователя*\n\n` +
+      `Введите максимальное количество голосов:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 1 - один голос на пользователя\n` +
+      `├ 3 - три голоса на пользователя\n` +
+      `├ 5 - пять голосов на пользователя\n` +
+      `└ 10 - десять голосов на пользователя\n\n` +
+      `⚠️ *Внимание:* Значение должно быть от 1 до 100!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Установка максимального количества голосов');
+    await ctx.answerCbQuery('❌ Ошибка установки голосов');
+  }
+});
+
+bot.action('admin_voting_captcha', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Переключаем настройку
+    const currentSettings = await db.collection('votingSettings').findOne({ type: 'security' }) || {
+      maxVotesPerUser: 1,
+      cooldownBetweenVotes: 0,
+      requireCaptcha: false,
+      antiSpam: true,
+      ipRestriction: false,
+      deviceRestriction: false,
+      maxVotesPerIP: 10,
+      maxVotesPerDevice: 5,
+      suspiciousActivityThreshold: 5,
+      autoBlockSuspicious: false
+    };
+    
+    const newValue = !currentSettings.requireCaptcha;
+    
+    await db.collection('votingSettings').updateOne(
+      { type: 'security' },
+      { $set: { requireCaptcha: newValue } },
+      { upsert: true }
+    );
+    
+    await ctx.answerCbQuery(`✅ Капча ${newValue ? 'включена' : 'выключена'}`);
+    await showAdminVotingSecuritySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение капчи');
+    await ctx.answerCbQuery('❌ Ошибка переключения');
+  }
+});
+
+bot.action('admin_voting_antispam', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Переключаем настройку
+    const currentSettings = await db.collection('votingSettings').findOne({ type: 'security' }) || {
+      maxVotesPerUser: 1,
+      cooldownBetweenVotes: 0,
+      requireCaptcha: false,
+      antiSpam: true,
+      ipRestriction: false,
+      deviceRestriction: false,
+      maxVotesPerIP: 10,
+      maxVotesPerDevice: 5,
+      suspiciousActivityThreshold: 5,
+      autoBlockSuspicious: false
+    };
+    
+    const newValue = !currentSettings.antiSpam;
+    
+    await db.collection('votingSettings').updateOne(
+      { type: 'security' },
+      { $set: { antiSpam: newValue } },
+      { upsert: true }
+    );
+    
+    await ctx.answerCbQuery(`✅ Антиспам ${newValue ? 'включен' : 'выключен'}`);
+    await showAdminVotingSecuritySettings(ctx, user);
+  } catch (error) {
+    logError(error, 'Переключение антиспама');
+    await ctx.answerCbQuery('❌ Ошибка переключения');
   }
 });
 
