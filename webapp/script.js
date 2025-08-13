@@ -1,12 +1,22 @@
-// Инициализация Telegram WebApp
-let tg = window.Telegram.WebApp;
-tg.expand();
-tg.ready();
+// Инициализация Telegram WebApp (если доступен)
+let tg = null;
+try {
+    tg = window.Telegram?.WebApp;
+    if (tg) {
+        tg.expand();
+        tg.ready();
+        console.log('✅ Telegram WebApp API доступен');
+    } else {
+        console.log('⚠️ Telegram WebApp API недоступен, работаем в автономном режиме');
+    }
+} catch (error) {
+    console.log('⚠️ Ошибка инициализации Telegram WebApp:', error);
+}
 
 // Состояние игры
 let gameState = {
-    magnumCoins: 0,
-    stars: 0,
+    magnumCoins: 1000, // Начальные монеты
+    stars: 100, // Начальные звезды
     clickCount: 0,
     cps: 1, // Coins per second
     upgrades: {
@@ -29,17 +39,19 @@ const elements = {
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎮 WebApp загружен');
     initGame();
     setupEventListeners();
     loadUserData();
     startAutoClicker();
     renderUpgrades();
+    updateConnectionStatus('WebApp готов к работе', 'connected');
 });
 
 // Инициализация игры
 function initGame() {
     console.log('🎮 Инициализация WebApp кликера...');
-    updateConnectionStatus('Подключение к боту...', 'connecting');
+    updateConnectionStatus('Загрузка игры...', 'connecting');
 }
 
 // Настройка обработчиков событий
@@ -66,12 +78,16 @@ function handleClick() {
     // Обновление UI
     updateUI();
     
-    // Отправка данных на сервер (если подключен)
+    // Сохранение данных
     saveUserData();
     
-    // Haptic feedback
-    if (tg.HapticFeedback) {
-        tg.HapticFeedback.impactOccurred('light');
+    // Haptic feedback (если доступен)
+    if (tg?.HapticFeedback) {
+        try {
+            tg.HapticFeedback.impactOccurred('light');
+        } catch (error) {
+            console.log('Haptic feedback недоступен');
+        }
     }
 }
 
@@ -117,52 +133,36 @@ function formatNumber(num) {
     return Math.floor(num).toString();
 }
 
-// Рендер улучшений
+// Рендеринг улучшений
 function renderUpgrades() {
-    elements.upgradeList.innerHTML = '';
+    const upgradeList = elements.upgradeList;
+    upgradeList.innerHTML = '';
     
-    const upgrades = [
-        {
-            id: 'autoClicker',
-            name: '🤖 Авто-кликер',
-            description: 'Автоматически генерирует монеты',
-            icon: '⚡'
-        },
-        {
-            id: 'clickPower',
-            name: '💪 Сила клика',
-            description: 'Увеличивает монеты за клик',
-            icon: '💪'
-        },
-        {
-            id: 'starGenerator',
-            name: '⭐ Генератор звезд',
-            description: 'Генерирует звезды автоматически',
-            icon: '⭐'
-        }
-    ];
-    
-    upgrades.forEach(upgrade => {
-        const upgradeData = gameState.upgrades[upgrade.id];
-        const canAfford = gameState.magnumCoins >= upgradeData.cost;
-        
+    Object.entries(gameState.upgrades).forEach(([id, upgrade]) => {
         const upgradeElement = document.createElement('div');
         upgradeElement.className = 'upgrade-item';
         upgradeElement.innerHTML = `
             <div class="upgrade-info">
-                <div class="upgrade-name">${upgrade.icon} ${upgrade.name}</div>
-                <div class="upgrade-description">${upgrade.description} (Уровень: ${upgradeData.level})</div>
+                <div class="upgrade-name">${getUpgradeName(id)}</div>
+                <div class="upgrade-level">Уровень: ${upgrade.level}</div>
+                <div class="upgrade-cost">Стоимость: ${formatNumber(upgrade.cost)} MC</div>
             </div>
-            <div class="upgrade-cost">
-                <div class="upgrade-price">${formatNumber(upgradeData.cost)} MC</div>
-                <button class="upgrade-btn" ${!canAfford ? 'disabled' : ''} onclick="buyUpgrade('${upgrade.id}')">
-                    Купить
-                </button>
-            </div>
+            <button class="upgrade-btn" onclick="buyUpgrade('${id}')" ${gameState.magnumCoins < upgrade.cost ? 'disabled' : ''}>
+                Купить
+            </button>
         `;
-        
-        elements.upgradeList.appendChild(upgradeElement);
+        upgradeList.appendChild(upgradeElement);
     });
+}
+
+// Названия улучшений
+function getUpgradeName(id) {
+    const names = {
+        autoClicker: '🤖 Авто-кликер',
+        clickPower: '⚡ Сила клика',
+        starGenerator: '⭐ Генератор звезд'
+    };
+    return names[id] || id;
 }
 
 // Покупка улучшения
@@ -172,11 +172,13 @@ function buyUpgrade(upgradeId) {
     if (gameState.magnumCoins >= upgrade.cost) {
         gameState.magnumCoins -= upgrade.cost;
         upgrade.level++;
+        
+        // Пересчет стоимости
         upgrade.cost = Math.floor(upgrade.baseCost * Math.pow(upgrade.multiplier, upgrade.level));
         
-        // Обновление CPS
+        // Обновление CPS для clickPower
         if (upgradeId === 'clickPower') {
-            gameState.cps = 1 + (upgrade.level * 0.5);
+            gameState.cps = 1 + upgrade.level;
         }
         
         // Обновление UI
@@ -184,64 +186,39 @@ function buyUpgrade(upgradeId) {
         renderUpgrades();
         saveUserData();
         
-        // Haptic feedback
-        if (tg.HapticFeedback) {
-            tg.HapticFeedback.impactOccurred('medium');
-        }
+        console.log(`✅ Куплено улучшение: ${getUpgradeName(upgradeId)} (уровень ${upgrade.level})`);
         
-        console.log(`✅ Куплено улучшение: ${upgradeId} (уровень ${upgrade.level})`);
+        // Haptic feedback
+        if (tg?.HapticFeedback) {
+            try {
+                tg.HapticFeedback.impactOccurred('medium');
+            } catch (error) {
+                console.log('Haptic feedback недоступен');
+            }
+        }
     }
 }
 
 // Загрузка данных пользователя
-async function loadUserData() {
+function loadUserData() {
     try {
-        const user = tg.initDataUnsafe?.user;
-        if (!user) {
-            console.log('⚠️ Пользователь не авторизован');
-            updateConnectionStatus('Требуется авторизация', 'error');
-            return;
-        }
-        
-        console.log('👤 Загрузка данных пользователя:', user.id);
-        
-        // Здесь будет запрос к API бота
-        // Пока используем локальные данные
-        const savedData = localStorage.getItem('magnumClickerData');
+        const savedData = localStorage.getItem('magnumStarsWebApp');
         if (savedData) {
             const data = JSON.parse(savedData);
             gameState = { ...gameState, ...data };
-            updateUI();
+            console.log('📥 Данные загружены из localStorage');
         }
-        
-        updateConnectionStatus('Подключено к боту', 'connected');
-        
     } catch (error) {
-        console.error('❌ Ошибка загрузки данных:', error);
-        updateConnectionStatus('Ошибка подключения', 'error');
+        console.log('❌ Ошибка загрузки данных:', error);
     }
 }
 
 // Сохранение данных пользователя
-async function saveUserData() {
+function saveUserData() {
     try {
-        const user = tg.initDataUnsafe?.user;
-        if (!user) return;
-        
-        // Сохраняем локально
-        localStorage.setItem('magnumClickerData', JSON.stringify({
-            magnumCoins: gameState.magnumCoins,
-            stars: gameState.stars,
-            clickCount: gameState.clickCount,
-            cps: gameState.cps,
-            upgrades: gameState.upgrades
-        }));
-        
-        // Здесь будет отправка на сервер
-        // await sendDataToServer(user.id, gameState);
-        
+        localStorage.setItem('magnumStarsWebApp', JSON.stringify(gameState));
     } catch (error) {
-        console.error('❌ Ошибка сохранения данных:', error);
+        console.log('❌ Ошибка сохранения данных:', error);
     }
 }
 
@@ -252,15 +229,22 @@ function updateConnectionStatus(message, status) {
     const text = statusElement.querySelector('span');
     
     text.textContent = message;
-    indicator.className = `status-indicator ${status}`;
+    
+    // Удаляем старые классы
+    indicator.className = 'status-indicator';
+    
+    // Добавляем новый класс
+    if (status === 'connected') {
+        indicator.classList.add('connected');
+    } else if (status === 'connecting') {
+        indicator.classList.add('connecting');
+    } else if (status === 'error') {
+        indicator.classList.add('error');
+    }
 }
 
-// Функция для отправки данных на сервер (будет реализована позже)
-async function sendDataToServer(userId, data) {
-    // TODO: Реализовать API для синхронизации с ботом
-    console.log('📡 Отправка данных на сервер:', { userId, data });
+// Отправка данных на сервер (заглушка для будущей интеграции)
+function sendDataToServer() {
+    // Здесь будет интеграция с сервером
+    console.log('📤 Данные будут отправлены на сервер');
 }
-
-// Экспорт функций для отладки
-window.gameState = gameState;
-window.buyUpgrade = buyUpgrade;
