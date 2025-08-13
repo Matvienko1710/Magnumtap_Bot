@@ -2005,6 +2005,45 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
   log(`⏰ Запущен обратный отсчет бонуса для пользователя ${user.id}, осталось: ${remainingSeconds}с`);
 }
 
+// ==================== АДМИН ТИТУЛЫ ====================
+async function showAdminTitles(ctx, user) {
+  try {
+    log(`👑 Показ управления титулами для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Выдать титул', 'admin_give_title'),
+        Markup.button.callback('➖ Забрать титул', 'admin_remove_title')
+      ],
+      [
+        Markup.button.callback('📊 Статистика титулов', 'admin_titles_stats'),
+        Markup.button.callback('🔄 Синхронизация титулов', 'admin_sync_titles')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `👑 *Управление титулами*\n\n` +
+      `Здесь вы можете управлять титулами пользователей\n\n` +
+      `🎯 *Доступные действия:*\n` +
+      `├ ➕ Выдать титул - добавить титул пользователю\n` +
+      `├ ➖ Забрать титул - убрать титул у пользователя\n` +
+      `├ 📊 Статистика титулов - общая статистика\n` +
+      `└ 🔄 Синхронизация титулов - обновить титулы\n\n` +
+      `Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Меню управления титулами показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, 'Показ управления титулами');
+    await ctx.answerCbQuery('❌ Ошибка показа управления титулами');
+  }
+}
+
 // ==================== АДМИН ПОСТЫ ====================
 async function showAdminPosts(ctx, user) {
   try {
@@ -2040,6 +2079,136 @@ async function showAdminPosts(ctx, user) {
     logError(error, 'Показ управления постами');
   }
 }
+// Функция для выдачи титула пользователю
+async function handleAdminGiveTitle(ctx, user, text) {
+  try {
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply('❌ Формат: "ID_пользователя Название_титула"\n\nПример: "123456789 🌱 Новичок"');
+      return;
+    }
+    
+    const userId = parseInt(parts[0]);
+    const titleName = parts.slice(1).join(' ');
+    
+    if (isNaN(userId)) {
+      await ctx.reply('❌ Неверный ID пользователя');
+      return;
+    }
+    
+    // Получаем пользователя
+    const targetUser = await getUser(userId);
+    if (!targetUser) {
+      await ctx.reply('❌ Пользователь не найден');
+      return;
+    }
+    
+    // Проверяем, есть ли уже такой титул
+    const userTitles = targetUser.titles || [];
+    if (userTitles.includes(titleName)) {
+      await ctx.reply(`❌ У пользователя ${targetUser.firstName || targetUser.username || userId} уже есть титул "${titleName}"`);
+      return;
+    }
+    
+    // Добавляем титул
+    await db.collection('users').updateOne(
+      { id: userId },
+      { 
+        $addToSet: { titles: titleName },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(userId);
+    
+    await ctx.reply(`✅ Титул "${titleName}" выдан пользователю ${targetUser.firstName || targetUser.username || userId}`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    // Очищаем кеш админа
+    userCache.delete(user.id);
+    
+  } catch (error) {
+    logError(error, 'Выдача титула админом');
+    await ctx.reply('❌ Ошибка выдачи титула');
+  }
+}
+
+// Функция для забора титула у пользователя
+async function handleAdminRemoveTitle(ctx, user, text) {
+  try {
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply('❌ Формат: "ID_пользователя Название_титула"\n\nПример: "123456789 🌱 Новичок"');
+      return;
+    }
+    
+    const userId = parseInt(parts[0]);
+    const titleName = parts.slice(1).join(' ');
+    
+    if (isNaN(userId)) {
+      await ctx.reply('❌ Неверный ID пользователя');
+      return;
+    }
+    
+    // Получаем пользователя
+    const targetUser = await getUser(userId);
+    if (!targetUser) {
+      await ctx.reply('❌ Пользователь не найден');
+      return;
+    }
+    
+    // Проверяем, есть ли такой титул
+    const userTitles = targetUser.titles || [];
+    if (!userTitles.includes(titleName)) {
+      await ctx.reply(`❌ У пользователя ${targetUser.firstName || targetUser.username || userId} нет титула "${titleName}"`);
+      return;
+    }
+    
+    // Убираем титул
+    await db.collection('users').updateOne(
+      { id: userId },
+      { 
+        $pull: { titles: titleName },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Если это был главный титул, устанавливаем дефолтный
+    if (targetUser.mainTitle === titleName) {
+      await db.collection('users').updateOne(
+        { id: userId },
+        { 
+          $set: { mainTitle: '🌱 Новичок', updatedAt: new Date() }
+        }
+      );
+    }
+    
+    // Очищаем кеш
+    userCache.delete(userId);
+    
+    await ctx.reply(`✅ Титул "${titleName}" забран у пользователя ${targetUser.firstName || targetUser.username || userId}`);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    // Очищаем кеш админа
+    userCache.delete(user.id);
+    
+  } catch (error) {
+    logError(error, 'Забор титула админом');
+    await ctx.reply('❌ Ошибка забора титула');
+  }
+}
+
 // ==================== АДМИН ПРОМОКОДЫ ====================
 async function showAdminPromocodes(ctx, user) {
   try {
@@ -2450,11 +2619,14 @@ async function showAdminPanel(ctx, user) {
         Markup.button.callback('🎫 Управление промокодами', 'admin_promocodes')
       ],
       [
-        Markup.button.callback('📢 Рассылка', 'admin_broadcast'),
-        Markup.button.callback('🔄 Обновление кеша', 'admin_cache')
+        Markup.button.callback('👑 Управление титулами', 'admin_titles'),
+        Markup.button.callback('📢 Рассылка', 'admin_broadcast')
       ],
       [
-        Markup.button.callback('🏦 Управление резервом', 'admin_reserve'),
+        Markup.button.callback('🔄 Обновление кеша', 'admin_cache'),
+        Markup.button.callback('🏦 Управление резервом', 'admin_reserve')
+      ],
+      [
         Markup.button.callback('🔍 Отладка рангов', 'admin_debug_ranks')
       ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
@@ -2470,6 +2642,7 @@ async function showAdminPanel(ctx, user) {
       `├ ⚙️ Настройки бота - конфигурация\n` +
       `├ 📝 Управление постами - создание постов в канал\n` +
       `├ 🎫 Управление промокодами - создание промокодов\n` +
+      `├ 👑 Управление титулами - выдача и забор титулов\n` +
       `├ 📢 Рассылка - отправка сообщений\n` +
       `├ 🔄 Обновление кеша - очистка кеша\n` +
       `└ 🏦 Управление резервом - управление резервом биржи\n\n` +
@@ -8585,6 +8758,188 @@ bot.action('admin_settings', async (ctx) => {
   }
 });
 
+// Обработчики для управления титулами
+bot.action('admin_titles', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminTitles(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление титулами');
+    await ctx.answerCbQuery('❌ Ошибка управления титулами');
+  }
+});
+
+bot.action('admin_give_title', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'giving_title', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_titles')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➕ *Выдача титула*\n\n` +
+      `Введите ID пользователя и название титула:\n\n` +
+      `💡 *Формат:* ID Название_титула\n` +
+      `💡 *Пример:* 123456789 🌱 Новичок\n\n` +
+      `📋 *Доступные титулы:*\n` +
+      `├ 🌱 Новичок\n` +
+      `├ 🚀 Начинающий\n` +
+      `├ 🎯 Опытный\n` +
+      `├ ✨ Мастер\n` +
+      `├ 💫 Эксперт\n` +
+      `├ 🌟 Профессионал\n` +
+      `├ 🏆 Чемпион\n` +
+      `├ 👑 Легенда\n` +
+      `├ 🕵️ Скрытный\n` +
+      `├ 🧠 Тактик\n` +
+      `├ ⏳ Усердный\n` +
+      `├ 🔥 Бессмертный\n` +
+      `├ 🐉 Дракон\n` +
+      `├ ⚡ Бог\n` +
+      `├ 🛡️ Модератор\n` +
+      `├ ⚙️ Администратор\n` +
+      `└ 👑 Владелец`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Выдача титула');
+    await ctx.answerCbQuery('❌ Ошибка выдачи титула');
+  }
+});
+
+bot.action('admin_remove_title', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'removing_title', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_titles')]
+    ]);
+    
+    await ctx.editMessageText(
+      `➖ *Забор титула*\n\n` +
+      `Введите ID пользователя и название титула:\n\n` +
+      `💡 *Формат:* ID Название_титула\n` +
+      `💡 *Пример:* 123456789 🌱 Новичок\n\n` +
+      `⚠️ *Внимание:* Если это главный титул, будет установлен дефолтный!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Забор титула');
+    await ctx.answerCbQuery('❌ Ошибка забора титула');
+  }
+});
+
+bot.action('admin_titles_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Получаем статистику титулов
+    const users = await db.collection('users').find({}).toArray();
+    const titleStats = {};
+    
+    users.forEach(u => {
+      const titles = u.titles || [];
+      titles.forEach(title => {
+        titleStats[title] = (titleStats[title] || 0) + 1;
+      });
+    });
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_titles')]
+    ]);
+    
+    let message = `📊 *Статистика титулов*\n\n`;
+    message += `👥 Всего пользователей: \`${users.length}\`\n\n`;
+    
+    if (Object.keys(titleStats).length > 0) {
+      message += `🏆 *Распределение титулов:*\n`;
+      Object.entries(titleStats)
+        .sort(([,a], [,b]) => b - a)
+        .forEach(([title, count]) => {
+          const percentage = ((count / users.length) * 100).toFixed(1);
+          message += `├ ${title}: \`${count}\` (${percentage}%)\n`;
+        });
+    } else {
+      message += `❌ Нет данных о титулах`;
+    }
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Статистика титулов');
+    await ctx.answerCbQuery('❌ Ошибка статистики титулов');
+  }
+});
+
+bot.action('admin_sync_titles', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Синхронизируем титулы для всех пользователей
+    const users = await db.collection('users').find({}).toArray();
+    let synced = 0;
+    
+    for (const u of users) {
+      try {
+        await syncUserTitles(u);
+        synced++;
+      } catch (error) {
+        console.error(`Ошибка синхронизации титулов для пользователя ${u.id}:`, error);
+      }
+    }
+    
+    await ctx.answerCbQuery(`✅ Синхронизировано титулов для ${synced} пользователей!`);
+    await showAdminTitles(ctx, user);
+  } catch (error) {
+    logError(error, 'Синхронизация титулов');
+    await ctx.answerCbQuery('❌ Ошибка синхронизации титулов');
+  }
+});
+
 bot.action('admin_cache', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -9647,6 +10002,12 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'setting_commission') {
           console.log(`💸 Админ ${ctx.from.id} устанавливает комиссию: "${text}"`);
           await handleAdminSetCommission(ctx, user, text);
+        } else if (user.adminState === 'giving_title') {
+          console.log(`👑 Админ ${ctx.from.id} выдает титул: "${text}"`);
+          await handleAdminGiveTitle(ctx, user, text);
+        } else if (user.adminState === 'removing_title') {
+          console.log(`👑 Админ ${ctx.from.id} забирает титул: "${text}"`);
+          await handleAdminRemoveTitle(ctx, user, text);
         } else if (user.adminState === 'broadcasting') {
           console.log(`📢 Админ ${ctx.from.id} рассылает сообщение: "${text}"`);
           const cursor = db.collection('users').find({}, { projection: { id: 1 } });
