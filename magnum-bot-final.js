@@ -43,6 +43,7 @@ const config = {
   FARM_BASE_REWARD: 0.01,
   DAILY_BONUS_BASE: 3,
   REFERRAL_BONUS: 50,
+  REFERRAL_REWARD: 100, // Награда за каждого реферала
   MINER_REWARD_PER_MINUTE: 0.01, // Базовая награда за минуту
   MINER_REWARD_PER_HOUR: 0.1, // Оставляем для обратной совместимости
   EXCHANGE_COMMISSION: 2.5,
@@ -873,15 +874,31 @@ async function getUser(id, ctx = null) {
       
       // Обновляем пользователя в базе данных
       console.log(`💾 Обновление пользователя ${id} в базе данных`);
+      
+      // Обновляем данные пользователя из контекста, если они доступны
+      const updateData = { 
+        'statistics.lastSeen': user.statistics.lastSeen,
+        'statistics.totalSessions': user.statistics.totalSessions,
+        updatedAt: new Date()
+      };
+      
+      // Обновляем имя и username, если они доступны в контексте
+      if (ctx?.from?.first_name) {
+        updateData.firstName = ctx.from.first_name;
+        user.firstName = ctx.from.first_name;
+      }
+      if (ctx?.from?.last_name) {
+        updateData.lastName = ctx.from.last_name;
+        user.lastName = ctx.from.last_name;
+      }
+      if (ctx?.from?.username) {
+        updateData.username = ctx.from.username;
+        user.username = ctx.from.username;
+      }
+      
       const updateResult = await db.collection('users').updateOne(
         { id: id },
-        { 
-          $set: { 
-            'statistics.lastSeen': user.statistics.lastSeen,
-            'statistics.totalSessions': user.statistics.totalSessions,
-            updatedAt: new Date()
-          }
-        }
+        { $set: updateData }
       );
       console.log(`Результат обновления пользователя ${id}:`, { 
         matchedCount: updateResult.matchedCount,
@@ -912,6 +929,43 @@ async function getUser(id, ctx = null) {
 
 function generateReferralCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// Функция для получения отображаемого имени пользователя
+function getDisplayName(user) {
+  if (user.firstName) {
+    return user.firstName;
+  }
+  if (user.username) {
+    return `@${user.username}`;
+  }
+  return 'Не указано';
+}
+
+// Функция для формирования сообщения профиля
+function formatProfileMessage(user, rankProgress) {
+  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
+  if (!rankProgress.isMax) {
+    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
+  } else {
+    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
+  }
+  
+  return `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
+    `👤 *Профиль:*\n` +
+    `├ ID: \`${user.id}\`\n` +
+    `├ Имя: ${getDisplayName(user)}\n` +
+    `├ Уровень: ${user.level}\n` +
+    `${rankInfo}` +
+    `└ Титул: ${user.mainTitle}\n\n` +
+    `💎 *Баланс:*\n` +
+    `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
+    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
+    `📊 *Статистика:*\n` +
+    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
+    `├ Рефералы: \`${user.referralsCount}\`\n` +
+    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
+    `🎯 Выберите действие:`;
 }
 
 // ==================== ПРОВЕРКА ПОДПИСКИ ====================
@@ -1038,30 +1092,7 @@ async function showMainMenu(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
-  // Формируем информацию о ранге
-  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
-  if (!rankProgress.isMax) {
-    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
-  } else {
-    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
-  }
-  
-  const message = 
-    `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
-    `👤 *Профиль:*\n` +
-    `├ ID: \`${user.id}\`\n` +
-    `├ Имя: ${user.firstName || 'Не указано'}\n` +
-    `├ Уровень: ${user.level}\n` +
-    `${rankInfo}` +
-    `└ Титул: ${user.mainTitle}\n\n` +
-    `💎 *Баланс:*\n` +
-    `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
-    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
-    `📊 *Статистика:*\n` +
-    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
-    `├ Рефералы: \`${user.referralsCount}\`\n` +
-    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
-    `🎯 Выберите действие:`;
+  const message = formatProfileMessage(user, rankProgress);
   
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
@@ -1104,30 +1135,7 @@ async function showMainMenuStart(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
-  // Формируем информацию о ранге
-  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
-  if (!rankProgress.isMax) {
-    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
-  } else {
-    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
-  }
-  
-  const message = 
-    `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
-    `👤 *Профиль:*\n` +
-    `├ ID: \`${user.id}\`\n` +
-    `├ Имя: ${user.firstName || 'Не указано'}\n` +
-    `├ Уровень: ${user.level}\n` +
-    `${rankInfo}` +
-    `└ Титул: ${user.mainTitle}\n\n` +
-    `💎 *Баланс:*\n` +
-    `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
-    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
-    `📊 *Статистика:*\n` +
-    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
-    `├ Рефералы: \`${user.referralsCount}\`\n` +
-    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
-    `🎯 Выберите действие:`;
+  const message = formatProfileMessage(user, rankProgress);
   
   await ctx.reply(message, {
     parse_mode: 'Markdown',
@@ -4360,9 +4368,9 @@ async function showReferralRewards(ctx, user) {
     
     // Текущие награды
     message += `💰 *Текущие награды:*\n`;
-    message += `├ За каждого реферала: \`${referralReward}\` Stars\n`;
-    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
-    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Stars\n\n`;
+    message += `├ За каждого реферала: \`${referralReward}\` Magnum Coins\n`;
+    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
+    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Magnum Coins\n\n`;
     
     // Система бонусов
     message += `🏆 *Система бонусов:*\n`;
@@ -4386,7 +4394,7 @@ async function showReferralRewards(ctx, user) {
         `Выполнено!` : 
         `Осталось: ${bonus.count - referralsCount} рефералов`;
       
-      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Stars\n`;
+      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Magnum Coins\n`;
       message += `└ ${progress}\n\n`;
     });
     
@@ -5231,6 +5239,86 @@ async function showTasksProgress(ctx, user) {
   } catch (error) {
     logError(error, 'Показ прогресса заданий');
     await ctx.answerCbQuery('❌ Ошибка загрузки прогресса');
+  }
+}
+
+async function showTasksAchievements(ctx, user) {
+  try {
+    log(`🏆 Показ достижений в заданиях для пользователя ${user.id}`);
+    
+    const tasks = user.tasks || {};
+    const completedTasks = tasks.completedTasks || 0;
+    const totalEarnings = tasks.totalTaskEarnings || 0;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'tasks')]
+    ]);
+    
+    let message = `🏆 *Достижения в заданиях*\n\n`;
+    
+    // Система достижений
+    const achievements = [
+      { id: 'first_task', title: '🎯 Первое задание', description: 'Выполните первое задание', requirement: 1, reward: 10 },
+      { id: 'task_master', title: '🎯 Мастер заданий', description: 'Выполните 10 заданий', requirement: 10, reward: 50 },
+      { id: 'task_expert', title: '🎯 Эксперт заданий', description: 'Выполните 25 заданий', requirement: 25, reward: 100 },
+      { id: 'task_legend', title: '🎯 Легенда заданий', description: 'Выполните 50 заданий', requirement: 50, reward: 250 },
+      { id: 'task_god', title: '🎯 Бог заданий', description: 'Выполните 100 заданий', requirement: 100, reward: 500 }
+    ];
+    
+    // Проверяем достижения
+    const userAchievements = tasks.achievements || {};
+    
+    message += `📊 *Ваша статистика:*\n`;
+    message += `├ Выполнено заданий: \`${completedTasks}\`\n`;
+    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
+    message += `└ Получено достижений: \`${Object.keys(userAchievements).length}\`\n\n`;
+    
+    message += `🏆 *Достижения:*\n`;
+    
+    achievements.forEach(achievement => {
+      const isCompleted = userAchievements[achievement.id]?.completed || false;
+      const isClaimed = userAchievements[achievement.id]?.claimed || false;
+      const progress = Math.min(100, Math.round((completedTasks / achievement.requirement) * 100));
+      
+      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
+      
+      message += `${status} *${achievement.title}*\n`;
+      message += `├ ${achievement.description}\n`;
+      message += `├ Прогресс: \`${completedTasks}/${achievement.requirement}\` (\`${progress}%\`)\n`;
+      message += `├ Награда: \`${achievement.reward}\` Magnum Coins\n`;
+      
+      if (isCompleted && !isClaimed) {
+        message += `└ 🎁 *Готово к получению!*\n\n`;
+      } else if (isClaimed) {
+        message += `└ ✅ *Получено!*\n\n`;
+      } else {
+        message += `└ Осталось: \`${achievement.requirement - completedTasks}\` заданий\n\n`;
+      }
+    });
+    
+    // Проверяем, есть ли достижения готовые к получению
+    const readyToClaim = achievements.filter(a => 
+      userAchievements[a.id]?.completed && !userAchievements[a.id]?.claimed
+    );
+    
+    if (readyToClaim.length > 0) {
+      message += `🎁 *Готово к получению:* \`${readyToClaim.length}\` достижений\n\n`;
+    }
+    
+    message += `💡 *Информация:*\n`;
+    message += `├ Достижения получаются автоматически\n`;
+    message += `├ Награды выдаются сразу после получения\n`;
+    message += `└ Прогресс обновляется в реальном времени\n\n`;
+    
+    message += `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ достижений в заданиях');
+    await ctx.answerCbQuery('❌ Ошибка загрузки достижений');
   }
 }
 
@@ -6087,7 +6175,7 @@ async function handleCreateSupportTicket(ctx, user, text) {
     const supportMessage = 
       `🆘 *Новый тикет поддержки*\n\n` +
       `🆔 *ID тикета:* \`${ticket.id}\`\n` +
-      `👤 *Пользователь:* ${user.firstName || 'Не указано'}\n` +
+      `👤 *Пользователь:* ${getDisplayName(user)}\n` +
       `📱 *Username:* ${user.username ? '@' + user.username : 'Не указан'}\n` +
       `🆔 *User ID:* \`${user.id}\`\n` +
       `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
@@ -7060,7 +7148,7 @@ bot.action('support_email', async (ctx) => {
       `📧 *Тема письма:* Поддержка Magnum Bot\n\n` +
       `📝 *Содержание письма:*\n` +
       `• Ваш ID: \`${user.id}\`\n` +
-      `• Имя пользователя: ${user.firstName || 'Не указано'}\n` +
+      `• Имя пользователя: ${getDisplayName(user)}\n` +
       `• Описание проблемы\n` +
       `• Скриншоты (если нужно)\n\n` +
       `📋 *Пример письма:*\n` +
@@ -7068,7 +7156,7 @@ bot.action('support_email', async (ctx) => {
       `Мой ID: ${user.id}\n` +
       `Проблема: [опишите проблему]\n\n` +
       `С уважением,\n` +
-      `${user.firstName || 'Пользователь'}\n\n` +
+      `${getDisplayName(user)}\n\n` +
       `⏰ *Время ответа:* 1-24 часа`;
     
     await ctx.editMessageText(message, {
@@ -7696,6 +7784,18 @@ bot.action('tasks_progress', async (ctx) => {
     logError(error, 'Прогресс заданий');
   }
 });
+
+bot.action('tasks_achievements', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showTasksAchievements(ctx, user);
+  } catch (error) {
+    logError(error, 'Достижения в заданиях');
+  }
+});
+
 // Обработка спонсорских заданий
 bot.action(/^sponsor_task_(\d+)$/, async (ctx) => {
   try {
@@ -9360,6 +9460,140 @@ bot.on('text', async (ctx) => {
     });
   }
 });
+
+// ==================== ОБРАБОТКА ПРОМОКОДОВ ====================
+async function handleUserEnterPromocode(ctx, user, text) {
+  try {
+    log(`🎫 Обработка промокода от пользователя ${user.id}: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: '' }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const promocode = text.trim().toUpperCase();
+    
+    // Проверяем, что промокод не пустой
+    if (!promocode || promocode.length < 3) {
+      await ctx.reply('❌ Промокод должен содержать минимум 3 символа!');
+      return;
+    }
+    
+    // Проверяем, не использовал ли пользователь уже этот промокод
+    const usedPromocodes = user.usedPromocodes || [];
+    if (usedPromocodes.includes(promocode)) {
+      await ctx.reply('❌ Вы уже использовали этот промокод!');
+      return;
+    }
+    
+    // Ищем промокод в базе данных
+    const promocodeDoc = await db.collection('promocodes').findOne({ 
+      code: promocode,
+      isActive: true,
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gt: new Date() } }
+      ]
+    });
+    
+    if (!promocodeDoc) {
+      await ctx.reply('❌ Промокод не найден или недействителен!');
+      return;
+    }
+    
+    // Проверяем лимит активаций
+    if (promocodeDoc.maxActivations && promocodeDoc.activations >= promocodeDoc.maxActivations) {
+      await ctx.reply('❌ Промокод больше не действителен (закончились активации)!');
+      return;
+    }
+    
+    // Выдаем награду
+    const reward = promocodeDoc.reward || 10;
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: reward,
+          totalEarnedMagnumCoins: reward
+        },
+        $push: { usedPromocodes: promocode },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Обновляем статистику промокода
+    await db.collection('promocodes').updateOne(
+      { code: promocode },
+      { 
+        $inc: { 
+          activations: 1,
+          totalActivations: 1,
+          totalRewards: reward
+        },
+        $push: { 
+          activationsHistory: {
+            userId: user.id,
+            username: user.username || 'Неизвестно',
+            firstName: user.firstName || 'Неизвестно',
+            activatedAt: new Date(),
+            reward: reward
+          }
+        }
+      }
+    );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
+    
+    // Отправляем уведомление пользователю
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'promocode')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод активирован!*\n\n` +
+      `🎫 Промокод: \`${promocode}\`\n` +
+      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `📊 Ваш баланс: \`${formatNumber(user.magnumCoins + reward)}\` Magnum Coins\n\n` +
+      `🎉 Спасибо за использование промокода!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    // Отправляем уведомление в чат @magnumtapchat
+    try {
+      const chatId = '@magnumtapchat';
+      const notificationMessage = 
+        `🎫 *Новая активация промокода!*\n\n` +
+        `👤 Пользователь: ${user.firstName || 'Неизвестно'} ${user.username ? `(@${user.username})` : ''}\n` +
+        `🆔 ID: \`${user.id}\`\n` +
+        `🎫 Промокод: \`${promocode}\`\n` +
+        `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+        `📅 Время: ${new Date().toLocaleString('ru-RU')}\n\n` +
+        `🎉 Поздравляем с активацией промокода!`;
+      
+      await ctx.telegram.sendMessage(chatId, notificationMessage, {
+        parse_mode: 'Markdown'
+      });
+      
+      log(`✅ Уведомление об активации промокода отправлено в чат ${chatId}`);
+    } catch (error) {
+      logError(error, `Отправка уведомления в чат @magnumtapchat`);
+      console.log(`⚠️ Не удалось отправить уведомление в чат: ${error.message}`);
+    }
+    
+    log(`✅ Промокод ${promocode} успешно активирован пользователем ${user.id}, награда: ${reward} Magnum Coins`);
+    
+  } catch (error) {
+    logError(error, `Обработка промокода пользователем ${user.id}`);
+    await ctx.reply('❌ Произошла ошибка при активации промокода. Попробуйте позже.');
+  }
+}
 
 // Обработчики необработанных ошибок
 process.on('uncaughtException', (error) => {
