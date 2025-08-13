@@ -37,8 +37,8 @@ const config = {
   BOT_PHOTO_URL: process.env.BOT_PHOTO_URL,
   
   // Игровые настройки
-  INITIAL_STARS: 100,
-  INITIAL_MAGNUM_COINS: 0,
+  INITIAL_STARS: 0,
+  INITIAL_MAGNUM_COINS: 1000,
   FARM_COOLDOWN: 10, // секунды
   FARM_BASE_REWARD: 0.01,
   DAILY_BONUS_BASE: 3,
@@ -266,6 +266,93 @@ async function initializeReserve() {
       }
   } catch (error) {
     console.error('❌ Ошибка инициализации резерва:', error);
+  }
+}
+
+// Функция для полного сброса базы данных
+async function resetDatabase() {
+  try {
+    console.log('🗑️ Начинаем сброс базы данных...');
+    
+    // Получаем список всех коллекций
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(col => col.name);
+    
+    console.log('📋 Найдены коллекции:', collectionNames);
+    
+    // Удаляем все коллекции кроме системных
+    for (const collectionName of collectionNames) {
+      if (!collectionName.startsWith('system.')) {
+        console.log(`🗑️ Удаляем коллекцию: ${collectionName}`);
+        await db.collection(collectionName).drop();
+      }
+    }
+    
+    console.log('✅ Все пользовательские коллекции удалены');
+    
+    // Пересоздаем индексы
+    console.log('📋 Пересоздание индексов...');
+    
+    // Создаем индексы для коллекции users
+    await db.collection('users').createIndex({ id: 1 }, { unique: true });
+    await db.collection('users').createIndex({ username: 1 });
+    await db.collection('users').createIndex({ 'miner.active': 1 });
+    await db.collection('users').createIndex({ lastSeen: -1 });
+    await db.collection('users').createIndex({ referrerId: 1 });
+    
+    // Создаем индексы для коллекции promocodes
+    await db.collection('promocodes').createIndex({ code: 1 }, { unique: true });
+    await db.collection('promocodes').createIndex({ isActive: 1 });
+    await db.collection('promocodes').createIndex({ expiresAt: 1 });
+    
+    // Создаем индексы для коллекции withdrawalRequests
+    await db.collection('withdrawalRequests').createIndex({ userId: 1 });
+    await db.collection('withdrawalRequests').createIndex({ status: 1 });
+    await db.collection('withdrawalRequests').createIndex({ createdAt: -1 });
+    
+    // Создаем индексы для коллекции supportTickets
+    await db.collection('supportTickets').createIndex({ userId: 1 });
+    await db.collection('supportTickets').createIndex({ status: 1 });
+    await db.collection('supportTickets').createIndex({ createdAt: -1 });
+    await db.collection('supportTickets').createIndex({ id: 1 }, { unique: true });
+    await db.collection('supportTickets').createIndex({ adminId: 1 });
+    await db.collection('supportTickets').createIndex({ updatedAt: -1 });
+    
+    // Создаем индексы для коллекции taskChecks
+    await db.collection('taskChecks').createIndex({ userId: 1 });
+    await db.collection('taskChecks').createIndex({ status: 1 });
+    await db.collection('taskChecks').createIndex({ createdAt: -1 });
+    
+    // Создаем индексы для коллекции dailyTasks
+    await db.collection('dailyTasks').createIndex({ userId: 1 });
+    await db.collection('dailyTasks').createIndex({ date: 1 });
+    await db.collection('dailyTasks').createIndex({ completed: 1 });
+    
+    // Создаем индексы для коллекции exchangeHistory
+    await db.collection('exchangeHistory').createIndex({ userId: 1 });
+    await db.collection('exchangeHistory').createIndex({ timestamp: -1 });
+    
+    // Создаем индекс для резерва
+    await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+    
+    console.log('✅ Все индексы пересозданы');
+    
+    // Инициализируем резерв заново
+    console.log('💰 Инициализация резерва...');
+    await initializeReserve();
+    console.log('✅ Резерв инициализирован');
+    
+    // Очищаем кеши
+    userCache.clear();
+    statsCache.clear();
+    console.log('✅ Кеши очищены');
+    
+    console.log('✅ База данных успешно сброшена!');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Ошибка сброса базы данных:', error);
+    throw error;
   }
 }
 
@@ -1798,7 +1885,8 @@ async function showWithdrawalMenu(ctx, user) {
     `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
     `└ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Magnum Coins\n\n` +
     `💡 *Информация:*\n` +
-    `├ Минимальная сумма: 10 Magnum Coins\n` +
+    `├ Минимальная сумма MC: 10 Magnum Coins\n` +
+    `├ Минимальная сумма Stars: 15 Stars\n` +
     `├ Комиссия: 5%\n` +
     `└ Обработка: до 24 часов\n\n` +
     `🎯 Выберите действие:`;
@@ -3015,6 +3103,9 @@ async function showAdminPanel(ctx, user) {
         Markup.button.callback('🏦 Управление резервом', 'admin_reserve'),
         Markup.button.callback('🔍 Отладка рангов', 'admin_debug_ranks')
       ],
+      [
+        Markup.button.callback('🗑️ Сброс базы данных', 'admin_reset_db')
+      ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
@@ -3033,7 +3124,8 @@ async function showAdminPanel(ctx, user) {
       `├ 📢 Рассылка - отправка сообщений\n` +
       `├ 🗳️ Управление голосованием - создание и управление голосованиями\n` +
       `├ 🔄 Обновление кеша - очистка кеша\n` +
-      `└ 🏦 Управление резервом - управление резервом биржи\n\n` +
+      `├ 🏦 Управление резервом - управление резервом биржи\n` +
+      `└ 🗑️ Сброс базы данных - полная очистка всех данных\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -9560,8 +9652,8 @@ bot.action('withdrawal_stars', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    if (user.stars < 1000) {
-      await ctx.answerCbQuery('❌ Минимальная сумма для вывода: 1000 Stars');
+    if (user.stars < 15) {
+      await ctx.answerCbQuery('❌ Минимальная сумма для вывода: 15 Stars');
       return;
     }
     
@@ -9581,8 +9673,8 @@ bot.action('withdrawal_stars', async (ctx) => {
       `💎 Доступно: ${formatNumber(user.stars)} Stars\n` +
       `💸 Комиссия: 5%\n\n` +
       `Введите сумму для вывода:\n\n` +
-      `💡 *Пример:* 1000, 5000, 10000\n\n` +
-      `⚠️ *Внимание:* Минимум 1000 Stars!`,
+      `💡 *Пример:* 15, 50, 100\n\n` +
+      `⚠️ *Внимание:* Минимум 15 Stars!`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
@@ -9614,7 +9706,7 @@ bot.action('withdrawal_stats', async (ctx) => {
       `💡 *Информация:*\n` +
       `├ Комиссия за вывод: 5%\n` +
       `├ Минимум Magnum Coins: 10\n` +
-      `├ Минимум Stars: 1000\n` +
+      `├ Минимум Stars: 15\n` +
       `└ Обработка: до 24 часов`;
     
     await ctx.editMessageText(message, {
@@ -11946,6 +12038,100 @@ bot.action('admin_subscription_add', async (ctx) => {
   }
 });
 
+bot.action('admin_reset_db', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Проверяем, что пользователь является админом
+    if (!config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Подтвердить сброс', 'admin_reset_db_confirm'),
+        Markup.button.callback('❌ Отмена', 'admin')
+      ]
+    ]);
+    
+    await ctx.editMessageText(
+      `🗑️ *Сброс базы данных*\n\n` +
+      `⚠️ **ВНИМАНИЕ!** Это действие необратимо!\n\n` +
+      `🔴 *Что будет удалено:*\n` +
+      `├ 👥 Все пользователи\n` +
+      `├ 💰 Все балансы\n` +
+      `├ 🏦 Резерв биржи\n` +
+      `├ 📊 Вся статистика\n` +
+      `├ 🎫 Все промокоды\n` +
+      `├ 📝 Вся история обменов\n` +
+      `├ 🗳️ Все голосования\n` +
+      `└ 📋 Все настройки\n\n` +
+      `🔄 *Что будет восстановлено:*\n` +
+      `├ 🏦 Начальный резерв биржи\n` +
+      `├ ⚙️ Базовые настройки\n` +
+      `└ 📊 Пустая статистика\n\n` +
+      `💡 *Рекомендация:* Сделайте резервную копию перед сбросом!\n\n` +
+      `🎯 Вы уверены, что хотите сбросить базу данных?`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Показ меню сброса БД');
+    await ctx.answerCbQuery('❌ Ошибка показа меню сброса');
+  }
+});
+
+bot.action('admin_reset_db_confirm', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Проверяем, что пользователь является админом
+    if (!config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await ctx.editMessageText('🔄 Выполняется сброс базы данных...\n\n⏳ Это может занять несколько секунд...');
+    
+    // Выполняем сброс базы данных
+    await resetDatabase();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Вернуться в админ панель', 'admin')]
+    ]);
+    
+    await ctx.editMessageText(
+      `✅ *База данных успешно сброшена!*\n\n` +
+      `🗑️ *Удалено:*\n` +
+      `├ 👥 Все пользователи\n` +
+      `├ 💰 Все балансы\n` +
+      `├ 🏦 Резерв биржи\n` +
+      `├ 📊 Вся статистика\n` +
+      `├ 🎫 Все промокоды\n` +
+      `├ 📝 Вся история обменов\n` +
+      `├ 🗳️ Все голосования\n` +
+      `└ 📋 Все настройки\n\n` +
+      `🔄 *Восстановлено:*\n` +
+      `├ 🏦 Начальный резерв биржи\n` +
+      `├ ⚙️ Базовые настройки\n` +
+      `└ 📊 Пустая статистика\n\n` +
+      `🚀 Бот готов к работе с чистой базой данных!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Сброс базы данных');
+    await ctx.editMessageText('❌ Ошибка при сбросе базы данных');
+  }
+});
+
 // Обработка ошибок
 bot.catch((err, ctx) => {
   console.error('❌ Ошибка в боте:', err);
@@ -12093,6 +12279,14 @@ bot.on('text', async (ctx) => {
       } else if (user.adminState === 'exchange_custom_stars') {
         console.log(`⭐ Пользователь ${ctx.from.id} вводит сумму Stars для обмена: "${text}"`);
         await handleExchangeCustomStars(ctx, user, text);
+        return;
+      } else if (user.adminState === 'withdrawing_mc') {
+        console.log(`💰 Пользователь ${ctx.from.id} вводит сумму MC для вывода: "${text}"`);
+        await handleWithdrawalMC(ctx, user, text);
+        return;
+      } else if (user.adminState === 'withdrawing_stars') {
+        console.log(`⭐ Пользователь ${ctx.from.id} вводит сумму Stars для вывода: "${text}"`);
+        await handleWithdrawalStars(ctx, user, text);
         return;
       }
       // Проверяем админские состояния (только для админов)
@@ -12407,6 +12601,235 @@ async function handleExchangeCustomStars(ctx, user, text) {
   } catch (error) {
     logError(error, `Обработка ввода суммы Stars для обмена пользователем ${user.id}`);
     await ctx.reply('❌ Произошла ошибка при обработке суммы. Попробуйте позже.');
+  }
+}
+
+// ==================== ОБРАБОТКА ВЫВОДА СРЕДСТВ ====================
+async function handleWithdrawalMC(ctx, user, text) {
+  try {
+    log(`💰 Обработка вывода MC от пользователя ${user.id}: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: '' }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const amount = parseFloat(text.trim());
+    
+    // Проверяем корректность суммы
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Некорректная сумма! Введите положительное число.');
+      return;
+    }
+    
+    // Проверяем минимальную сумму
+    if (amount < 10) {
+      await ctx.reply('❌ Минимальная сумма для вывода: 10 Magnum Coins');
+      return;
+    }
+    
+    // Проверяем баланс
+    if (amount > user.magnumCoins) {
+      await ctx.reply('❌ Недостаточно Magnum Coins для вывода!');
+      return;
+    }
+    
+    // Рассчитываем комиссию
+    const commission = amount * 0.05; // 5%
+    const amountAfterCommission = amount - commission;
+    
+    // Создаем заявку на вывод
+    const withdrawalRequest = {
+      userId: user.id,
+      userFirstName: user.firstName,
+      userUsername: user.username,
+      currency: 'magnum_coins',
+      amount: amount,
+      amountAfterCommission: amountAfterCommission,
+      commission: commission,
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    await db.collection('withdrawalRequests').insertOne(withdrawalRequest);
+    
+    // Обновляем пользователя (снимаем средства)
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: -amount,
+          'withdrawal.withdrawalCount': 1,
+          'withdrawal.totalWithdrawn': amount
+        },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Уведомляем пользователя
+    await ctx.reply(
+      `✅ *Заявка на вывод создана!*\n\n` +
+      `💰 *Детали заявки:*\n` +
+      `├ Сумма: ${formatNumber(amount)} Magnum Coins\n` +
+      `├ Комиссия: ${formatNumber(commission)} Magnum Coins (5%)\n` +
+      `├ К получению: ${formatNumber(amountAfterCommission)} Magnum Coins\n` +
+      `└ Статус: ⏳ Ожидает обработки\n\n` +
+      `📋 *Информация:*\n` +
+      `├ Обработка: до 24 часов\n` +
+      `├ Номер заявки: #${withdrawalRequest._id}\n` +
+      `└ Следите за статусом в истории выводов\n\n` +
+      `💡 *Следующие шаги:*\n` +
+      `├ Администратор рассмотрит вашу заявку\n` +
+      `├ При одобрении средства будут переведены\n` +
+      `└ Вы получите уведомление об изменении статуса`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    // Уведомляем админов
+    for (const adminId of config.ADMIN_IDS) {
+      try {
+        await bot.telegram.sendMessage(
+          adminId,
+          `🆕 *Новая заявка на вывод Magnum Coins*\n\n` +
+          `👤 *Пользователь:* ${user.firstName} (@${user.username || 'без username'})\n` +
+          `🆔 ID: \`${user.id}\`\n` +
+          `💰 *Сумма:* ${formatNumber(amount)} Magnum Coins\n` +
+          `💸 *Комиссия:* ${formatNumber(commission)} Magnum Coins\n` +
+          `📊 *К получению:* ${formatNumber(amountAfterCommission)} Magnum Coins\n` +
+          `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n` +
+          `🆔 *Номер заявки:* #${withdrawalRequest._id}`,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (error) {
+        console.log(`⚠️ Не удалось уведомить админа ${adminId}: ${error.message}`);
+      }
+    }
+    
+    log(`✅ Заявка на вывод MC создана для пользователя ${user.id}: ${amount} MC`);
+    
+  } catch (error) {
+    logError(error, `Обработка вывода MC пользователем ${user.id}`);
+    await ctx.reply('❌ Произошла ошибка при создании заявки на вывод. Попробуйте позже.');
+  }
+}
+
+async function handleWithdrawalStars(ctx, user, text) {
+  try {
+    log(`⭐ Обработка вывода Stars от пользователя ${user.id}: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: '' }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const amount = parseFloat(text.trim());
+    
+    // Проверяем корректность суммы
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Некорректная сумма! Введите положительное число.');
+      return;
+    }
+    
+    // Проверяем минимальную сумму
+    if (amount < 15) {
+      await ctx.reply('❌ Минимальная сумма для вывода: 15 Stars');
+      return;
+    }
+    
+    // Проверяем баланс
+    if (amount > user.stars) {
+      await ctx.reply('❌ Недостаточно Stars для вывода!');
+      return;
+    }
+    
+    // Рассчитываем комиссию
+    const commission = amount * 0.05; // 5%
+    const amountAfterCommission = amount - commission;
+    
+    // Создаем заявку на вывод
+    const withdrawalRequest = {
+      userId: user.id,
+      userFirstName: user.firstName,
+      userUsername: user.username,
+      currency: 'stars',
+      amount: amount,
+      amountAfterCommission: amountAfterCommission,
+      commission: commission,
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    await db.collection('withdrawalRequests').insertOne(withdrawalRequest);
+    
+    // Обновляем пользователя (снимаем средства)
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          stars: -amount,
+          'withdrawal.withdrawalCount': 1,
+          'withdrawal.totalWithdrawn': amount
+        },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Уведомляем пользователя
+    await ctx.reply(
+      `✅ *Заявка на вывод создана!*\n\n` +
+      `⭐ *Детали заявки:*\n` +
+      `├ Сумма: ${formatNumber(amount)} Stars\n` +
+      `├ Комиссия: ${formatNumber(commission)} Stars (5%)\n` +
+      `├ К получению: ${formatNumber(amountAfterCommission)} Stars\n` +
+      `└ Статус: ⏳ Ожидает обработки\n\n` +
+      `📋 *Информация:*\n` +
+      `├ Обработка: до 24 часов\n` +
+      `├ Номер заявки: #${withdrawalRequest._id}\n` +
+      `└ Следите за статусом в истории выводов\n\n` +
+      `💡 *Следующие шаги:*\n` +
+      `├ Администратор рассмотрит вашу заявку\n` +
+      `├ При одобрении средства будут переведены\n` +
+      `└ Вы получите уведомление об изменении статуса`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    // Уведомляем админов
+    for (const adminId of config.ADMIN_IDS) {
+      try {
+        await bot.telegram.sendMessage(
+          adminId,
+          `🆕 *Новая заявка на вывод Stars*\n\n` +
+          `👤 *Пользователь:* ${user.firstName} (@${user.username || 'без username'})\n` +
+          `🆔 ID: \`${user.id}\`\n` +
+          `⭐ *Сумма:* ${formatNumber(amount)} Stars\n` +
+          `💸 *Комиссия:* ${formatNumber(commission)} Stars\n` +
+          `📊 *К получению:* ${formatNumber(amountAfterCommission)} Stars\n` +
+          `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n` +
+          `🆔 *Номер заявки:* #${withdrawalRequest._id}`,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (error) {
+        console.log(`⚠️ Не удалось уведомить админа ${adminId}: ${error.message}`);
+      }
+    }
+    
+    log(`✅ Заявка на вывод Stars создана для пользователя ${user.id}: ${amount} Stars`);
+    
+  } catch (error) {
+    logError(error, `Обработка вывода Stars пользователем ${user.id}`);
+    await ctx.reply('❌ Произошла ошибка при создании заявки на вывод. Попробуйте позже.');
   }
 }
 
