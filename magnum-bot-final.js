@@ -4777,13 +4777,26 @@ async function showExchangeMenu(ctx, user) {
       `(зависит от ранга)\n\n` +
       `🎯 Выберите сумму для обмена или действие:`;
     
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
+    // Проверяем тип контекста для правильного метода отправки
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    } else {
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    }
   } catch (error) {
     logError(error, 'Показ биржи');
-    await ctx.answerCbQuery('❌ Ошибка загрузки биржи');
+    // Проверяем тип контекста для правильного метода ответа
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('❌ Ошибка загрузки биржи');
+    } else {
+      await ctx.reply('❌ Ошибка загрузки биржи');
+    }
   }
 }
 // Функция для показа графика курса
@@ -5139,10 +5152,12 @@ async function performExchange(ctx, user, amount) {
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
     
-    // Автоматически обновляем меню биржи
-    const updatedUser = await getUser(ctx.from.id);
-    if (updatedUser) {
-      await showExchangeMenu(ctx, updatedUser);
+    // Автоматически обновляем меню биржи только для callback queries
+    if (ctx.callbackQuery) {
+      const updatedUser = await getUser(ctx.from.id);
+      if (updatedUser) {
+        await showExchangeMenu(ctx, updatedUser);
+      }
     }
   } catch (error) {
     logError(error, 'Обмен Magnum Coins на Stars');
@@ -5259,10 +5274,12 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       `✅ Обмен выполнен! ${formatNumber(starsAmount)} Stars → ${formatNumber(mcToReceive)} Magnum Coins\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
     );
     
-    // Обновляем меню обмена
-    const updatedUser = await getUser(ctx.from.id);
-    if (updatedUser) {
-      await showExchangeMenu(ctx, updatedUser);
+    // Автоматически обновляем меню биржи только для callback queries
+    if (ctx.callbackQuery) {
+      const updatedUser = await getUser(ctx.from.id);
+      if (updatedUser) {
+        await showExchangeMenu(ctx, updatedUser);
+      }
     }
   } catch (error) {
     logError(error, 'Обмен валют');
