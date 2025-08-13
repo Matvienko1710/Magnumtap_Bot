@@ -9666,9 +9666,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
       
       const notificationMessage = 
         `🎫 *Новая активация промокода!*\n\n` +
-        `🆔 *ID промокода:* \`${updatedPromocode._id}\`\n` +
         `👤 Пользователь: ${user.firstName || 'Неизвестно'} ${user.username ? `(@${user.username})` : ''}\n` +
-        `🆔 ID: \`${user.id}\`\n` +
         `🎫 Промокод: \`${promocode}\`\n` +
         `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
         `📊 Статус: ${activationStatus}\n` +
