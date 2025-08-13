@@ -269,6 +269,93 @@ async function initializeReserve() {
   }
 }
 
+// Функция для полного сброса базы данных
+async function resetDatabase() {
+  try {
+    console.log('🗑️ Начинаем сброс базы данных...');
+    
+    // Получаем список всех коллекций
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(col => col.name);
+    
+    console.log('📋 Найдены коллекции:', collectionNames);
+    
+    // Удаляем все коллекции кроме системных
+    for (const collectionName of collectionNames) {
+      if (!collectionName.startsWith('system.')) {
+        console.log(`🗑️ Удаляем коллекцию: ${collectionName}`);
+        await db.collection(collectionName).drop();
+      }
+    }
+    
+    console.log('✅ Все пользовательские коллекции удалены');
+    
+    // Пересоздаем индексы
+    console.log('📋 Пересоздание индексов...');
+    
+    // Создаем индексы для коллекции users
+    await db.collection('users').createIndex({ id: 1 }, { unique: true });
+    await db.collection('users').createIndex({ username: 1 });
+    await db.collection('users').createIndex({ 'miner.active': 1 });
+    await db.collection('users').createIndex({ lastSeen: -1 });
+    await db.collection('users').createIndex({ referrerId: 1 });
+    
+    // Создаем индексы для коллекции promocodes
+    await db.collection('promocodes').createIndex({ code: 1 }, { unique: true });
+    await db.collection('promocodes').createIndex({ isActive: 1 });
+    await db.collection('promocodes').createIndex({ expiresAt: 1 });
+    
+    // Создаем индексы для коллекции withdrawalRequests
+    await db.collection('withdrawalRequests').createIndex({ userId: 1 });
+    await db.collection('withdrawalRequests').createIndex({ status: 1 });
+    await db.collection('withdrawalRequests').createIndex({ createdAt: -1 });
+    
+    // Создаем индексы для коллекции supportTickets
+    await db.collection('supportTickets').createIndex({ userId: 1 });
+    await db.collection('supportTickets').createIndex({ status: 1 });
+    await db.collection('supportTickets').createIndex({ createdAt: -1 });
+    await db.collection('supportTickets').createIndex({ id: 1 }, { unique: true });
+    await db.collection('supportTickets').createIndex({ adminId: 1 });
+    await db.collection('supportTickets').createIndex({ updatedAt: -1 });
+    
+    // Создаем индексы для коллекции taskChecks
+    await db.collection('taskChecks').createIndex({ userId: 1 });
+    await db.collection('taskChecks').createIndex({ status: 1 });
+    await db.collection('taskChecks').createIndex({ createdAt: -1 });
+    
+    // Создаем индексы для коллекции dailyTasks
+    await db.collection('dailyTasks').createIndex({ userId: 1 });
+    await db.collection('dailyTasks').createIndex({ date: 1 });
+    await db.collection('dailyTasks').createIndex({ completed: 1 });
+    
+    // Создаем индексы для коллекции exchangeHistory
+    await db.collection('exchangeHistory').createIndex({ userId: 1 });
+    await db.collection('exchangeHistory').createIndex({ timestamp: -1 });
+    
+    // Создаем индекс для резерва
+    await db.collection('reserve').createIndex({ currency: 1 }, { unique: true });
+    
+    console.log('✅ Все индексы пересозданы');
+    
+    // Инициализируем резерв заново
+    console.log('💰 Инициализация резерва...');
+    await initializeReserve();
+    console.log('✅ Резерв инициализирован');
+    
+    // Очищаем кеши
+    userCache.clear();
+    statsCache.clear();
+    console.log('✅ Кеши очищены');
+    
+    console.log('✅ База данных успешно сброшена!');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Ошибка сброса базы данных:', error);
+    throw error;
+  }
+}
+
 // ==================== КЕШИРОВАНИЕ ====================
 const userCache = new Map();
 const statsCache = new Map();
@@ -3015,6 +3102,9 @@ async function showAdminPanel(ctx, user) {
         Markup.button.callback('🏦 Управление резервом', 'admin_reserve'),
         Markup.button.callback('🔍 Отладка рангов', 'admin_debug_ranks')
       ],
+      [
+        Markup.button.callback('🗑️ Сброс базы данных', 'admin_reset_db')
+      ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
@@ -3033,7 +3123,8 @@ async function showAdminPanel(ctx, user) {
       `├ 📢 Рассылка - отправка сообщений\n` +
       `├ 🗳️ Управление голосованием - создание и управление голосованиями\n` +
       `├ 🔄 Обновление кеша - очистка кеша\n` +
-      `└ 🏦 Управление резервом - управление резервом биржи\n\n` +
+      `├ 🏦 Управление резервом - управление резервом биржи\n` +
+      `└ 🗑️ Сброс базы данных - полная очистка всех данных\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -11943,6 +12034,100 @@ bot.action('admin_subscription_add', async (ctx) => {
     await ctx.reply('📢 Введите канал для обязательной подписки (@channel или https://t.me/channel):');
   } catch (error) {
     logError(error, 'Добавление канала подписки (обработчик)');
+  }
+});
+
+bot.action('admin_reset_db', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Проверяем, что пользователь является админом
+    if (!config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Подтвердить сброс', 'admin_reset_db_confirm'),
+        Markup.button.callback('❌ Отмена', 'admin')
+      ]
+    ]);
+    
+    await ctx.editMessageText(
+      `🗑️ *Сброс базы данных*\n\n` +
+      `⚠️ **ВНИМАНИЕ!** Это действие необратимо!\n\n` +
+      `🔴 *Что будет удалено:*\n` +
+      `├ 👥 Все пользователи\n` +
+      `├ 💰 Все балансы\n` +
+      `├ 🏦 Резерв биржи\n` +
+      `├ 📊 Вся статистика\n` +
+      `├ 🎫 Все промокоды\n` +
+      `├ 📝 Вся история обменов\n` +
+      `├ 🗳️ Все голосования\n` +
+      `└ 📋 Все настройки\n\n` +
+      `🔄 *Что будет восстановлено:*\n` +
+      `├ 🏦 Начальный резерв биржи\n` +
+      `├ ⚙️ Базовые настройки\n` +
+      `└ 📊 Пустая статистика\n\n` +
+      `💡 *Рекомендация:* Сделайте резервную копию перед сбросом!\n\n` +
+      `🎯 Вы уверены, что хотите сбросить базу данных?`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Показ меню сброса БД');
+    await ctx.answerCbQuery('❌ Ошибка показа меню сброса');
+  }
+});
+
+bot.action('admin_reset_db_confirm', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Проверяем, что пользователь является админом
+    if (!config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await ctx.editMessageText('🔄 Выполняется сброс базы данных...\n\n⏳ Это может занять несколько секунд...');
+    
+    // Выполняем сброс базы данных
+    await resetDatabase();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Вернуться в админ панель', 'admin')]
+    ]);
+    
+    await ctx.editMessageText(
+      `✅ *База данных успешно сброшена!*\n\n` +
+      `🗑️ *Удалено:*\n` +
+      `├ 👥 Все пользователи\n` +
+      `├ 💰 Все балансы\n` +
+      `├ 🏦 Резерв биржи\n` +
+      `├ 📊 Вся статистика\n` +
+      `├ 🎫 Все промокоды\n` +
+      `├ 📝 Вся история обменов\n` +
+      `├ 🗳️ Все голосования\n` +
+      `└ 📋 Все настройки\n\n` +
+      `🔄 *Восстановлено:*\n` +
+      `├ 🏦 Начальный резерв биржи\n` +
+      `├ ⚙️ Базовые настройки\n` +
+      `└ 📊 Пустая статистика\n\n` +
+      `🚀 Бот готов к работе с чистой базой данных!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Сброс базы данных');
+    await ctx.editMessageText('❌ Ошибка при сбросе базы данных');
   }
 });
 
