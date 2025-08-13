@@ -11,38 +11,21 @@ const PORT = process.env.PORT || 8080;
 // Настройка статических файлов для WebApp
 app.use('/webapp', express.static(path.join(__dirname, 'webapp')));
 
+// Тестовый маршрут для проверки работы сервера
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        message: 'Magnum Stars Bot is running',
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Маршрут для WebApp
 app.get('/webapp', (req, res) => {
     res.sendFile(path.join(__dirname, 'webapp', 'index.html'));
 });
 
-// API маршрут для проверки доступа к WebApp
-app.get('/api/webapp/check-access', async (req, res) => {
-    try {
-        const userId = req.query.user_id;
-        if (!userId) {
-            return res.json({ access: false, reason: 'No user ID provided' });
-        }
-
-        // Проверяем, является ли пользователь админом
-        const isAdmin = config.ADMIN_IDS.includes(parseInt(userId));
-        const webappEnabled = process.env.WEBAPP_ENABLED === 'true';
-        const adminOnly = process.env.WEBAPP_ADMIN_ONLY === 'true';
-
-        if (!webappEnabled) {
-            return res.json({ access: false, reason: 'WebApp disabled' });
-        }
-
-        if (adminOnly && !isAdmin) {
-            return res.json({ access: false, reason: 'Admin only' });
-        }
-
-        res.json({ access: true, isAdmin });
-    } catch (error) {
-        console.error('WebApp access check error:', error);
-        res.status(500).json({ access: false, reason: 'Server error' });
-    }
-});
+// API маршрут будет добавлен после определения конфигурации
 
 // Express сервер будет запущен после успешного запуска бота
 
@@ -110,6 +93,34 @@ const config = {
   BASE_EXCHANGE_RATE: 0.001, // 100 Magnum Coins = 0.001 Star
   EXCHANGE_RATE_MULTIPLIER: 1.0 // Множитель курса в зависимости от резерва
 };
+
+// API маршрут для проверки доступа к WebApp
+app.get('/api/webapp/check-access', async (req, res) => {
+    try {
+        const userId = req.query.user_id;
+        if (!userId) {
+            return res.json({ access: false, reason: 'No user ID provided' });
+        }
+
+        // Проверяем, является ли пользователь админом
+        const isAdmin = config.ADMIN_IDS.includes(parseInt(userId));
+        const webappEnabled = process.env.WEBAPP_ENABLED === 'true';
+        const adminOnly = process.env.WEBAPP_ADMIN_ONLY === 'true';
+
+        if (!webappEnabled) {
+            return res.json({ access: false, reason: 'WebApp disabled' });
+        }
+
+        if (adminOnly && !isAdmin) {
+            return res.json({ access: false, reason: 'Admin only' });
+        }
+
+        res.json({ access: true, isAdmin });
+    } catch (error) {
+        console.error('WebApp access check error:', error);
+        res.status(500).json({ access: false, reason: 'Server error' });
+    }
+});
 
 // ==================== КОНФИГУРАЦИЯ ====================
 
@@ -12291,8 +12302,21 @@ async function startBot() {
     console.log('🚀 Magnum Stars Bot запущен успешно!');
     
     // Запускаем Express сервер после успешного запуска бота
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log(`🌐 WebApp сервер запущен на порту ${PORT}`);
+    });
+
+    // Обработка ошибок сервера
+    server.on('error', (error) => {
+        console.error('❌ Ошибка Express сервера:', error);
+    });
+
+    // Graceful shutdown для Express сервера
+    process.once('SIGINT', () => {
+        console.log('🛑 Остановка Express сервера...');
+        server.close(() => {
+            console.log('✅ Express сервер остановлен');
+        });
     });
     
     console.log('Бот запущен:', {
