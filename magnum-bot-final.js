@@ -169,6 +169,70 @@ app.get('/api/webapp/check-access', async (req, res) => {
     }
 });
 
+// API маршрут для получения данных пользователя
+app.get('/api/webapp/user-data', async (req, res) => {
+    try {
+        const userId = req.query.user_id;
+        if (!userId) {
+            return res.status(400).json({ error: 'User ID required' });
+        }
+
+        const user = await getUser(parseInt(userId));
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                magnumCoins: user.magnumCoins || 0,
+                stars: user.stars || 0,
+                level: user.level || 1,
+                experience: user.experience || 0
+            }
+        });
+    } catch (error) {
+        console.error('WebApp user data error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// API маршрут для обновления данных пользователя
+app.post('/api/webapp/update-data', async (req, res) => {
+    try {
+        const { userId, magnumCoins, stars, clickCount } = req.body;
+        
+        if (!userId) {
+            return res.status(400).json({ error: 'User ID required' });
+        }
+
+        const user = await getUser(parseInt(userId));
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Обновляем данные пользователя
+        await db.collection('users').updateOne(
+            { id: parseInt(userId) },
+            {
+                $set: {
+                    magnumCoins: magnumCoins || user.magnumCoins,
+                    stars: stars || user.stars,
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        // Очищаем кеш
+        userCache.delete(parseInt(userId));
+
+        res.json({ success: true, message: 'Data updated successfully' });
+    } catch (error) {
+        console.error('WebApp update data error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // ==================== КОНФИГУРАЦИЯ ====================
 
 // Глобальные переменные для хранения курса за 24 часа
@@ -1194,13 +1258,24 @@ async function showSubscriptionMessage(ctx) {
 // ==================== РЕФЕРАЛЬНАЯ СИСТЕМА ====================
 async function handleReferral(userId, referrerId) {
   try {
-    if (userId === referrerId) return;
+    console.log(`👥 Обработка реферала: ${userId} -> ${referrerId}`);
+    
+    if (userId === referrerId) {
+      console.log('❌ Пользователь не может быть своим реферером');
+      return;
+    }
     
     const user = await getUser(userId);
-    if (user.referrerId) return; // Уже есть реферер
+    if (user.referrerId) {
+      console.log('❌ У пользователя уже есть реферер');
+      return;
+    }
     
     const referrer = await getUser(referrerId);
-    if (!referrer) return;
+    if (!referrer) {
+      console.log('❌ Реферер не найден');
+      return;
+    }
     
     // Обновляем пользователя
     await db.collection('users').updateOne(
@@ -1213,15 +1288,16 @@ async function handleReferral(userId, referrerId) {
       }
     );
     
-    // Обновляем реферера
+    // Обновляем реферера с правильной наградой
+    const referralReward = config.REFERRAL_REWARD; // 100 монет за реферала
     await db.collection('users').updateOne(
       { id: referrerId },
       { 
         $inc: { 
           referralsCount: 1,
-          totalReferralEarnings: config.REFERRAL_BONUS,
-          magnumCoins: config.REFERRAL_BONUS,
-          totalEarnedMagnumCoins: config.REFERRAL_BONUS
+          totalReferralEarnings: referralReward,
+          magnumCoins: referralReward,
+          totalEarnedMagnumCoins: referralReward
         },
         $push: { referrals: userId },
         $set: { updatedAt: new Date() }
@@ -1232,8 +1308,51 @@ async function handleReferral(userId, referrerId) {
     userCache.delete(userId);
     userCache.delete(referrerId);
     
-    log(`👥 Реферал: ${userId} -> ${referrerId}`);
+    // Отправляем уведомление рефереру
+    try {
+      const referrerUser = await getUser(referrerId);
+      const newUser = await getUser(userId);
+      
+      const notificationMessage = 
+        `🎉 *Новый реферал!*\n\n` +
+        `👤 Пользователь: ${newUser.firstName || 'Неизвестно'}\n` +
+        `🆔 ID: \`${userId}\`\n` +
+        `💰 Награда: +${formatNumber(referralReward)} Magnum Coins\n\n` +
+        `📊 Всего рефералов: ${referrerUser.referralsCount}\n` +
+        `💎 Общий заработок с рефералов: ${formatNumber(referrerUser.totalReferralEarnings || 0)} MC`;
+      
+      await bot.telegram.sendMessage(referrerId, notificationMessage, {
+        parse_mode: 'Markdown'
+      });
+      
+      console.log(`✅ Уведомление отправлено рефереру ${referrerId}`);
+    } catch (notifyError) {
+      console.error('❌ Ошибка отправки уведомления рефереру:', notifyError);
+    }
+    
+    // Отправляем уведомление новому пользователю
+    try {
+      const welcomeMessage = 
+        `🎉 *Добро пожаловать в Magnum Stars!*\n\n` +
+        `👥 Вы присоединились по реферальной ссылке\n` +
+        `👤 Пригласил: ${referrer.firstName || 'Неизвестно'}\n` +
+        `💰 Вы получили: +${formatNumber(config.INITIAL_MAGNUM_COINS)} Magnum Coins\n\n` +
+        `🎮 Начните играть прямо сейчас!`;
+      
+      await bot.telegram.sendMessage(userId, welcomeMessage, {
+        parse_mode: 'Markdown'
+      });
+      
+      console.log(`✅ Приветственное сообщение отправлено пользователю ${userId}`);
+    } catch (welcomeError) {
+      console.error('❌ Ошибка отправки приветственного сообщения:', welcomeError);
+    }
+    
+    console.log(`✅ Реферал успешно обработан: ${userId} -> ${referrerId}`);
+    console.log(`💰 Награда выдана: ${referralReward} MC`);
+    
   } catch (error) {
+    console.error('❌ Ошибка обработки реферала:', error);
     logError(error, 'Обработка реферала');
   }
 }

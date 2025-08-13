@@ -1,11 +1,15 @@
 // Инициализация Telegram WebApp (если доступен)
 let tg = null;
+let userId = null;
+
 try {
     tg = window.Telegram?.WebApp;
     if (tg) {
         tg.expand();
         tg.ready();
+        userId = tg.initDataUnsafe?.user?.id;
         console.log('✅ Telegram WebApp API доступен');
+        console.log('👤 User ID:', userId);
     } else {
         console.log('⚠️ Telegram WebApp API недоступен, работаем в автономном режиме');
     }
@@ -110,6 +114,8 @@ function startAutoClicker() {
 function handleVisibilityChange() {
     if (document.hidden) {
         console.log('📱 Страница скрыта, авто-кликер приостановлен');
+        // Сохраняем данные при скрытии страницы
+        saveUserData();
     } else {
         console.log('📱 Страница видна, авто-кликер возобновлен');
     }
@@ -200,7 +206,35 @@ function buyUpgrade(upgradeId) {
 }
 
 // Загрузка данных пользователя
-function loadUserData() {
+async function loadUserData() {
+    try {
+        if (userId) {
+            // Загружаем данные с сервера
+            const response = await fetch(`/api/webapp/user-data?user_id=${userId}`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    gameState.magnumCoins = result.data.magnumCoins;
+                    gameState.stars = result.data.stars;
+                    console.log('📥 Данные загружены с сервера');
+                    updateConnectionStatus('Подключено к боту', 'connected');
+                }
+            } else {
+                console.log('⚠️ Не удалось загрузить данные с сервера, используем локальные');
+                loadLocalData();
+            }
+        } else {
+            // Загружаем локальные данные
+            loadLocalData();
+        }
+    } catch (error) {
+        console.log('❌ Ошибка загрузки данных:', error);
+        loadLocalData();
+    }
+}
+
+// Загрузка локальных данных
+function loadLocalData() {
     try {
         const savedData = localStorage.getItem('magnumStarsWebApp');
         if (savedData) {
@@ -208,15 +242,40 @@ function loadUserData() {
             gameState = { ...gameState, ...data };
             console.log('📥 Данные загружены из localStorage');
         }
+        updateConnectionStatus('Автономный режим', 'connected');
     } catch (error) {
-        console.log('❌ Ошибка загрузки данных:', error);
+        console.log('❌ Ошибка загрузки локальных данных:', error);
+        updateConnectionStatus('Ошибка загрузки', 'error');
     }
 }
 
 // Сохранение данных пользователя
-function saveUserData() {
+async function saveUserData() {
     try {
+        // Сохраняем локально
         localStorage.setItem('magnumStarsWebApp', JSON.stringify(gameState));
+        
+        // Синхронизируем с сервером если есть userId
+        if (userId) {
+            const response = await fetch('/api/webapp/update-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    userId: userId,
+                    magnumCoins: gameState.magnumCoins,
+                    stars: gameState.stars,
+                    clickCount: gameState.clickCount
+                })
+            });
+            
+            if (response.ok) {
+                console.log('📤 Данные синхронизированы с сервером');
+            } else {
+                console.log('⚠️ Ошибка синхронизации с сервером');
+            }
+        }
     } catch (error) {
         console.log('❌ Ошибка сохранения данных:', error);
     }
@@ -243,8 +302,9 @@ function updateConnectionStatus(message, status) {
     }
 }
 
-// Отправка данных на сервер (заглушка для будущей интеграции)
-function sendDataToServer() {
-    // Здесь будет интеграция с сервером
-    console.log('📤 Данные будут отправлены на сервер');
-}
+// Периодическая синхронизация с сервером
+setInterval(() => {
+    if (userId && !document.hidden) {
+        saveUserData();
+    }
+}, 30000); // Синхронизация каждые 30 секунд
