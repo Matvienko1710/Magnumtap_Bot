@@ -4655,7 +4655,7 @@ function logFunction(functionName, userId = null, params = null) {
   console.log(logMessage);
 }
 // ==================== БИРЖА ====================
-// Функция для получения лимита обмена по рангу
+// Функция для получения лимита обмена по рангу (MC → Stars)
 function getExchangeLimitByRank(userLevel) {
   if (userLevel >= 100) return 10000; // Император
   if (userLevel >= 75) return 5000;   // Легенда
@@ -4665,6 +4665,18 @@ function getExchangeLimitByRank(userLevel) {
   if (userLevel >= 10) return 250;    // Лучник
   if (userLevel >= 5) return 100;     // Боец
   return 50; // Новичок
+}
+
+// Функция для получения лимита обмена Stars → MC (в 10 раз больше)
+function getStarsToMCLimitByRank(userLevel) {
+  if (userLevel >= 100) return 100000; // Император
+  if (userLevel >= 75) return 50000;   // Легенда
+  if (userLevel >= 50) return 25000;   // Герой
+  if (userLevel >= 35) return 10000;   // Воин
+  if (userLevel >= 20) return 5000;    // Рыцарь
+  if (userLevel >= 10) return 2500;    // Лучник
+  if (userLevel >= 5) return 1000;     // Боец
+  return 500; // Новичок
 }
 
 async function showExchangeMenu(ctx, user) {
@@ -4715,8 +4727,9 @@ async function showExchangeMenu(ctx, user) {
       return `${changeSign}${change.toFixed(6)} (${percentSign}${percent.toFixed(2)}%)`;
     };
     
-    // Получаем лимит обмена по рангу
-    const exchangeLimit = getExchangeLimitByRank(user.level);
+    // Получаем лимиты обмена по рангу
+    const mcToStarsLimit = getExchangeLimitByRank(user.level);
+    const starsToMCLimit = getStarsToMCLimitByRank(user.level);
     
     const keyboard = Markup.inlineKeyboard([
       [
@@ -4758,7 +4771,10 @@ async function showExchangeMenu(ctx, user) {
       `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` MC\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
       `└ Ликвидность: ${Math.min(100, ((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
-      `🎯 *Лимит обмена:* ${formatNumber(exchangeLimit)} MC за раз (зависит от ранга)\n\n` +
+      `🎯 *Лимиты обмена:*\n` +
+      `├ MC → Stars: ${formatNumber(mcToStarsLimit)} MC за раз\n` +
+      `└ Stars → MC: ${formatNumber(starsToMCLimit)} MC эквивалент за раз\n` +
+      `(зависит от ранга)\n\n` +
       `🎯 Выберите сумму для обмена или действие:`;
     
     await ctx.editMessageText(message, {
@@ -5154,7 +5170,7 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     // Проверяем лимит обмена по рангу (конвертируем в MC для проверки)
     const exchangeRate = await calculateExchangeRate();
     const mcEquivalent = starsAmount / exchangeRate;
-    const exchangeLimit = getExchangeLimitByRank(user.level);
+    const exchangeLimit = getStarsToMCLimitByRank(user.level);
     if (mcEquivalent > exchangeLimit) {
       log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${mcEquivalent} MC эквивалент > ${exchangeLimit}`);
       await ctx.reply(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC эквивалент (зависит от ранга)`);
@@ -7908,8 +7924,8 @@ async function handleAdminCreatePromocode(ctx, user, text) {
       return;
     }
     
-    if (!reward || reward <= 0 || reward > 10000) {
-      await ctx.reply('❌ Награда должна быть от 1 до 10000 Magnum Coins!');
+    if (!reward || reward <= 0) {
+      await ctx.reply('❌ Награда должна быть больше 0!');
       return;
     }
     
