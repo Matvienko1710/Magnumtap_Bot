@@ -12688,8 +12688,11 @@ async function handleWithdrawalMC(ctx, user, text) {
     // Отправляем заявку в канал поддержки
     if (config.WITHDRAWAL_CHANNEL) {
       try {
+        // Формируем полное имя канала с @
+        const channelName = config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`;
+        
         // Проверяем существование канала
-        const chat = await bot.telegram.getChat(config.WITHDRAWAL_CHANNEL);
+        const chat = await bot.telegram.getChat(channelName);
         if (!chat) {
           throw new Error('Канал не найден');
         }
@@ -12702,7 +12705,7 @@ async function handleWithdrawalMC(ctx, user, text) {
         ]);
         
         await bot.telegram.sendMessage(
-          config.WITHDRAWAL_CHANNEL,
+          channelName,
           `🆕 *Новая заявка на вывод Magnum Coins*\n\n` +
           `👤 *Пользователь:* ${user.firstName} (@${user.username || 'без username'})\n` +
           `🆔 ID: \`${user.id}\`\n` +
@@ -12718,7 +12721,7 @@ async function handleWithdrawalMC(ctx, user, text) {
           }
         );
         
-        log(`✅ Заявка на вывод MC отправлена в канал поддержки: ${config.WITHDRAWAL_CHANNEL}`);
+        log(`✅ Заявка на вывод MC отправлена в канал поддержки: ${channelName}`);
       } catch (error) {
         logError(error, `Отправка заявки в канал поддержки ${config.WITHDRAWAL_CHANNEL}`);
         console.log(`⚠️ Не удалось отправить заявку в канал: ${error.message}`);
@@ -12856,8 +12859,11 @@ async function handleWithdrawalStars(ctx, user, text) {
     // Отправляем заявку в канал поддержки
     if (config.WITHDRAWAL_CHANNEL) {
       try {
+        // Формируем полное имя канала с @
+        const channelName = config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`;
+        
         // Проверяем существование канала
-        const chat = await bot.telegram.getChat(config.WITHDRAWAL_CHANNEL);
+        const chat = await bot.telegram.getChat(channelName);
         if (!chat) {
           throw new Error('Канал не найден');
         }
@@ -12870,7 +12876,7 @@ async function handleWithdrawalStars(ctx, user, text) {
         ]);
         
         await bot.telegram.sendMessage(
-          config.WITHDRAWAL_CHANNEL,
+          channelName,
           `🆕 *Новая заявка на вывод Stars*\n\n` +
           `👤 *Пользователь:* ${user.firstName} (@${user.username || 'без username'})\n` +
           `🆔 ID: \`${user.id}\`\n` +
@@ -12886,7 +12892,7 @@ async function handleWithdrawalStars(ctx, user, text) {
           }
         );
         
-        log(`✅ Заявка на вывод Stars отправлена в канал поддержки: ${config.WITHDRAWAL_CHANNEL}`);
+        log(`✅ Заявка на вывод Stars отправлена в канал поддержки: ${channelName}`);
       } catch (error) {
         logError(error, `Отправка заявки в канал поддержки ${config.WITHDRAWAL_CHANNEL}`);
         console.log(`⚠️ Не удалось отправить заявку в канал: ${error.message}`);
@@ -12995,7 +13001,10 @@ bot.command('setup_withdraw', async (ctx) => {
       return;
     }
     
-    const channelName = '@magnumwithdraw';
+    // Используем переменную окружения или значение по умолчанию
+    const channelName = config.WITHDRAWAL_CHANNEL ? 
+      (config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`) : 
+      '@magnumwithdraw';
     
     await ctx.reply(`🔧 Автоматическая настройка канала ${channelName}...`);
     
@@ -13011,9 +13020,9 @@ bot.command('setup_withdraw', async (ctx) => {
       }
       
       // Устанавливаем канал
-      config.WITHDRAWAL_CHANNEL = channelName;
+      config.WITHDRAWAL_CHANNEL = channelName.replace('@', '');
       
-      await ctx.reply(`✅ Канал поддержки автоматически настроен: ${channelName}\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n├ Username: ${chat.username || 'N/A'}\n└ Права бота: ✅ Может отправлять сообщения\n\n🎯 Теперь все заявки на вывод будут отправляться в этот канал!`);
+      await ctx.reply(`✅ Канал поддержки автоматически настроен: ${channelName}\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n├ Username: ${chat.username || 'N/A'}\n└ Права бота: ✅ Может отправлять сообщения\n\n🎯 Теперь все заявки на вывод будут отправляться в этот канал!\n\n💡 Переменная окружения: ${config.WITHDRAWAL_CHANNEL}`);
       
     } catch (error) {
       await ctx.reply(`❌ Ошибка доступа к каналу ${channelName}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Канал существует\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n\n🔗 Ссылка на канал: https://t.me/magnumwithdraw`);
@@ -13033,17 +13042,22 @@ bot.command('test_channel', async (ctx) => {
       return;
     }
     
+    // Показываем текущую переменную окружения
+    await ctx.reply(`📋 *Текущие настройки канала поддержки:*\n\n🔧 Переменная окружения: \`${config.WITHDRAWAL_CHANNEL || 'не установлена'}\`\n📡 Полное имя канала: \`${config.WITHDRAWAL_CHANNEL ? (config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`) : 'не установлен'}\``);
+    
     // Сначала проверяем установленный канал
     if (config.WITHDRAWAL_CHANNEL) {
-      await ctx.reply(`🔍 Тестирование установленного канала ${config.WITHDRAWAL_CHANNEL}...`);
+      const channelName = config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`;
+      
+      await ctx.reply(`🔍 Тестирование установленного канала ${channelName}...`);
       
       try {
-        const chat = await bot.telegram.getChat(config.WITHDRAWAL_CHANNEL);
-        await ctx.reply(`✅ Канал ${config.WITHDRAWAL_CHANNEL} найден!\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n└ Username: ${chat.username || 'N/A'}`);
+        const chat = await bot.telegram.getChat(channelName);
+        await ctx.reply(`✅ Канал ${channelName} найден!\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n└ Username: ${chat.username || 'N/A'}`);
         
         // Пробуем отправить тестовое сообщение
         const testMessage = await bot.telegram.sendMessage(
-          config.WITHDRAWAL_CHANNEL,
+          channelName,
           `🧪 *Тестовое сообщение*\n\n` +
           `📅 Дата: ${new Date().toLocaleString('ru-RU')}\n` +
           `🤖 Бот: @${bot.botInfo.username}\n` +
@@ -13054,7 +13068,7 @@ bot.command('test_channel', async (ctx) => {
         await ctx.reply(`✅ Тестовое сообщение отправлено в канал!\n\n🆔 ID сообщения: ${testMessage.message_id}`);
         
       } catch (error) {
-        await ctx.reply(`❌ Ошибка доступа к каналу ${config.WITHDRAWAL_CHANNEL}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n├ Канал существует и доступен`);
+        await ctx.reply(`❌ Ошибка доступа к каналу ${channelName}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n├ Канал существует и доступен`);
       }
     } else {
       // Тестируем канал @magnumwithdraw по умолчанию
@@ -13079,7 +13093,7 @@ bot.command('test_channel', async (ctx) => {
         await ctx.reply(`✅ Тестовое сообщение отправлено в канал!\n\n🆔 ID сообщения: ${testMessage.message_id}`);
         
         // Предлагаем установить этот канал
-        await ctx.reply(`💡 Хотите установить ${testChannel} как канал поддержки?\n\nИспользуйте команду:\n/set_channel @magnumwithdraw`);
+        await ctx.reply(`💡 Хотите установить ${testChannel} как канал поддержки?\n\nИспользуйте команду:\n/setup_withdraw`);
         
       } catch (error) {
         await ctx.reply(`❌ Ошибка доступа к каналу ${testChannel}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n├ Канал существует и доступен`);
