@@ -4357,13 +4357,14 @@ async function performExchange(ctx, user, amount) {
       }
     );
     
-    // Обновляем резерв (комиссия остается в резерве Magnum Coins)
+    // Обновляем резерв
+    // Комиссия остается в резерве Magnum Coins, а обменная сумма уходит на покупку Stars
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
         $inc: { 
-          magnumCoins: amount, // Полная сумма идет в резерв
-          stars: -starsToReceive
+          magnumCoins: commission, // Только комиссия остается в резерве MC
+          stars: -starsToReceive    // Stars уходят пользователю
         },
         $set: { 
           updatedAt: new Date()
@@ -4399,6 +4400,7 @@ async function performExchange(ctx, user, amount) {
     await updateDailyTaskProgress(user, 'daily_exchange', 1);
     
     log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission})`);
+    log(`💰 Комиссия ${commission} MC добавлена в резерв биржи`);
     await ctx.answerCbQuery(
       `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
     );
