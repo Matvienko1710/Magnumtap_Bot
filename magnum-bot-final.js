@@ -12322,10 +12322,6 @@ async function startBot() {
       }
     }, 10 * 60 * 1000);
     
-    console.log('🤖 Запуск Telegram бота...');
-    await bot.launch();
-    console.log('🚀 Magnum Stars Bot запущен успешно!');
-    
     // Проверяем существование файлов WebApp
     const fs = require('fs');
     const webappPath = path.join(__dirname, 'webapp');
@@ -12339,7 +12335,7 @@ async function startBot() {
     console.log('🎨 styles.css:', fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден');
     console.log('⚡ script.js:', fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден');
 
-    // Запускаем Express сервер после успешного запуска бота
+    // Запускаем Express сервер независимо от бота
     const server = app.listen(PORT, () => {
         console.log(`🌐 WebApp сервер запущен на порту ${PORT}`);
         console.log(`🌐 WebApp доступен по адресу: http://localhost:${PORT}/webapp`);
@@ -12377,6 +12373,16 @@ async function startBot() {
             timestamp: new Date().toISOString()
         });
     });
+
+    // Пытаемся запустить Telegram бота
+    console.log('🤖 Запуск Telegram бота...');
+    try {
+        await bot.launch();
+        console.log('🚀 Magnum Stars Bot запущен успешно!');
+    } catch (error) {
+        console.error('❌ Ошибка запуска Telegram бота:', error);
+        console.log('⚠️ WebApp будет работать без Telegram бота');
+    }
     
     console.log('Бот запущен:', {
       botInfo: await bot.telegram.getMe(),
