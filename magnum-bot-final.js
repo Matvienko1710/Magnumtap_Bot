@@ -4737,29 +4737,7 @@ function logFunction(functionName, userId = null, params = null) {
   console.log(logMessage);
 }
 // ==================== БИРЖА ====================
-// Функция для получения лимита обмена по рангу (MC → Stars)
-function getExchangeLimitByRank(userLevel) {
-  if (userLevel >= 100) return 10000; // Император
-  if (userLevel >= 75) return 5000;   // Легенда
-  if (userLevel >= 50) return 2500;   // Герой
-  if (userLevel >= 35) return 1000;   // Воин
-  if (userLevel >= 20) return 500;    // Рыцарь
-  if (userLevel >= 10) return 250;    // Лучник
-  if (userLevel >= 5) return 100;     // Боец
-  return 50; // Новичок
-}
 
-// Функция для получения лимита обмена Stars → MC (в 10 раз больше)
-function getStarsToMCLimitByRank(userLevel) {
-  if (userLevel >= 100) return 100000; // Император
-  if (userLevel >= 75) return 50000;   // Легенда
-  if (userLevel >= 50) return 25000;   // Герой
-  if (userLevel >= 35) return 10000;   // Воин
-  if (userLevel >= 20) return 5000;    // Рыцарь
-  if (userLevel >= 10) return 2500;    // Лучник
-  if (userLevel >= 5) return 1000;     // Боец
-  return 500; // Новичок
-}
 
 async function showExchangeMenu(ctx, user) {
   try {
@@ -4803,9 +4781,7 @@ async function showExchangeMenu(ctx, user) {
       return `${changeSign}${change.toFixed(6)} (${percentSign}${percent.toFixed(2)}%)`;
     };
     
-    // Получаем лимиты обмена по рангу
-    const mcToStarsLimit = getExchangeLimitByRank(user.level);
-    const starsToMCLimit = getStarsToMCLimitByRank(user.level);
+
     
     const keyboard = Markup.inlineKeyboard([
       [
@@ -4847,9 +4823,7 @@ async function showExchangeMenu(ctx, user) {
       `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` MC\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
       `└ Ликвидность: ${Math.min(100, ((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
-      `🎯 *Лимиты обмена:*\n` +
-      `├ MC → Stars: ${formatNumber(mcToStarsLimit)} MC за раз\n` +
-      `└ Stars → MC: ${formatNumber(starsToMCLimit)} MC эквивалент за раз\n\n` +
+
       `🎯 Выберите сумму для обмена или действие:`;
     
     // Проверяем тип контекста для правильного метода отправки
@@ -5135,13 +5109,7 @@ async function performExchange(ctx, user, amount) {
       return;
     }
     
-    // Проверяем лимит обмена по рангу
-    const exchangeLimit = getExchangeLimitByRank(user.level);
-    if (amount > exchangeLimit) {
-      log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${amount} > ${exchangeLimit}`);
-      await ctx.reply(`❌ Превышен лимит обмена! Максимум: ${formatNumber(exchangeLimit)} MC (зависит от ранга)`);
-      return;
-    }
+
     
     // Получаем текущий курс обмена
     const exchangeRate = await calculateExchangeRate();
@@ -5255,14 +5223,7 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       return;
     }
     
-    // Проверяем лимит обмена по рангу (в Stars)
-    const exchangeLimit = getStarsToMCLimitByRank(user.level);
-    const starsLimit = exchangeLimit * exchangeRate;
-    if (starsAmount > starsLimit) {
-      log(`❌ Превышен лимит обмена для пользователя ${user.id}: ${starsAmount} Stars > ${starsLimit}`);
-      await ctx.reply(`❌ Превышен лимит обмена! Максимум: ${formatNumber(starsLimit)} Stars`);
-      return;
-    }
+
     
     // Рассчитываем комиссию в Stars
     const commission = (starsAmount * config.EXCHANGE_COMMISSION) / 100;
@@ -9203,15 +9164,13 @@ bot.action('exchange_custom_mc', async (ctx) => {
     
     userCache.delete(user.id);
     
-    const exchangeLimit = getExchangeLimitByRank(user.level);
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'exchange')]
     ]);
     
     await ctx.editMessageText(
       `🪙 *Ввод суммы обмена MC → Stars*\n\n` +
-      `💰 Ваш баланс: \`${formatNumber(user.magnumCoins)}\` Magnum Coins\n` +
-      `🎯 Лимит обмена: \`${formatNumber(exchangeLimit)}\` MC за раз\n\n` +
+      `💰 Ваш баланс: \`${formatNumber(user.magnumCoins)}\` Magnum Coins\n\n` +
       `💡 Введите сумму Magnum Coins для обмена на Stars:`,
       {
         parse_mode: 'Markdown',
@@ -9237,9 +9196,7 @@ bot.action('exchange_custom_stars', async (ctx) => {
     
     userCache.delete(user.id);
     
-    const exchangeLimit = getExchangeLimitByRank(user.level);
     const exchangeRate = await calculateExchangeRate();
-    const starsLimit = exchangeLimit * exchangeRate;
     
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'exchange')]
@@ -9248,7 +9205,6 @@ bot.action('exchange_custom_stars', async (ctx) => {
     await ctx.editMessageText(
       `⭐ *Ввод суммы обмена Stars → MC*\n\n` +
       `💰 Ваш баланс: \`${formatNumber(user.stars)}\` Stars\n` +
-      `🎯 Лимит обмена: \`${formatNumber(starsLimit)}\` Stars за раз\n` +
       `📊 Текущий курс: 1 MC = \`${exchangeRate.toFixed(6)}\` Stars\n\n` +
       `💡 Введите сумму Stars для обмена на Magnum Coins:`,
       {
