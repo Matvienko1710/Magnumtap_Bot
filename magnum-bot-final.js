@@ -6033,6 +6033,9 @@ async function handleAdminSetFarmReward(ctx, user, text) {
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
     
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
+    
   } catch (error) {
     logError(error, 'Изменение награды фарма админом');
     await ctx.reply('❌ Ошибка изменения награды');
@@ -6063,6 +6066,9 @@ async function handleAdminSetFarmCooldown(ctx, user, text) {
       { id: user.id },
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
     
   } catch (error) {
     logError(error, 'Изменение кулдауна фарма админом');
@@ -6096,6 +6102,9 @@ async function handleAdminSetBonusBase(ctx, user, text) {
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
     
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
+    
   } catch (error) {
     logError(error, 'Изменение базового бонуса админом');
     await ctx.reply('❌ Ошибка изменения бонуса');
@@ -6128,6 +6137,9 @@ async function handleAdminSetMinerReward(ctx, user, text) {
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
     
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
+    
   } catch (error) {
     logError(error, 'Изменение награды майнера админом');
     await ctx.reply('❌ Ошибка изменения награды майнера');
@@ -6158,6 +6170,9 @@ async function handleAdminSetReferralReward(ctx, user, text) {
       { id: user.id },
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
     
   } catch (error) {
     logError(error, 'Изменение награды реферала админом');
@@ -6191,6 +6206,9 @@ async function handleAdminSetSubscriptionChannel(ctx, user, text) {
       { id: user.id },
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
     
   } catch (error) {
     logError(error, 'Изменение канала подписки админом');
@@ -9343,6 +9361,9 @@ bot.action('admin_cooldown_farm', async (ctx) => {
       { id: user.id },
       { $set: { adminState: 'setting_farm_cooldown', updatedAt: new Date() } }
     );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(user.id);
     
     await ctx.reply('⏰ Введите новый кулдаун фарма (в секундах):');
   } catch (error) {
