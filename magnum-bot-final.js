@@ -348,7 +348,10 @@ async function getRankProgress(user) {
   const level = freshUser ? (freshUser.level || 1) : (user.level || 1);
   const ranks = getRankRequirements();
   
-  console.log(`🔍 getRankProgress вызвана для пользователя ${user.id}, уровень: ${level}`);
+  console.log(`🔍 getRankProgress вызвана для пользователя ${user.id}`);
+  console.log(`🔍 Уровень из freshUser: ${freshUser ? freshUser.level : 'null'}`);
+  console.log(`🔍 Уровень из user: ${user.level}`);
+  console.log(`🔍 Итоговый уровень: ${level}`);
   
   // Находим текущий ранг
   let currentRank = ranks[0];
@@ -484,11 +487,8 @@ async function checkAndUpdateLevel(user) {
         }
       );
       
-      // Обновляем кеш
-      user.level = newLevel;
-      user.experience = newExperience;
-      user.experienceToNextLevel = newExperienceToNextLevel;
-      setCachedUser(user.id, user);
+      // Очищаем кеш, чтобы при следующем запросе получить свежие данные
+      userCache.delete(user.id);
       
       console.log(`✅ Уровень пользователя ${user.id} обновлен: ${newLevel}, опыт: ${newExperience}/${newExperienceToNextLevel}`);
     }
@@ -704,6 +704,8 @@ async function getUser(id, ctx = null) {
       console.log(`✅ Пользователь ${id} найден в кеше`);
       console.log(`Кешированный пользователь ${id}:`, {
         level: cached.level,
+        experience: cached.experience,
+        experienceToNextLevel: cached.experienceToNextLevel,
         magnumCoins: cached.magnumCoins,
         stars: cached.stars,
         banned: cached.banned,
@@ -730,6 +732,8 @@ async function getUser(id, ctx = null) {
       console.log(`📊 Данные из БД для пользователя ${id}:`, {
         adminState: user.adminState,
         level: user.level,
+        experience: user.experience,
+        experienceToNextLevel: user.experienceToNextLevel,
         isAdmin: isAdmin(user.id)
       });
     }
