@@ -705,25 +705,12 @@ async function getUser(id, ctx = null) {
     logFunction('getUser', id, { ctx: ctx ? 'present' : 'null' });
     
     // Проверяем кеш
-    console.log(`Проверка кеша для пользователя ${id}`);
     const cached = getCachedUser(id);
     if (cached) {
-      console.log(`✅ Пользователь ${id} найден в кеше`);
-      console.log(`Кешированный пользователь ${id}:`, {
-        level: cached.level,
-        experience: cached.experience,
-        experienceToNextLevel: cached.experienceToNextLevel,
-        magnumCoins: cached.magnumCoins,
-        stars: cached.stars,
-        banned: cached.banned,
-        adminState: cached.adminState
-      });
       
       // Проверяем, не заблокирован ли пользователь
       if (cached.banned) {
-        console.log(`🚫 Пользователь ${id} заблокирован (из кеша)`);
         if (ctx) {
-          console.log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
@@ -731,28 +718,9 @@ async function getUser(id, ctx = null) {
       return cached;
     }
 
-    console.log(`📊 Поиск пользователя ${id} в базе данных`);
     let user = await db.collection('users').findOne({ id: id });
     
-    if (user) {
-      console.log(`✅ Пользователь ${id} найден в базе данных`);
-      console.log(`📊 Данные из БД для пользователя ${id}:`, {
-        adminState: user.adminState,
-        level: user.level,
-        experience: user.experience,
-        experienceToNextLevel: user.experienceToNextLevel,
-        isAdmin: isAdmin(user.id)
-      });
-    }
-    
     if (!user) {
-      console.log(`🆕 Создание нового пользователя ${id}`);
-      console.log(`Данные для нового пользователя ${id}:`, {
-        username: ctx?.from?.username || null,
-        firstName: ctx?.from?.first_name || null,
-        lastName: ctx?.from?.last_name || null,
-        hasContext: !!ctx
-      });
       
       // Создаем нового пользователя
       user = {
@@ -831,32 +799,18 @@ async function getUser(id, ctx = null) {
         updatedAt: new Date()
       };
       
-      console.log(`💾 Сохранение нового пользователя ${id} в базу данных`);
-      const insertResult = await db.collection('users').insertOne(user);
-      console.log(`Результат вставки пользователя ${id}:`, { insertedId: insertResult.insertedId });
-      console.log(`✅ Новый пользователь ${id} успешно создан: ${user.username || user.id}`);
+      await db.collection('users').insertOne(user);
     } else {
-      console.log(`✅ Пользователь ${id} найден в базе данных`);
-      console.log(`Существующий пользователь ${id}:`, {
-        level: user.level,
-        magnumCoins: user.magnumCoins,
-        stars: user.stars,
-        banned: user.banned,
-        lastSeen: user.statistics?.lastSeen
-      });
       
       // Проверяем, не заблокирован ли пользователь
       if (user.banned) {
-        console.log(`🚫 Пользователь ${id} заблокирован (из БД)`);
         if (ctx) {
-          console.log(`Отправка сообщения о блокировке пользователю ${id}`);
           await ctx.reply('🚫 Вы заблокированы в боте. Обратитесь к администратору.');
         }
         return null;
       }
       
       // Проверяем и инициализируем все недостающие поля
-      console.log(`Инициализация полей для существующего пользователя ${id}`);
       user = ensureUserFields(user);
       
       // Обновляем статистику
@@ -864,16 +818,6 @@ async function getUser(id, ctx = null) {
       const oldSessions = user.statistics?.totalSessions || 0;
       user.statistics.lastSeen = new Date();
       user.statistics.totalSessions = oldSessions + 1;
-      
-      console.log(`Обновление статистики пользователя ${id}:`, {
-        oldLastSeen,
-        newLastSeen: user.statistics.lastSeen,
-        oldSessions,
-        newSessions: user.statistics.totalSessions
-      });
-      
-      // Обновляем пользователя в базе данных
-      console.log(`💾 Обновление пользователя ${id} в базе данных`);
       
       // Обновляем данные пользователя из контекста, если они доступны
       const updateData = { 
@@ -896,26 +840,14 @@ async function getUser(id, ctx = null) {
         user.username = ctx.from.username;
       }
       
-      const updateResult = await db.collection('users').updateOne(
+      await db.collection('users').updateOne(
         { id: id },
         { $set: updateData }
       );
-      console.log(`Результат обновления пользователя ${id}:`, { 
-        matchedCount: updateResult.matchedCount,
-        modifiedCount: updateResult.modifiedCount 
-      });
     }
     
     // Сохраняем в кеш
-    console.log(`Сохранение пользователя ${id} в кеш`);
     setCachedUser(id, user);
-    
-    console.log(`✅ Пользователь ${id} успешно загружен`);
-    console.log(`📊 Данные пользователя ${id}:`, {
-      adminState: user.adminState,
-      level: user.level,
-      isAdmin: isAdmin(user.id)
-    });
     return user;
   } catch (error) {
     console.error(`❌ Ошибка получения пользователя ${id}:`, error);
@@ -1953,8 +1885,8 @@ function startFarmCountdown(ctx, user, remainingSeconds) {
     }
   };
   
-  // Запускаем обновление каждую секунду
-  global[countdownKey] = setInterval(updateCountdown, 1000);
+  // Запускаем обновление каждые 5 секунд для снижения нагрузки
+  global[countdownKey] = setInterval(updateCountdown, 5000);
   
   // Сразу запускаем первое обновление
   updateCountdown();
@@ -2052,8 +1984,8 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
     }
   };
   
-  // Запускаем обновление каждую секунду
-  global[countdownKey] = setInterval(updateCountdown, 1000);
+  // Запускаем обновление каждые 5 секунд для снижения нагрузки
+  global[countdownKey] = setInterval(updateCountdown, 5000);
   
   // Сразу запускаем первое обновление
   updateCountdown();
@@ -3722,18 +3654,6 @@ async function calculateMinerReward(userEfficiency = 1, user = null) {
     // Итоговая награда
     const finalReward = baseReward * exchangeMultiplier * minersMultiplier * userEfficiency * titleMultiplier;
     
-    console.log(`⛏️ Расчет награды майнера:`, {
-      baseReward: baseReward.toFixed(4),
-      exchangeRate: exchangeRate.toFixed(6),
-      exchangeMultiplier: exchangeMultiplier.toFixed(3),
-      activeMiners: activeMinersCount,
-      minersMultiplier: minersMultiplier.toFixed(3),
-      userEfficiency: userEfficiency.toFixed(2),
-      titleMultiplier: titleMultiplier.toFixed(2),
-      userTitle: user?.mainTitle || 'Нет',
-      finalReward: finalReward.toFixed(4)
-    });
-    
     return Math.max(0.001, finalReward); // Минимальная награда 0.001
   } catch (error) {
     console.error('❌ Ошибка расчета награды майнера:', error);
@@ -3751,7 +3671,7 @@ async function processMinerRewards() {
       'miner.lastReward': { $lt: minuteAgo }
     }).toArray();
     
-    console.log(`⛏️ Обработка наград майнера: найдено ${activeMiners.length} активных майнеров`);
+
     
     for (const user of activeMiners) {
       try {
@@ -3785,7 +3705,7 @@ async function processMinerRewards() {
           }
         }
         
-        log(`⛏️ Майнер награда: ${user.id} +${reward.toFixed(4)} Magnum Coins`);
+
       } catch (error) {
         logError(error, `Обработка награды майнера для пользователя ${user.id}`);
       }
@@ -5492,8 +5412,6 @@ async function updateDailyTaskProgress(user, taskType, amount = 1) {
       progress: newProgress,
       lastUpdated: new Date()
     };
-    
-    console.log(`📅 Обновлен прогресс ежедневного задания ${taskType}: ${newProgress}`);
     
   } catch (error) {
     console.error('❌ Ошибка обновления прогресса ежедневного задания:', error);
@@ -9522,15 +9440,13 @@ async function startBot() {
       statsCacheTTL: config.STATS_CACHE_TTL
     });
     
-    // Запускаем обработку майнера каждую минуту
+    // Запускаем обработку майнера каждые 2 минуты для снижения нагрузки
     setInterval(() => {
-      console.log('⛏️ Запуск обработки наград майнера по расписанию');
       processMinerRewards();
-    }, 60 * 1000); // 1 минута
+    }, 2 * 60 * 1000); // 2 минуты
     
-    // Очистка кеша каждые 5 минут
+    // Очистка кеша каждые 10 минут для снижения нагрузки
     setInterval(() => {
-      console.log('🧹 Запуск очистки кеша по расписанию');
       const now = Date.now();
       let userCacheCleared = 0;
       let statsCacheCleared = 0;
@@ -9550,9 +9466,9 @@ async function startBot() {
       }
       
       if (userCacheCleared > 0 || statsCacheCleared > 0) {
-        console.log(`🧹 Очистка кеша завершена: пользователей ${userCacheCleared}, статистики ${statsCacheCleared}`);
+        console.log(`🧹 Очистка кеша: пользователей ${userCacheCleared}, статистики ${statsCacheCleared}`);
       }
-    }, 5 * 60 * 1000);
+    }, 10 * 60 * 1000);
     
     console.log('🤖 Запуск Telegram бота...');
     await bot.launch();
@@ -9598,22 +9514,12 @@ async function startBot() {
 // Должен быть в конце, после всех остальных обработчиков
 bot.on('text', async (ctx) => {
   try {
-    console.log(`📝 Текстовое сообщение от пользователя ${ctx.from.id}: "${ctx.message.text}"`);
-    console.log(`🔍 Начинаем обработку текстового сообщения от ${ctx.from.id}`);
-    
     const user = await getUser(ctx.from.id);
     if (!user) {
-      console.log(`❌ Не удалось получить пользователя ${ctx.from.id} для обработки текста`);
       return;
     }
     
     const text = ctx.message.text;
-    
-    console.log(`🔍 Проверка adminState для пользователя ${ctx.from.id}:`, {
-      adminState: user.adminState,
-      isAdmin: isAdmin(user.id),
-      textLength: text.length
-    });
     
     // Проверяем, есть ли у пользователя adminState
     if (user.adminState) {
