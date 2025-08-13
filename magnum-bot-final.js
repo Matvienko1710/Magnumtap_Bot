@@ -6360,6 +6360,96 @@ async function handleAdminAnswerTicket(ctx, user, text) {
     await ctx.reply('❌ Ошибка отправки ответа. Попробуйте позже.');
   }
 }
+
+// ==================== СОЗДАНИЕ ПРОМОКОДОВ ====================
+async function handleAdminCreatePromocode(ctx, user, text) {
+  try {
+    log(`🎫 Админ ${user.id} создает промокод: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Парсим данные промокода
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 3) {
+      await ctx.reply('❌ Неверный формат! Используйте: КОД НАГРАДА АКТИВАЦИИ\n\n💡 Пример: WELCOME 100 50');
+      return;
+    }
+    
+    const code = parts[0].toUpperCase();
+    const reward = parseFloat(parts[1]);
+    const maxActivations = parseInt(parts[2]);
+    
+    // Валидация данных
+    if (!code || code.length < 3) {
+      await ctx.reply('❌ Код промокода должен содержать минимум 3 символа!');
+      return;
+    }
+    
+    if (!reward || reward <= 0 || reward > 10000) {
+      await ctx.reply('❌ Награда должна быть от 1 до 10000 Magnum Coins!');
+      return;
+    }
+    
+    if (!maxActivations || maxActivations <= 0 || maxActivations > 10000) {
+      await ctx.reply('❌ Количество активаций должно быть от 1 до 10000!');
+      return;
+    }
+    
+    // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
+    if (existingPromocode) {
+      await ctx.reply(`❌ Промокод "${code}" уже существует!`);
+      return;
+    }
+    
+    // Создаем промокод
+    const promocode = {
+      code: code,
+      reward: reward,
+      maxActivations: maxActivations,
+      activations: 0,
+      totalActivations: 0,
+      totalRewards: 0,
+      isActive: true,
+      createdAt: new Date(),
+      createdBy: user.id,
+      activationsHistory: []
+    };
+    
+    // Сохраняем в базу данных
+    await db.collection('promocodes').insertOne(promocode);
+    
+    // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод создан успешно!*\n\n` +
+      `🎫 Код: \`${code}\`\n` +
+      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `📊 Максимум активаций: \`${maxActivations}\`\n` +
+      `📅 Создан: ${new Date().toLocaleString('ru-RU')}\n\n` +
+      `🎯 Промокод готов к использованию!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Промокод ${code} успешно создан админом ${user.id}, награда: ${reward} MC, активаций: ${maxActivations}`);
+    
+  } catch (error) {
+    logError(error, `Создание промокода админом ${user.id}`);
+    await ctx.reply('❌ Ошибка создания промокода. Попробуйте позже.');
+  }
+}
+
 // ==================== FAQ ОБРАБОТЧИКИ ====================
 bot.action('faq_farm', async (ctx) => {
   try {
