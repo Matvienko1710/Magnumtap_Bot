@@ -286,18 +286,17 @@ function setCachedStats(key, data) {
 function formatNumber(num) {
   // Проверяем, что num является числом
   if (num === null || num === undefined || isNaN(num)) {
-    return '0.00';
+    return '0';
   }
   
   // Преобразуем в число на всякий случай
   num = Number(num);
   
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return num.toFixed(2);
+  // Форматируем число с разделителями тысяч
+  return num.toLocaleString('ru-RU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
 }
 
 function formatTime(seconds) {
