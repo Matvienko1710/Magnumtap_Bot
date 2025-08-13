@@ -874,15 +874,31 @@ async function getUser(id, ctx = null) {
       
       // Обновляем пользователя в базе данных
       console.log(`💾 Обновление пользователя ${id} в базе данных`);
+      
+      // Обновляем данные пользователя из контекста, если они доступны
+      const updateData = { 
+        'statistics.lastSeen': user.statistics.lastSeen,
+        'statistics.totalSessions': user.statistics.totalSessions,
+        updatedAt: new Date()
+      };
+      
+      // Обновляем имя и username, если они доступны в контексте
+      if (ctx?.from?.first_name) {
+        updateData.firstName = ctx.from.first_name;
+        user.firstName = ctx.from.first_name;
+      }
+      if (ctx?.from?.last_name) {
+        updateData.lastName = ctx.from.last_name;
+        user.lastName = ctx.from.last_name;
+      }
+      if (ctx?.from?.username) {
+        updateData.username = ctx.from.username;
+        user.username = ctx.from.username;
+      }
+      
       const updateResult = await db.collection('users').updateOne(
         { id: id },
-        { 
-          $set: { 
-            'statistics.lastSeen': user.statistics.lastSeen,
-            'statistics.totalSessions': user.statistics.totalSessions,
-            updatedAt: new Date()
-          }
-        }
+        { $set: updateData }
       );
       console.log(`Результат обновления пользователя ${id}:`, { 
         matchedCount: updateResult.matchedCount,
@@ -913,6 +929,43 @@ async function getUser(id, ctx = null) {
 
 function generateReferralCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// Функция для получения отображаемого имени пользователя
+function getDisplayName(user) {
+  if (user.firstName) {
+    return user.firstName;
+  }
+  if (user.username) {
+    return `@${user.username}`;
+  }
+  return 'Не указано';
+}
+
+// Функция для формирования сообщения профиля
+function formatProfileMessage(user, rankProgress) {
+  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
+  if (!rankProgress.isMax) {
+    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
+  } else {
+    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
+  }
+  
+  return `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
+    `👤 *Профиль:*\n` +
+    `├ ID: \`${user.id}\`\n` +
+    `├ Имя: ${getDisplayName(user)}\n` +
+    `├ Уровень: ${user.level}\n` +
+    `${rankInfo}` +
+    `└ Титул: ${user.mainTitle}\n\n` +
+    `💎 *Баланс:*\n` +
+    `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
+    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
+    `📊 *Статистика:*\n` +
+    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
+    `├ Рефералы: \`${user.referralsCount}\`\n` +
+    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
+    `🎯 Выберите действие:`;
 }
 
 // ==================== ПРОВЕРКА ПОДПИСКИ ====================
@@ -1039,30 +1092,7 @@ async function showMainMenu(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
-  // Формируем информацию о ранге
-  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
-  if (!rankProgress.isMax) {
-    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
-  } else {
-    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
-  }
-  
-  const message = 
-    `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
-    `👤 *Профиль:*\n` +
-    `├ ID: \`${user.id}\`\n` +
-    `├ Имя: ${user.firstName || 'Не указано'}\n` +
-    `├ Уровень: ${user.level}\n` +
-    `${rankInfo}` +
-    `└ Титул: ${user.mainTitle}\n\n` +
-    `💎 *Баланс:*\n` +
-    `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
-    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
-    `📊 *Статистика:*\n` +
-    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
-    `├ Рефералы: \`${user.referralsCount}\`\n` +
-    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
-    `🎯 Выберите действие:`;
+  const message = formatProfileMessage(user, rankProgress);
   
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
@@ -1105,30 +1135,7 @@ async function showMainMenuStart(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
-  // Формируем информацию о ранге
-  let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
-  if (!rankProgress.isMax) {
-    rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
-  } else {
-    rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
-  }
-  
-  const message = 
-    `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
-    `👤 *Профиль:*\n` +
-    `├ ID: \`${user.id}\`\n` +
-    `├ Имя: ${user.firstName || 'Не указано'}\n` +
-    `├ Уровень: ${user.level}\n` +
-    `${rankInfo}` +
-    `└ Титул: ${user.mainTitle}\n\n` +
-    `💎 *Баланс:*\n` +
-    `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
-    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
-    `📊 *Статистика:*\n` +
-    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
-    `├ Рефералы: \`${user.referralsCount}\`\n` +
-    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
-    `🎯 Выберите действие:`;
+  const message = formatProfileMessage(user, rankProgress);
   
   await ctx.reply(message, {
     parse_mode: 'Markdown',
@@ -6168,7 +6175,7 @@ async function handleCreateSupportTicket(ctx, user, text) {
     const supportMessage = 
       `🆘 *Новый тикет поддержки*\n\n` +
       `🆔 *ID тикета:* \`${ticket.id}\`\n` +
-      `👤 *Пользователь:* ${user.firstName || 'Не указано'}\n` +
+      `👤 *Пользователь:* ${getDisplayName(user)}\n` +
       `📱 *Username:* ${user.username ? '@' + user.username : 'Не указан'}\n` +
       `🆔 *User ID:* \`${user.id}\`\n` +
       `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
@@ -7141,7 +7148,7 @@ bot.action('support_email', async (ctx) => {
       `📧 *Тема письма:* Поддержка Magnum Bot\n\n` +
       `📝 *Содержание письма:*\n` +
       `• Ваш ID: \`${user.id}\`\n` +
-      `• Имя пользователя: ${user.firstName || 'Не указано'}\n` +
+      `• Имя пользователя: ${getDisplayName(user)}\n` +
       `• Описание проблемы\n` +
       `• Скриншоты (если нужно)\n\n` +
       `📋 *Пример письма:*\n` +
@@ -7149,7 +7156,7 @@ bot.action('support_email', async (ctx) => {
       `Мой ID: ${user.id}\n` +
       `Проблема: [опишите проблему]\n\n` +
       `С уважением,\n` +
-      `${user.firstName || 'Пользователь'}\n\n` +
+      `${getDisplayName(user)}\n\n` +
       `⏰ *Время ответа:* 1-24 часа`;
     
     await ctx.editMessageText(message, {
