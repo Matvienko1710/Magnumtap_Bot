@@ -4118,6 +4118,13 @@ async function showExchangeMenu(ctx, user) {
     const priceChangeIcon = priceChange >= 0 ? '📈' : '📉';
     const priceChangeColor = priceChange >= 0 ? '🟢' : '🔴';
     
+    // Форматируем изменение цены с правильными знаками
+    const formatPriceChange = (change, percent) => {
+      const changeSign = change >= 0 ? '+' : '';
+      const percentSign = percent >= 0 ? '+' : '';
+      return `${changeSign}${change.toFixed(6)} (${percentSign}${percent.toFixed(2)}%)`;
+    };
+    
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(`🪙 10 MC → ${stars10} Stars`, 'exchange_10'),
@@ -4149,7 +4156,7 @@ async function showExchangeMenu(ctx, user) {
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `📊 *Текущий курс:*\n` +
       `├ ${priceChangeIcon} 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ ${priceChangeColor} Изменение: ${exchangeHistory.length >= 2 ? `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(6)} (${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)` : 'Нет данных'}\n` +
+      `├ ${priceChangeColor} Изменение: ${exchangeHistory.length >= 2 ? formatPriceChange(priceChange, priceChangePercent) : 'Нет данных'}\n` +
       `├ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n` +
       `└ 📅 Обновлено: ${new Date().toLocaleTimeString('ru-RU')}\n\n` +
       `🏦 *Резерв биржи:*\n` +
