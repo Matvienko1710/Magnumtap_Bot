@@ -2674,6 +2674,7 @@ async function showAdminDebugRanks(ctx, user) {
       [Markup.button.callback('📊 Статистика рангов', 'admin_rank_stats')],
       [Markup.button.callback('🧪 Тест прогресса', 'admin_test_progress')],
       [Markup.button.callback('⚡ Принудительная проверка уровня', 'admin_force_level_check')],
+      [Markup.button.callback('🎯 Добавить опыт', 'admin_add_experience')],
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
@@ -2690,6 +2691,7 @@ async function showAdminDebugRanks(ctx, user) {
     message += `├ 📊 Статистика рангов - детальная статистика\n`;
     message += `├ 🧪 Тест прогресса - тестирование расчета прогресса\n`;
     message += `├ ⚡ Принудительная проверка уровня - обновить уровни всех пользователей\n`;
+    message += `├ 🎯 Добавить опыт - добавить опыт текущему пользователю\n`;
     message += `└ 🔙 Назад - вернуться в админ панель\n\n`;
     message += `🎯 Выберите действие:`;
     
@@ -2812,6 +2814,67 @@ async function showAdminForceLevelCheck(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка принудительной проверки уровня');
   }
 }
+
+// Функция для добавления опыта пользователю
+async function showAdminAddExperience(ctx, user) {
+  try {
+    log(`🎯 Показ добавления опыта для админа ${user.id}`);
+    
+    // Добавляем 100 опыта пользователю
+    const experienceToAdd = 100;
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          experience: experienceToAdd
+        },
+        $set: { 
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Получаем обновленного пользователя
+    const updatedUser = await getUser(user.id);
+    
+    // Проверяем и обновляем уровень
+    const levelResult = await checkAndUpdateLevel(updatedUser);
+    
+    let message = `🎯 *Добавление опыта*\n\n`;
+    message += `✅ Добавлено ${experienceToAdd} опыта\n\n`;
+    message += `📊 *Текущие данные:*\n`;
+    message += `├ Уровень: ${updatedUser.level}\n`;
+    message += `├ Опыт: ${updatedUser.experience}/${updatedUser.experienceToNextLevel}\n`;
+    
+    if (levelResult.levelUp) {
+      message += `├ 🎉 Уровень повышен до: ${levelResult.newLevel}\n`;
+      message += `├ Новый опыт: ${levelResult.newExperience}/${levelResult.newExperienceToNextLevel}\n`;
+    }
+    
+    message += `└ Прогресс до следующего уровня: ${Math.round((updatedUser.experience / updatedUser.experienceToNextLevel) * 100)}%\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🎯 Добавить еще опыт', 'admin_add_experience')],
+      [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Опыт добавлен для пользователя ${user.id}: +${experienceToAdd}, уровень: ${updatedUser.level}`);
+  } catch (error) {
+    logError(error, `Добавление опыта для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка добавления опыта');
+  }
+}
+
 // Функции обработки управления резервом
 async function handleAdminAddReserveMC(ctx, user, text) {
   try {
@@ -7793,6 +7856,22 @@ bot.action('admin_force_level_check', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка проверки уровня');
   }
 });
+
+bot.action('admin_add_experience', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminAddExperience(ctx, user);
+  } catch (error) {
+    logError(error, 'Добавление опыта');
+    await ctx.answerCbQuery('❌ Ошибка добавления опыта');
+  }
+});
+
 bot.action('admin_reserve_add_mc', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
