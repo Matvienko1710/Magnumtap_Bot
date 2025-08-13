@@ -2050,8 +2050,13 @@ async function showAdminTitles(ctx, user) {
     
     log(`✅ Меню управления титулами показано для админа ${user.id}`);
   } catch (error) {
-    logError(error, 'Показ управления титулами');
-    await ctx.answerCbQuery('❌ Ошибка показа управления титулами');
+    if (error.message && error.message.includes('message is not modified')) {
+      // Игнорируем эту ошибку - сообщение уже актуально
+      log(`ℹ️ Сообщение управления титулами уже актуально для админа ${user.id}`);
+    } else {
+      logError(error, 'Показ управления титулами');
+      await ctx.answerCbQuery('❌ Ошибка показа управления титулами');
+    }
   }
 }
 
@@ -2095,7 +2100,7 @@ async function handleAdminGiveTitle(ctx, user, text) {
   try {
     const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
-      await ctx.reply('❌ Формат: "ID_пользователя Название_титула"\n\nПример: "123456789 🌱 Новичок"');
+      await ctx.reply('❌ Формат: `ID_пользователя Название_титула`\n\nПример: `123456789 🌱 Новичок`', { parse_mode: 'Markdown' });
       return;
     }
     
@@ -2117,7 +2122,7 @@ async function handleAdminGiveTitle(ctx, user, text) {
     // Проверяем, есть ли уже такой титул
     const userTitles = targetUser.titles || [];
     if (userTitles.includes(titleName)) {
-      await ctx.reply(`❌ У пользователя ${targetUser.firstName || targetUser.username || userId} уже есть титул "${titleName}"`);
+      await ctx.reply(`❌ У пользователя \`${targetUser.firstName || targetUser.username || userId}\` уже есть титул \`${titleName}\``, { parse_mode: 'Markdown' });
       return;
     }
     
@@ -2133,7 +2138,7 @@ async function handleAdminGiveTitle(ctx, user, text) {
     // Очищаем кеш
     userCache.delete(userId);
     
-    await ctx.reply(`✅ Титул "${titleName}" выдан пользователю ${targetUser.firstName || targetUser.username || userId}`);
+    await ctx.reply(`✅ Титул \`${titleName}\` выдан пользователю \`${targetUser.firstName || targetUser.username || userId}\``, { parse_mode: 'Markdown' });
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -2155,7 +2160,7 @@ async function handleAdminRemoveTitle(ctx, user, text) {
   try {
     const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
-      await ctx.reply('❌ Формат: "ID_пользователя Название_титула"\n\nПример: "123456789 🌱 Новичок"');
+      await ctx.reply('❌ Формат: `ID_пользователя Название_титула`\n\nПример: `123456789 🌱 Новичок`', { parse_mode: 'Markdown' });
       return;
     }
     
@@ -2177,7 +2182,7 @@ async function handleAdminRemoveTitle(ctx, user, text) {
     // Проверяем, есть ли такой титул
     const userTitles = targetUser.titles || [];
     if (!userTitles.includes(titleName)) {
-      await ctx.reply(`❌ У пользователя ${targetUser.firstName || targetUser.username || userId} нет титула "${titleName}"`);
+      await ctx.reply(`❌ У пользователя \`${targetUser.firstName || targetUser.username || userId}\` нет титула \`${titleName}\``, { parse_mode: 'Markdown' });
       return;
     }
     
@@ -2203,7 +2208,7 @@ async function handleAdminRemoveTitle(ctx, user, text) {
     // Очищаем кеш
     userCache.delete(userId);
     
-    await ctx.reply(`✅ Титул "${titleName}" забран у пользователя ${targetUser.firstName || targetUser.username || userId}`);
+    await ctx.reply(`✅ Титул \`${titleName}\` забран у пользователя \`${targetUser.firstName || targetUser.username || userId}\``, { parse_mode: 'Markdown' });
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
