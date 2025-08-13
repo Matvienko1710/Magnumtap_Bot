@@ -87,11 +87,11 @@ async function calculateExchangeRate() {
     let multiplier;
     if (ratio <= 1) {
       // Если MC меньше или равно Stars, используем линейную шкалу
-      multiplier = Math.max(0.1, ratio);
+      multiplier = Math.max(0.001, ratio);
     } else {
-      // Если MC больше Stars, используем логарифмическую шкалу
+      // Если MC больше Stars, используем логарифмическую шкалу без ограничений
       const logRatio = Math.log(ratio) / Math.log(10); // log10
-      multiplier = Math.max(0.1, Math.min(50, 1 + logRatio * 2));
+      multiplier = Math.max(0.001, 1 + logRatio * 2);
     }
     
     const dynamicRate = config.BASE_EXCHANGE_RATE * multiplier;
@@ -4504,7 +4504,7 @@ async function calculateMinerReward(userEfficiency = 1, user = null) {
     let baseReward = config.MINER_REWARD_PER_MINUTE;
     
     // Множитель на основе курса обмена (чем выше курс, тем больше награда)
-    const exchangeMultiplier = Math.max(0.5, Math.min(3.0, exchangeRate / config.BASE_EXCHANGE_RATE));
+    const exchangeMultiplier = Math.max(0.1, exchangeRate / config.BASE_EXCHANGE_RATE);
     
     // Множитель на основе количества активных майнеров (чем больше майнеров, тем меньше награда)
     // Используем общее количество пользователей с майнерами, а не только активных
