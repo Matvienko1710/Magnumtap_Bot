@@ -12358,11 +12358,13 @@ async function startBot() {
     console.log('⚡ script.js:', fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден');
 
     // Запускаем Express сервер независимо от бота
+    console.log('🌐 Запуск Express сервера...');
     const server = app.listen(PORT, () => {
-        console.log(`🌐 WebApp сервер запущен на порту ${PORT}`);
+        console.log(`✅ WebApp сервер запущен на порту ${PORT}`);
         console.log(`🌐 Переменная PORT: ${process.env.PORT || 'не установлена'}`);
         console.log(`🌐 WebApp доступен по адресу: http://localhost:${PORT}/webapp`);
         console.log(`🌐 Railway URL: https://magnumtapbot-production.up.railway.app`);
+        console.log('✅ Express сервер готов принимать запросы');
     });
 
     // Обработка ошибок сервера
@@ -12370,6 +12372,10 @@ async function startBot() {
         console.error('❌ Ошибка Express сервера:', error);
         if (error.code === 'EADDRINUSE') {
             console.error('❌ Порт уже занят. Попробуйте другой порт.');
+        } else if (error.code === 'EACCES') {
+            console.error('❌ Нет прав для использования порта.');
+        } else {
+            console.error('❌ Неизвестная ошибка сервера:', error.code);
         }
     });
 
@@ -12403,11 +12409,23 @@ async function startBot() {
 
     // Пытаемся запустить Telegram бота
     console.log('🤖 Запуск Telegram бота...');
+    console.log('🤖 Проверка токена бота...');
+    
     try {
+        // Проверяем информацию о боте
+        const botInfo = await bot.telegram.getMe();
+        console.log('🤖 Информация о боте:', botInfo);
+        
+        // Запускаем бота
         await bot.launch();
         console.log('🚀 Magnum Stars Bot запущен успешно!');
     } catch (error) {
         console.error('❌ Ошибка запуска Telegram бота:', error);
+        console.error('❌ Детали ошибки:', {
+            message: error.message,
+            code: error.code,
+            response: error.response
+        });
         console.log('⚠️ WebApp будет работать без Telegram бота');
     }
     
