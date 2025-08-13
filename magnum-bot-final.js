@@ -82,7 +82,17 @@ async function calculateExchangeRate() {
     
     // Расчет множителя на основе соотношения резервов
     const ratio = magnumCoinsReserve / starsReserve;
-    const multiplier = Math.max(0.1, Math.min(10, ratio)); // Ограничиваем множитель от 0.1 до 10
+    
+    // Используем логарифмическую шкалу для более чувствительного курса
+    let multiplier;
+    if (ratio <= 1) {
+      // Если MC меньше или равно Stars, используем линейную шкалу
+      multiplier = Math.max(0.1, ratio);
+    } else {
+      // Если MC больше Stars, используем логарифмическую шкалу
+      const logRatio = Math.log(ratio) / Math.log(10); // log10
+      multiplier = Math.max(0.1, Math.min(50, 1 + logRatio * 2));
+    }
     
     const dynamicRate = config.BASE_EXCHANGE_RATE * multiplier;
     
@@ -90,6 +100,7 @@ async function calculateExchangeRate() {
       magnumCoinsReserve: formatNumber(magnumCoinsReserve),
       starsReserve: formatNumber(starsReserve),
       ratio: ratio.toFixed(4),
+      logRatio: ratio > 1 ? (Math.log(ratio) / Math.log(10)).toFixed(4) : 'N/A',
       multiplier: multiplier.toFixed(4),
       baseRate: config.BASE_EXCHANGE_RATE,
       dynamicRate: dynamicRate.toFixed(6)
@@ -2815,6 +2826,10 @@ async function showAdminReserve(ctx, user) {
       [
         Markup.button.callback('➕ Добавить Stars', 'admin_reserve_add_stars'),
         Markup.button.callback('➖ Убрать Stars', 'admin_reserve_remove_stars')
+      ],
+      [
+        Markup.button.callback('🔄 Обновить курс', 'admin_reserve_update_rate'),
+        Markup.button.callback('📊 Детали курса', 'admin_reserve_rate_details')
       ],
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
@@ -9804,6 +9819,92 @@ bot.action('admin_reserve_remove_stars', async (ctx) => {
   } catch (error) {
     logError(error, 'Удаление Stars из резерва');
     await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчики для новых функций управления резервом
+bot.action('admin_reserve_update_rate', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Очищаем кеш резерва
+    statsCache.delete('reserve');
+    
+    // Получаем обновленный резерв и пересчитываем курс
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
+    
+    // Сохраняем историю изменения курса
+    await db.collection('exchangeHistory').insertOne({
+      type: 'rate_update',
+      rate: newRate,
+      timestamp: new Date(),
+      magnumCoinsReserve: reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      starsReserve: reserve?.stars || config.INITIAL_RESERVE_STARS,
+      reason: 'admin_force_update',
+      adminId: user.id
+    });
+    
+    await ctx.answerCbQuery(`✅ Курс обновлен: ${newRate.toFixed(6)} Stars за 1 MC`);
+    await showAdminReserve(ctx, user);
+  } catch (error) {
+    logError(error, 'Принудительное обновление курса');
+    await ctx.answerCbQuery('❌ Ошибка обновления курса');
+  }
+});
+
+bot.action('admin_reserve_rate_details', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Получаем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
+    
+    // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
+    
+    // Рассчитываем детали
+    const ratio = magnumCoinsReserve / starsReserve;
+    const logRatio = ratio > 1 ? Math.log(ratio) / Math.log(10) : 0;
+    const multiplier = ratio <= 1 ? Math.max(0.1, ratio) : Math.max(0.1, Math.min(50, 1 + logRatio * 2));
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_reserve')]
+    ]);
+    
+    const message = 
+      `📊 *Детали расчета курса*\n\n` +
+      `💰 *Резервы:*\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
+      `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
+      `📈 *Расчет курса:*\n` +
+      `├ Соотношение: \`${ratio.toFixed(4)}\`\n` +
+      `├ Логарифм: \`${logRatio.toFixed(4)}\`\n` +
+      `├ Множитель: \`${multiplier.toFixed(4)}\`\n` +
+      `├ Базовый курс: \`${config.BASE_EXCHANGE_RATE}\`\n` +
+      `└ Итоговый курс: \`${exchangeRate.toFixed(6)}\`\n\n` +
+      `💡 *Логика расчета:*\n` +
+      `├ При ratio ≤ 1: линейная шкала\n` +
+      `├ При ratio > 1: логарифмическая шкала\n` +
+      `└ Лимиты: 0.1 ≤ множитель ≤ 50`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ деталей курса');
+    await ctx.answerCbQuery('❌ Ошибка показа деталей');
   }
 });
 
