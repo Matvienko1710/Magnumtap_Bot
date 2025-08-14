@@ -62,6 +62,10 @@ const elements = {
     todayEarned: document.getElementById('today-earned'),
     totalEarned: document.getElementById('total-earned'),
     
+    // Miner
+    minerStatus: document.getElementById('miner-status'),
+    minerIncome: document.getElementById('miner-income'),
+    
     // Navigation
     navItems: document.querySelectorAll('.nav-item'),
     
@@ -207,6 +211,15 @@ async function initGame() {
         startAutoClicker();
         startMiner();
         startProgressBar();
+
+        // Если сервер вернул кулдаун
+        if (typeof window.__farmCooldownMs === 'number') {
+            farmCooldownMs = window.__farmCooldownMs;
+        }
+        if (typeof window.__farmNextAvailableAt === 'number' && Date.now() < window.__farmNextAvailableAt) {
+            farmNextAvailableAt = window.__farmNextAvailableAt;
+            startFarmCooldownProgress();
+        }
         
         console.log('🎮 Игра инициализирована');
         
@@ -236,44 +249,118 @@ function setupEventListeners() {
         elements.farmingBtn.style.transform = 'scale(1)';
         handleFarming();
     });
+
+    // Miner toggle
+    const minerToggleBtn = document.getElementById('miner-toggle-btn');
+    if (minerToggleBtn) {
+        minerToggleBtn.addEventListener('click', async () => {
+            gameState.minerActive = !gameState.minerActive;
+            try {
+                if (userId) {
+                    await fetch('/api/webapp/miner/toggle', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId, active: gameState.minerActive })
+                    });
+                }
+                updateUI();
+                saveUserData();
+            } catch (e) { console.log('miner toggle error', e); }
+        });
+    }
+
+    // Settings toggles
+    const notif = document.getElementById('notifications-toggle');
+    const sound = document.getElementById('sound-toggle');
+    const autos = document.getElementById('auto-save-toggle');
+    [notif, sound, autos].forEach((el, idx) => {
+        if (!el) return;
+        el.addEventListener('change', () => {
+            if (idx === 0) gameState.settings.notifications = el.checked;
+            if (idx === 1) gameState.settings.sound = el.checked;
+            if (idx === 2) gameState.settings.autoSave = el.checked;
+            localStorage.setItem('magnumStarsWebApp', JSON.stringify(gameState));
+        });
+    });
 }
 
-// Handle farming
-function handleFarming() {
-    // Add coins and experience
+// Handle farming with server cooldown and UI lock
+let farmLock = false;
+let farmCooldownMs = 5000;
+let farmNextAvailableAt = 0;
+
+async function handleFarming() {
+    if (farmLock) return;
+    const now = Date.now();
+    if (now < farmNextAvailableAt) return;
+
+    farmLock = true;
+
+    try {
+        if (!navigator.onLine) {
+            showNotification('🚫 Нет соединения. Попробуйте позже', 'warning');
+            farmLock = false;
+            return;
+        }
+        if (!userId) {
+            // fallback оффлайн
+            localFarm();
+            farmLock = false;
+            return;
+        }
+        const resp = await fetch('/api/webapp/farm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+        });
+        if (resp.status === 429) {
+            const data = await resp.json();
+            farmCooldownMs = data.farmCooldownMs;
+            farmNextAvailableAt = data.nextAvailableAt;
+            startFarmCooldownProgress();
+            farmLock = false;
+            return;
+        }
+        const data = await resp.json();
+        if (data.success) {
+            const oldCoins = gameState.magnumCoins;
+            gameState.magnumCoins = data.magnumCoins;
+            gameState.clickCount += 1;
+            gameState.experience += 1;
+            farmCooldownMs = data.farmCooldownMs;
+            farmNextAvailableAt = data.nextAvailableAt;
+
+            showBalanceChange('coins', gameState.magnumCoins - oldCoins);
+            showFarmingEffect();
+            checkLevelUp();
+            updateTasks('click_100', 1);
+            updateTasks('first_click', 1);
+            updateTasks('click_master', 1);
+            updateUI();
+            startFarmCooldownProgress();
+            saveUserData();
+        }
+    } catch (e) {
+        console.log('❌ Ошибка фарма:', e);
+        localFarm();
+    } finally {
+        farmLock = false;
+    }
+}
+
+function localFarm() {
     const oldCoins = gameState.magnumCoins;
     gameState.magnumCoins += gameState.cps;
     gameState.clickCount++;
     gameState.experience += 1;
-    
-    // Show visual feedback
     showBalanceChange('coins', gameState.magnumCoins - oldCoins);
     showFarmingEffect();
-    
-    // Check level up
     checkLevelUp();
-    
-    // Update tasks
     updateTasks('click_100', 1);
     updateTasks('first_click', 1);
     updateTasks('click_master', 1);
-    
-    // Update UI
     updateUI();
-    
-    // Save data
-    if (gameState.clickCount % 5 === 0) {
-        saveUserData();
-    }
-    
-    // Haptic feedback
-    if (tg?.HapticFeedback) {
-        try {
-            tg.HapticFeedback.impactOccurred('light');
-        } catch (error) {
-            console.log('Haptic feedback недоступен');
-        }
-    }
+    saveUserData();
 }
 
 // Show farming effect
@@ -493,6 +580,13 @@ function updateUI() {
     // Update statistics
     elements.todayEarned.textContent = formatNumber(gameState.clickCount * gameState.cps);
     elements.totalEarned.textContent = formatNumber(gameState.magnumCoins);
+
+    // Miner UI
+    if (elements.minerStatus && elements.minerIncome) {
+        elements.minerStatus.textContent = gameState.minerActive ? 'Активен' : 'Неактивен';
+        const income = calculateMinerIncome();
+        elements.minerIncome.textContent = `${income} MC/мин`;
+    }
 }
 
 // Start animations
@@ -527,24 +621,39 @@ function startAnimations() {
 
 // Start progress bar
 function startProgressBar() {
-    let progress = 0;
-    
-    setInterval(() => {
-        progress += 1;
-        if (progress > 100) {
-            progress = 0;
+    // оставим декоративную анимацию без таймеров для батареи
+}
+
+function startFarmCooldownProgress() {
+    const btn = elements.farmingBtn;
+    const fill = elements.progressFill;
+    const text = elements.progressText;
+    const start = Date.now();
+    const end = farmNextAvailableAt;
+
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+
+    function tick() {
+        const now = Date.now();
+        const total = Math.max(1, farmCooldownMs);
+        const elapsed = Math.min(total, now - start);
+        const pct = Math.min(100, Math.floor((elapsed / total) * 100));
+        fill.style.transform = `scaleX(${pct/100})`;
+        const leftMs = Math.max(0, end - now);
+        if (leftMs <= 0) {
+            text.textContent = 'Готов к фарму';
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            fill.style.transform = 'scaleX(1)';
+            setTimeout(() => { fill.style.transform = 'scaleX(0)'; }, 150);
+            return;
         }
-        
-        elements.progressFill.style.width = `${progress}%`;
-        
-        if (progress === 0) {
-            elements.progressText.textContent = 'Готов к фарму';
-        } else if (progress < 50) {
-            elements.progressText.textContent = 'Фармим...';
-        } else if (progress < 100) {
-            elements.progressText.textContent = 'Почти готово...';
-        }
-    }, 100);
+        text.textContent = `Ожидание: ${(leftMs / 1000).toFixed(1)} c`;
+        requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
 }
 
 // Start auto clicker
@@ -560,13 +669,7 @@ function startAutoClicker() {
 
 // Start miner
 function startMiner() {
-    setInterval(() => {
-        if (gameState.minerActive && !document.hidden) {
-            const minerIncome = calculateMinerIncome();
-            gameState.magnumCoins += minerIncome;
-            updateUI();
-        }
-    }, 60000); // Every minute
+    // Клиентский таймер отключен, сервер начисляет пассив
 }
 
 // Calculate miner income
@@ -642,6 +745,12 @@ async function loadUserData() {
                 const result = await response.json();
                 if (result.success) {
                     Object.assign(gameState, result.data);
+                    if (result.data.farmCooldownMs) window.__farmCooldownMs = result.data.farmCooldownMs;
+                    if (result.data.lastFarmAt) {
+                        const fc = result.data.farmCooldownMs || farmCooldownMs;
+                        const nextAt = new Date(result.data.lastFarmAt).getTime() + fc;
+                        window.__farmNextAvailableAt = nextAt;
+                    }
                     console.log('📥 Данные загружены с сервера');
                 }
             }
@@ -666,28 +775,31 @@ function loadLocalData() {
     }
 }
 
-// Save user data
+// Save user data (debounced)
+let __lastSaveAt = 0;
 async function saveUserData() {
     try {
         // Save locally
         localStorage.setItem('magnumStarsWebApp', JSON.stringify(gameState));
         
-        // Save to server
-        if (userId) {
-            const response = await fetch('/api/webapp/update-data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userId: userId,
-                    ...gameState
-                })
-            });
-            
-            if (response.ok) {
-                console.log('📤 Данные синхронизированы с сервером');
-            }
+        // Throttle server saves
+        const now = Date.now();
+        if (!userId || now - __lastSaveAt < 5000) return;
+        __lastSaveAt = now;
+
+        const response = await fetch('/api/webapp/update-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                userId: userId,
+                ...gameState
+            })
+        });
+        
+        if (response.ok) {
+            console.log('📤 Данные синхронизированы с сервером');
         }
     } catch (error) {
         console.log('❌ Ошибка сохранения данных:', error);
