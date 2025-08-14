@@ -521,6 +521,16 @@ app.post('/api/webapp/promocode', async (req, res) => {
     }
 });
 
+// API текущего курса обмена
+app.get('/api/webapp/exchange-rate', async (req, res) => {
+    try {
+        const rate = await calculateExchangeRate();
+        res.json({ success: true, rate });
+    } catch (error) {
+        res.status(500).json({ success: false });
+    }
+});
+
 // API информации о боте
 app.get('/api/bot-info', async (req, res) => {
     try {
