@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './app.css';
+import Upgrades from './Upgrades';
+import Tasks from './Tasks';
 
 type UserData = {
 	userId?: number;
@@ -13,6 +15,8 @@ type UserData = {
 	minerActive: boolean;
 	lastFarmAt?: string | null;
 	farmCooldownMs?: number;
+	upgrades?: any;
+	tasks?: any;
 };
 
 const sections = ['farming','upgrades','exchange','miner','tasks','referrals','achievements','settings'] as const;
@@ -35,6 +39,18 @@ export default function App() {
 		}).catch(()=>{});
 	}, []);
 
+	// Telegram MainButton -> Tasks
+	useEffect(()=>{
+		const tg = (window as any).Telegram?.WebApp;
+		if (!tg) return;
+		try{
+			tg.MainButton.setText('Задания');
+			tg.MainButton.show();
+			tg.MainButton.onClick(()=> setActive('tasks'));
+			return ()=> tg.MainButton.offClick(()=> setActive('tasks'));
+		}catch{}
+	},[]);
+
 	const nextAvailableAt = useMemo(()=>{
 		if (!user.lastFarmAt || !user.farmCooldownMs) return 0;
 		return new Date(user.lastFarmAt).getTime() + user.farmCooldownMs;
@@ -51,8 +67,10 @@ export default function App() {
 			</header>
 			<main className="main">
 				{active==='farming' && <Farming user={user} setUser={setUser} nextAvailableAt={nextAvailableAt} />}
+				{active==='upgrades' && <Upgrades user={user} setUser={setUser} />}
+				{active==='tasks' && <Tasks user={user} setUser={setUser} />}
 				{active==='miner' && <Miner user={user} setUser={setUser} />}
-				{/* placeholders for other sections */}
+				{/* TODO: exchange/referrals/achievements/settings */}
 			</main>
 			<nav className="tabs">
 				{sections.map(s=> (
