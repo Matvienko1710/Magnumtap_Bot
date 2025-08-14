@@ -19,12 +19,12 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Настройка статических файлов для WebApp
-app.use('/webapp', express.static(path.join(__dirname, 'webapp'), {
-    maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
-    etag: true,
-    immutable: process.env.NODE_ENV === 'production'
-}));
+// Раздача WebApp отключена по запросу
+// app.use('/webapp', express.static(path.join(__dirname, 'webapp'), {
+//     maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
+//     etag: true,
+//     immutable: process.env.NODE_ENV === 'production'
+// }));
 
 
 // Тестовый маршрут для проверки работы сервера
@@ -58,23 +58,9 @@ app.get('/test', (req, res) => {
     });
 });
 
-// Маршрут для WebApp
+// Маршрут для WebApp отключен
 app.get('/webapp', (req, res) => {
-    try {
-        const filePath = path.join(__dirname, 'webapp', 'index.html');
-        console.log(`📄 Отправка WebApp файла: ${filePath}`);
-        res.sendFile(filePath, (err) => {
-            if (err) {
-                console.error('❌ Ошибка отправки WebApp файла:', err);
-                res.status(500).json({ error: 'WebApp file not found' });
-            } else {
-                console.log('✅ WebApp файл отправлен успешно');
-            }
-        });
-    } catch (error) {
-        console.error('❌ Ошибка в маршруте /webapp:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+    res.status(404).json({ error: 'WebApp disabled' });
 });
 
 // API маршрут будет добавлен после определения конфигурации
