@@ -617,7 +617,7 @@ function updateUI() {
 function startAnimations() {
     initExchange();
     initReferrals();
-
+    
     // Add CSS animations
     const style = document.createElement('style');
     style.textContent = `
@@ -855,11 +855,21 @@ window.elements = elements;
 
 async function initExchange(){
     try{
+        const rateNode = elements.exchangeRateText;
         // load rate
         const r = await fetch('/api/webapp/exchange-rate');
         const j = await r.json();
-        if(j?.success && elements.exchangeRateText){
-            elements.exchangeRateText.textContent = (j.rate||1).toFixed(6);
+        if(j?.success && rateNode){
+            const prev = Number(rateNode.textContent||'0');
+            rateNode.textContent = (j.rate||1).toFixed(6);
+            if (prev>0){
+                const diff = ((j.rate - prev) / prev) * 100;
+                const changeNode = document.getElementById('rate-change');
+                if (changeNode){
+                    changeNode.innerHTML = `${diff>=0?'<i class=\"fas fa-arrow-up\"></i>':'<i class=\"fas fa-arrow-down\"></i>'} <span>${(diff).toFixed(2)}%</span>`;
+                    changeNode.style.color = diff>=0? 'var(--color-success)' : 'var(--color-danger)';
+                }
+            }
         }
         // listeners
         if (elements.exchangeAmount && elements.exchangeFrom && elements.exchangeResult){
@@ -899,6 +909,26 @@ async function initExchange(){
                     }
                 }catch(e){ showNotification('Ошибка обмена','error'); }
             });
+        }
+        // history
+        const historyWrap = document.getElementById('exchange-history');
+        if (historyWrap && userId){
+            try{
+                const h = await fetch(`/api/webapp/exchange-history?user_id=${userId}`).then(r=>r.json());
+                if (h?.success){
+                    historyWrap.innerHTML = '';
+                    (h.items||[]).forEach(it=>{
+                        const row = document.createElement('div');
+                        row.className = 'glass-card';
+                        const dir = it.direction==='mc' ? 'MC→Stars' : 'Stars→MC';
+                        row.innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+                            <div>${dir}</div>
+                            <div style="color:#aaa;font-size:12px;">${new Date(it.timestamp).toLocaleString()}</div>
+                        </div>`;
+                        historyWrap.appendChild(row);
+                    });
+                }
+            }catch{}
         }
     }catch{}
 }
@@ -957,6 +987,20 @@ function initUpgrades(){
 }
 
 function initTasks(){
+    const tabs = document.querySelectorAll('.task-tab');
+    const dailyList = document.getElementById('daily-tasks');
+    const achList = document.getElementById('achievement-tasks');
+    tabs.forEach((t)=>{
+        t.addEventListener('click', ()=>{
+            tabs.forEach(x=>x.classList.remove('active'));
+            t.classList.add('active');
+            if (t.dataset.tab==='daily'){
+                dailyList.style.display='block'; achList.style.display='none';
+            } else {
+                dailyList.style.display='none'; achList.style.display='block';
+            }
+        });
+    });
     const dailyContainer = document.getElementById('daily-tasks');
     const achContainer = document.getElementById('achievement-tasks');
     if (dailyContainer) {
