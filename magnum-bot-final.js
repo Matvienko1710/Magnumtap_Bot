@@ -12400,6 +12400,10 @@ async function startBot() {
     // Проверяем существование файлов WebApp
     // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
     const webappEnabled = process.env.WEBAPP_ENABLED === 'true'; // [Изменение] Управляем логами WebApp через переменную окружения
+    const webappPath = path.join(__dirname, 'webapp');
+    const indexPath = path.join(webappPath, 'index.html');
+    const stylesPath = path.join(webappPath, 'styles.css');
+    const scriptPath = path.join(webappPath, 'script.js');
     
     if (webappEnabled) {
         console.log('📁 Проверка файлов WebApp...');
@@ -12426,129 +12430,6 @@ async function startBot() {
   }
 }
 
-startBot();
-    const webappPath = path.join(__dirname, 'webapp');
-    const indexPath = path.join(webappPath, 'index.html');
-    const stylesPath = path.join(webappPath, 'styles.css');
-    const scriptPath = path.join(webappPath, 'script.js');
-
-    if (webappEnabled) {
-        console.log('📁 Проверка файлов WebApp...');
-        console.log(`📁 Путь к WebApp: ${webappPath}`);
-        console.log(`📄 index.html: ${fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден'}`);
-        console.log(`🎨 styles.css: ${fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден'}`);
-        console.log(`⚡ script.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
-    } else {
-        console.log('🛈 WebApp отключен — проверка файлов пропущена'); // [Изменение] Меньше шума в логах
-    }
-
-    // Запускаем Express сервер независимо от бота
-    console.log('🌐 Запуск Express сервера...');
-    const server = app.listen(PORT, () => {
-        console.log(`✅ Express сервер запущен на порту ${PORT}`);
-        console.log(`🌐 Переменная PORT: ${process.env.PORT || 'не установлена'}`);
-        // [Чистка логов] WebApp отключён, URL для WebApp скрыт чтобы не вводить в заблуждение
-        console.log('✅ Сервер готов принимать запросы');
-    });
-
-    // Обработка ошибок сервера
-    server.on('error', (error) => {
-        console.error('❌ Ошибка Express сервера:', error);
-        if (error.code === 'EADDRINUSE') {
-            console.error('❌ Порт уже занят. Попробуйте другой порт.');
-        } else if (error.code === 'EACCES') {
-            console.error('❌ Нет прав для использования порта.');
-        } else {
-            console.error('❌ Неизвестная ошибка сервера:', error.code);
-        }
-    });
-
-    // Graceful shutdown для Express сервера
-    process.once('SIGINT', () => {
-        console.log('🛑 Остановка Express сервера...');
-        server.close(() => {
-            console.log('✅ Express сервер остановлен');
-        });
-    });
-
-    // Обработчик ошибок Express
-    app.use((error, req, res, next) => {
-        console.error('❌ Express ошибка:', error);
-        res.status(500).json({ 
-            error: 'Internal server error',
-            message: error.message,
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    // Обработчик 404 ошибок
-    app.use((req, res) => {
-        console.log(`❌ 404: ${req.method} ${req.path}`);
-        res.status(404).json({ 
-            error: 'Not found',
-            path: req.path,
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    // Пытаемся запустить Telegram бота
-    console.log('🤖 Запуск Telegram бота...');
-    console.log('🤖 Проверка токена бота...');
-    
-    try {
-        // Проверяем информацию о боте
-        const botInfo = await bot.telegram.getMe();
-        console.log('🤖 Информация о боте:', botInfo);
-        
-        // Запускаем бота
-        await bot.launch();
-        console.log('🚀 Magnum Stars Bot запущен успешно!');
-    } catch (error) {
-        console.error('❌ Ошибка запуска Telegram бота:', error);
-        console.error('❌ Детали ошибки:', {
-            message: error.message,
-            code: error.code,
-            response: error.response
-        });
-        console.log('⚠️ WebApp будет работать без Telegram бота');
-    }
-    
-    console.log('Бот запущен:', {
-      botInfo: await bot.telegram.getMe(),
-      config: {
-        farmCooldown: config.FARM_COOLDOWN,
-        farmReward: config.FARM_BASE_REWARD,
-        bonusBase: config.DAILY_BONUS_BASE,
-        // [Исправление] Неверное имя параметра, используем корректный ключ
-        minerReward: config.MINER_REWARD_PER_MINUTE,
-        referralReward: config.REFERRAL_REWARD
-      }
-    });
-    
-    // Graceful stop
-    process.once('SIGINT', () => {
-      console.log('🛑 Получен сигнал SIGINT, останавливаем бота...');
-      bot.stop('SIGINT');
-    });
-    
-    process.once('SIGTERM', () => {
-      console.log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
-      bot.stop('SIGTERM');
-    });
-    console.log('✅ Все обработчики сигналов настроены');
-  } catch (error) {
-    console.error('❌ Критическая ошибка запуска бота:', error);
-    console.log('Критическая ошибка при запуске:', {
-      error: error.message,
-      stack: error.stack,
-      config: {
-        hasBotToken: !!process.env.BOT_TOKEN,
-        hasMongoUri: !!process.env.MONGODB_URI
-      }
-    });
-    process.exit(1);
-  }
-}
 
 // ==================== ОБРАБОТЧИК ТЕКСТОВЫХ СООБЩЕНИЙ ====================
 // Должен быть в конце, после всех остальных обработчиков
