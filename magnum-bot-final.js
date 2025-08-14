@@ -20,7 +20,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Настройка статических файлов для WebApp
-app.use('/webapp', express.static(path.join(__dirname, 'webapp')));
+app.use('/webapp', express.static(path.join(__dirname, 'webapp'), {
+    maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
+    etag: true,
+    immutable: process.env.NODE_ENV === 'production'
+}));
 
 // Тестовый маршрут для проверки работы сервера
 app.get('/', (req, res) => {
@@ -179,18 +183,21 @@ app.get('/api/webapp/user-data', async (req, res) => {
 
         console.log(`📥 WebApp загрузка данных для пользователя ${userId}`);
 
-        // Сначала пробуем найти в коллекции webappUsers
         let webappUser = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
         
         if (!webappUser) {
-            // Если нет в webappUsers, создаем нового пользователя
             webappUser = {
                 userId: parseInt(userId),
-                magnumCoins: 1000, // Начальный бонус
+                magnumCoins: 1000,
                 stars: 0,
                 level: 1,
                 experience: 0,
                 clickCount: 0,
+                cps: 1,
+                minerActive: false,
+                referralsCount: 0,
+                referralEarnings: 0,
+                achievementsCompleted: 0,
                 upgrades: {
                     autoClicker: { level: 0, cost: 10, baseCost: 10, multiplier: 1.5 },
                     clickPower: { level: 0, cost: 25, baseCost: 25, multiplier: 2 },
@@ -217,14 +224,33 @@ app.get('/api/webapp/user-data', async (req, res) => {
                     sound: true,
                     autoSave: true
                 },
+                lastFarmAt: null,
                 createdAt: new Date(),
                 updatedAt: new Date()
             };
-            
-            // Сохраняем нового пользователя
             await db.collection('webappUsers').insertOne(webappUser);
             console.log(`🆕 Создан новый WebApp пользователь: ${userId}`);
         }
+
+        if (webappUser.minerActive) {
+            const now = Date.now();
+            const lastUpdate = new Date(webappUser.updatedAt || webappUser.createdAt).getTime();
+            const minutesPassed = Math.floor((now - lastUpdate) / 60000);
+            if (minutesPassed > 0) {
+                const baseIncome = 1;
+                const efficiencyBonus = (webappUser.minerUpgrades?.efficiency?.level || 0) * 0.5;
+                const capacityBonus = (webappUser.minerUpgrades?.capacity?.level || 0) * 0.3;
+                const perMinute = baseIncome + efficiencyBonus + capacityBonus;
+                const passiveEarn = perMinute * minutesPassed;
+                await db.collection('webappUsers').updateOne(
+                    { userId: parseInt(userId) },
+                    { $inc: { magnumCoins: passiveEarn }, $set: { updatedAt: new Date() } }
+                );
+                webappUser.magnumCoins += passiveEarn;
+            }
+        }
+
+        const farmCooldownMs = (parseInt(process.env.WEBAPP_FARM_COOLDOWN_SEC || '5') || 5) * 1000;
 
         res.json({
             success: true,
@@ -234,6 +260,11 @@ app.get('/api/webapp/user-data', async (req, res) => {
                 level: webappUser.level || 1,
                 experience: webappUser.experience || 0,
                 clickCount: webappUser.clickCount || 0,
+                cps: webappUser.cps || 1,
+                minerActive: !!webappUser.minerActive,
+                referralsCount: webappUser.referralsCount || 0,
+                referralEarnings: webappUser.referralEarnings || 0,
+                achievementsCompleted: webappUser.achievementsCompleted || 0,
                 upgrades: webappUser.upgrades || {
                     autoClicker: { level: 0, cost: 10, baseCost: 10, multiplier: 1.5 },
                     clickPower: { level: 0, cost: 25, baseCost: 25, multiplier: 2 },
@@ -259,7 +290,9 @@ app.get('/api/webapp/user-data', async (req, res) => {
                     notifications: true,
                     sound: true,
                     autoSave: true
-                }
+                },
+                lastFarmAt: webappUser.lastFarmAt || null,
+                farmCooldownMs
             }
         });
     } catch (error) {
@@ -271,57 +304,32 @@ app.get('/api/webapp/user-data', async (req, res) => {
 // API маршрут для обновления данных пользователя
 app.post('/api/webapp/update-data', async (req, res) => {
     try {
-        const { userId, magnumCoins, stars, level, experience, clickCount, upgrades, minerUpgrades, tasks, settings } = req.body;
+        const { userId, magnumCoins, stars, level, experience, clickCount, upgrades, minerUpgrades, tasks, settings, cps, minerActive, lastFarmAt } = req.body;
         
         if (!userId) {
             return res.status(400).json({ error: 'User ID required' });
         }
 
-        console.log(`📤 WebApp обновление данных для пользователя ${userId}:`, {
-            magnumCoins, stars, level, experience, clickCount,
-            upgrades: upgrades ? 'present' : 'not present',
-            minerUpgrades: minerUpgrades ? 'present' : 'not present',
-            tasks: tasks ? 'present' : 'not present',
-            settings: settings ? 'present' : 'not present'
-        });
+        // Белый список полей и валидация
+        const updateData = { updatedAt: new Date() };
+        if (typeof magnumCoins === 'number' && isFinite(magnumCoins) && magnumCoins >= 0) updateData.magnumCoins = magnumCoins;
+        if (typeof stars === 'number' && isFinite(stars) && stars >= 0) updateData.stars = stars;
+        if (typeof level === 'number' && isFinite(level) && level >= 1) updateData.level = Math.floor(level);
+        if (typeof experience === 'number' && isFinite(experience) && experience >= 0) updateData.experience = Math.floor(experience);
+        if (typeof clickCount === 'number' && isFinite(clickCount) && clickCount >= 0) updateData.clickCount = Math.floor(clickCount);
+        if (typeof cps === 'number' && isFinite(cps) && cps >= 0) updateData.cps = cps;
+        if (typeof minerActive === 'boolean') updateData.minerActive = minerActive;
+        if (lastFarmAt) updateData.lastFarmAt = new Date(lastFarmAt);
 
-        // Подготавливаем данные для обновления
-        const updateData = {
-            updatedAt: new Date()
-        };
+        if (upgrades && typeof upgrades === 'object') updateData.upgrades = upgrades;
+        if (minerUpgrades && typeof minerUpgrades === 'object') updateData.minerUpgrades = minerUpgrades;
+        if (tasks && typeof tasks === 'object') updateData.tasks = tasks;
+        if (settings && typeof settings === 'object') updateData.settings = settings;
 
-        // Обновляем основные данные
-        if (magnumCoins !== undefined) updateData.magnumCoins = magnumCoins;
-        if (stars !== undefined) updateData.stars = stars;
-        if (level !== undefined) updateData.level = level;
-        if (experience !== undefined) updateData.experience = experience;
-        if (clickCount !== undefined) updateData.clickCount = clickCount;
-
-        // Обновляем улучшения
-        if (upgrades) {
-            updateData.upgrades = upgrades;
-        }
-
-        // Обновляем улучшения майнера
-        if (minerUpgrades) {
-            updateData.minerUpgrades = minerUpgrades;
-        }
-
-        // Обновляем задания
-        if (tasks) {
-            updateData.tasks = tasks;
-        }
-
-        // Обновляем настройки
-        if (settings) {
-            updateData.settings = settings;
-        }
-
-        // Обновляем данные в коллекции webappUsers
         const result = await db.collection('webappUsers').updateOne(
             { userId: parseInt(userId) },
             { $set: updateData },
-            { upsert: true } // Создаем документ если не существует
+            { upsert: true }
         );
 
         console.log(`✅ WebApp данные обновлены для пользователя ${userId}, результат:`, result);
@@ -329,6 +337,74 @@ app.post('/api/webapp/update-data', async (req, res) => {
         res.json({ success: true, message: 'Data updated successfully' });
     } catch (error) {
         console.error('WebApp update data error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// API маршрут фарма с кулдауном
+app.post('/api/webapp/farm', async (req, res) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).json({ error: 'User ID required' });
+        }
+
+        const farmCooldownMs = (parseInt(process.env.WEBAPP_FARM_COOLDOWN_SEC || '5') || 5) * 1000;
+        const now = Date.now();
+
+        let webappUser = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+        if (!webappUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const lastFarmAt = webappUser.lastFarmAt ? new Date(webappUser.lastFarmAt).getTime() : 0;
+        const elapsed = now - lastFarmAt;
+        const remainingMs = farmCooldownMs - elapsed;
+        if (remainingMs > 0) {
+            return res.status(429).json({
+                error: 'Cooldown',
+                remainingMs,
+                nextAvailableAt: now + remainingMs,
+                farmCooldownMs
+            });
+        }
+
+        const reward = Math.max(1, webappUser.cps || 1);
+        const updates = {
+            $inc: { magnumCoins: reward, clickCount: 1, experience: 1 },
+            $set: { lastFarmAt: new Date(now), updatedAt: new Date(now) }
+        };
+        await db.collection('webappUsers').updateOne({ userId: parseInt(userId) }, updates);
+
+        const newBalance = (webappUser.magnumCoins || 0) + reward;
+
+        return res.json({
+            success: true,
+            reward,
+            magnumCoins: newBalance,
+            nextAvailableAt: now + farmCooldownMs,
+            farmCooldownMs
+        });
+    } catch (error) {
+        console.error('WebApp farm error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// API маршрут переключения майнера
+app.post('/api/webapp/miner/toggle', async (req, res) => {
+    try {
+        const { userId, active } = req.body;
+        if (!userId || typeof active !== 'boolean') {
+            return res.status(400).json({ error: 'Bad request' });
+        }
+        await db.collection('webappUsers').updateOne(
+            { userId: parseInt(userId) },
+            { $set: { minerActive: active, updatedAt: new Date() } }
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('WebApp miner toggle error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -393,7 +469,6 @@ async function calculateExchangeRate() {
     return config.BASE_EXCHANGE_RATE;
   }
 }
-
 // ==================== БАЗА ДАННЫХ ====================
 let db;
 let client;
@@ -860,7 +935,6 @@ async function getRankProgress(user) {
 function isAdmin(userId) {
   return config.ADMIN_IDS.includes(userId);
 }
-
 // Функция для проверки и повышения уровня пользователя
 async function checkAndUpdateLevel(user) {
   try {
@@ -1822,7 +1896,6 @@ async function showRoadmapSuggestions(ctx, user) {
     logError(error, 'Показ предложений роадмапа');
   }
 }
-
 // ==================== МАЙНИНГ ====================
 async function showMinerMenu(ctx, user) {
   // Убеждаемся, что все поля майнера инициализированы
@@ -2797,7 +2870,6 @@ async function showAdminRanksMenu(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления рангами');
   }
 }
-
 async function showAdminTitles(ctx, user) {
   try {
     log(`👑 Показ управления титулами для админа ${user.id}`);
@@ -3295,7 +3367,6 @@ async function claimBonus(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка получения бонуса');
   }
 }
-
 // ==================== СТАТИСТИКА БОНУСА ====================
 async function showBonusStats(ctx, user) {
   try {
@@ -3793,7 +3864,6 @@ async function showAdminVotingActive(ctx, user) {
     logError(error, 'Показ активных голосований');
   }
 }
-
 async function showAdminVotingStats(ctx, user) {
   try {
     // Получаем статистику голосований
@@ -4235,7 +4305,6 @@ async function handleAdminAddReserveMC(ctx, user, text) {
     await ctx.reply('❌ Ошибка добавления Magnum Coins в резерв.');
   }
 }
-
 async function handleAdminRemoveReserveMC(ctx, user, text) {
   try {
     const amount = parseFloat(text);
@@ -5624,7 +5693,6 @@ async function performExchange(ctx, user, amount) {
     await ctx.reply('❌ Ошибка обмена');
   }
 }
-
 // Функция для обмена Stars на Magnum Coins
 async function performStarsToMCExchange(ctx, user, starsAmount) {
   try {
@@ -6620,7 +6688,6 @@ async function resetUserSettings(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка сброса настроек');
   }
 }
-
 // ==================== ЗАДАНИЯ ====================
 async function showTasksMenu(ctx, user) {
   try {
@@ -7102,7 +7169,6 @@ async function showTasksAchievements(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки достижений');
   }
 }
-
 // Вспомогательные функции
 function getSponsorTasks() {
   return [
@@ -7596,7 +7662,6 @@ if (typeof afterActions !== 'undefined' && Array.isArray(afterActions)) {
     }
   }
 }
-
 // Регистрация отложенных обработчиков
 if (typeof afterActions !== 'undefined' && Array.isArray(afterActions)) {
   for (const fn of afterActions) {
@@ -8499,7 +8564,6 @@ async function handleBugReport(ctx, user, text) {
     await ctx.reply('❌ Ошибка отправки сообщения. Попробуйте позже.');
   }
 }
-
 // ==================== СОЗДАНИЕ ПРОМОКОДОВ ====================
 async function handleAdminCreatePromocode(ctx, user, text) {
   try {
@@ -8945,7 +9009,6 @@ bot.action('contact_support', async (ctx) => {
     });
   }
 });
-
 // ==================== ОБРАБОТЧИКИ КАНАЛА ПОДДЕРЖКИ ====================
 // Обработчик для ответа на тикет
 bot.action(/^support_answer_(.+)$/, async (ctx) => {
@@ -9440,7 +9503,6 @@ bot.action('roadmap', async (ctx) => {
     logError(error, 'Роадмап (обработчик)');
   }
 });
-
 bot.action('roadmap_q4_2025', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -9934,7 +9996,6 @@ bot.action('news_analytics', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка загрузки аналитики');
   }
 });
-
 bot.action('news_reports', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -10927,7 +10988,6 @@ bot.action('admin_posts', async (ctx) => {
     logError(error, 'Управление постами (обработчик)');
   }
 });
-
 bot.action('admin_promocodes', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -11418,7 +11478,6 @@ bot.action('admin_voting_delete', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка показа удаления');
   }
 });
-
 bot.action('admin_voting_history', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -11915,7 +11974,6 @@ bot.action('admin_mass_give', async (ctx) => {
     await ctx.reply('💰 Введите массовую выдачу (например: "stars 100" или "mc 50"):');
   } catch (error) { logError(error, 'Массовая выдача (обработчик)'); }
 });
-
 bot.action('admin_miner_stats', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); if (!user) return;
@@ -12055,359 +12113,6 @@ bot.action('promocode_history', async (ctx) => {
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'История промокодов (обработчик)'); }
 });
-// Обработчики для создания постов
-bot.action('admin_create_post_with_button', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Сохраняем adminState в базе данных
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'creating_post_with_button', updatedAt: new Date() } }
-    );
-    userCache.delete(user.id);
-    
-    await ctx.editMessageText(
-      `📝 *Создание поста с кнопкой*\n\n` +
-      `Отправьте текст поста в следующем сообщении.\n\n` +
-      `После текста поста отправьте кнопку в формате:\n` +
-      `Текст кнопки | Ссылка\n\n` +
-      `Например:\n` +
-      `Присоединиться | https://t.me/magnumtap\n\n` +
-      `🔙 Для отмены нажмите /cancel`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error) {
-    logError(error, 'Создание поста с кнопкой');
-  }
-});
-
-bot.action('admin_create_post_no_button', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    // Сохраняем adminState в базе данных
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'creating_post_no_button', updatedAt: new Date() } }
-    );
-    userCache.delete(user.id);
-    
-    await ctx.editMessageText(
-      `📝 *Создание поста без кнопки*\n\n` +
-      `Отправьте текст поста в следующем сообщении.\n\n` +
-      `🔙 Для отмены нажмите /cancel`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error) {
-    logError(error, 'Создание поста без кнопки');
-  }
-});
-
-// Обработчики для промокодов
-bot.action('admin_create_promocode', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Сохраняем adminState в базе данных
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'creating_promocode', updatedAt: new Date() } }
-    );
-    userCache.delete(user.id);
-    
-    await ctx.editMessageText(
-      `🎫 *Создание промокода*\n\n` +
-      `Отправьте данные промокода в формате:\n` +
-      `Название | Количество Magnum Coins | Количество активаций\n\n` +
-      `Например:\n` +
-      `WELCOME | 100 | 50\n\n` +
-      `🔙 Для отмены нажмите /cancel`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error) {
-    logError(error, 'Создание промокода');
-  }
-});
-
-// Обработчики для промокодов
-bot.action('promocode', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showPromocodeMenu(ctx, user);
-  } catch (error) {
-    logError(error, 'Промокоды (обработчик)');
-  }
-});
-
-bot.action('enter_promocode', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Сохраняем adminState в базе данных
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'entering_promocode', updatedAt: new Date() } }
-    );
-    userCache.delete(user.id);
-    
-    await ctx.editMessageText(
-      `🎫 *Ввод промокода*\n\n` +
-      `Отправьте промокод в следующем сообщении.\n\n` +
-      `🔙 Для отмены нажмите /cancel`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error) {
-    logError(error, 'Ввод промокода');
-  }
-});
-
-// Обработчик для поддержки
-bot.action('support', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('📧 Написать в поддержку', 'contact_support'),
-        Markup.button.callback('🐛 Сообщить об ошибке', 'report_bug')
-      ],
-      [
-        Markup.button.callback('❓ FAQ', 'support_faq')
-      ],
-      [
-        Markup.button.callback('🔙 Назад', 'settings')
-      ]
-    ]);
-    
-    const message = 
-      `🆘 *Поддержка*\n\n` +
-      `Если у вас возникли вопросы или проблемы, мы готовы помочь!\n\n` +
-      `💰 *Сообщите об ошибке и получите вознаграждение!*\n` +
-      `├ Нашли баг или ошибку в боте?\n` +
-      `├ Сообщите нам и получите награду\n` +
-      `└ Помогите сделать бота лучше\n\n` +
-      `📧 *Связаться с поддержкой:*\n` +
-      `├ Написать сообщение\n` +
-      `├ Сообщить об ошибке\n` +
-      `└ Получить быстрый ответ\n\n` +
-      `❓ *Часто задаваемые вопросы:*\n` +
-      `├ Как фармить Magnum Coins\n` +
-      `├ Как работает майнер\n` +
-      `├ Как получить бонусы\n` +
-      `└ Другие вопросы\n\n` +
-      `🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'Поддержка (обработчик)');
-  }
-});
-// Обработчик для сообщения об ошибке
-bot.action('report_bug', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Сохраняем adminState в базе данных
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'reporting_bug', updatedAt: new Date() } }
-    );
-    userCache.delete(user.id);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад', 'support')]
-    ]);
-    
-    await ctx.editMessageText(
-      `🐛 *Сообщить об ошибке*\n\n` +
-      `💰 *Вознаграждение за найденные ошибки:*\n` +
-      `├ Критические ошибки: 50-100 MC\n` +
-      `├ Ошибки интерфейса: 10-25 MC\n` +
-      `├ Мелкие баги: 5-15 MC\n` +
-      `└ Предложения улучшений: 5-20 MC\n\n` +
-      `📝 *Отправьте подробное описание ошибки:*\n` +
-      `├ Что произошло?\n` +
-      `├ Как воспроизвести?\n` +
-      `├ На каком экране?\n` +
-      `└ Дополнительная информация\n\n` +
-      `🔙 Для отмены нажмите кнопку "Назад"`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
-  } catch (error) {
-    logError(error, 'Сообщение об ошибке');
-    await ctx.answerCbQuery('❌ Ошибка загрузки формы');
-  }
-});
-
-// Обработчик для FAQ
-bot.action('support_faq', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('🌾 Фарм FAQ', 'faq_farm'),
-        Markup.button.callback('⛏️ Майнер FAQ', 'faq_miner')
-      ],
-      [
-        Markup.button.callback('🎁 Бонусы FAQ', 'faq_bonus'),
-        Markup.button.callback('💎 Обмен FAQ', 'faq_exchange')
-      ],
-      [
-        Markup.button.callback('🎫 Промокоды FAQ', 'faq_promocodes'),
-        Markup.button.callback('👥 Рефералы FAQ', 'faq_referrals')
-      ],
-      [
-        Markup.button.callback('🏆 Достижения FAQ', 'faq_achievements'),
-        Markup.button.callback('📋 Задания FAQ', 'faq_tasks')
-      ],
-      [
-        Markup.button.callback('🔙 Назад', 'support')
-      ]
-    ]);
-    
-    const message = 
-      `❓ *Часто задаваемые вопросы (FAQ)*\n\n` +
-      `Выберите раздел, чтобы получить подробную информацию:\n\n` +
-      `🌾 *Фарм* - Как фармить Magnum Coins\n` +
-      `⛏️ *Майнер* - Как работает майнинг\n` +
-      `🎁 *Бонусы* - Ежедневные бонусы и серии\n` +
-      `💎 *Обмен* - Обмен Magnum Coins на Stars\n` +
-      `🎫 *Промокоды* - Как использовать промокоды\n` +
-      `👥 *Рефералы* - Реферальная система\n` +
-      `🏆 *Достижения* - Система достижений\n` +
-      `📋 *Задания* - Выполнение заданий\n\n` +
-      `🎯 Выберите раздел:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'FAQ (обработчик)');
-  }
-});
-// Обработчики изменения настроек
-bot.action('admin_farm_reward_set', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Устанавливаем состояние для ввода награды
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_farm_reward', updatedAt: new Date() } }
-    );
-    
-    await ctx.reply('🎯 Введите новую базовую награду фарма (в Magnum Coins):');
-  } catch (error) {
-    logError(error, 'Установка награды фарма (обработчик)');
-  }
-});
-
-bot.action('admin_cooldown_farm', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Устанавливаем состояние для ввода кулдауна
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_farm_cooldown', updatedAt: new Date() } }
-    );
-    
-    // Очищаем кеш пользователя
-    userCache.delete(user.id);
-    
-    await ctx.reply('⏰ Введите новый кулдаун фарма (в секундах):');
-  } catch (error) {
-    logError(error, 'Установка кулдауна фарма (обработчик)');
-  }
-});
-
-bot.action('admin_bonus_base', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Устанавливаем состояние для ввода базового бонуса
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_bonus_base', updatedAt: new Date() } }
-    );
-    
-    await ctx.reply('🎁 Введите новую базовую награду ежедневного бонуса (в Magnum Coins):');
-  } catch (error) {
-    logError(error, 'Установка базового бонуса (обработчик)');
-  }
-});
-
-bot.action('admin_miner_reward', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Устанавливаем состояние для ввода награды майнера
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_miner_reward', updatedAt: new Date() } }
-    );
-    
-    await ctx.reply('⛏️ Введите новую базовую награду майнера (в Magnum Coins за минуту):');
-  } catch (error) {
-    logError(error, 'Установка награды майнера (обработчик)');
-  }
-});
-
-bot.action('admin_referral_reward', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Устанавливаем состояние для ввода награды реферала
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_referral_reward', updatedAt: new Date() } }
-    );
-    
-    await ctx.reply('👥 Введите новую награду за реферала (в Magnum Coins):');
-  } catch (error) {
-    logError(error, 'Установка награды реферала (обработчик)');
-  }
-});
-
-bot.action('admin_subscription_add', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Устанавливаем состояние для ввода канала подписки
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_subscription_channel', updatedAt: new Date() } }
-    );
-    
-    await ctx.reply('📢 Введите канал для обязательной подписки (@channel или https://t.me/channel):');
-  } catch (error) {
-    logError(error, 'Добавление канала подписки (обработчик)');
-  }
-});
-
 bot.action('admin_reset_db', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -12857,7 +12562,6 @@ bot.on('text', async (ctx) => {
     });
   }
 });
-
 // ==================== ОБРАБОТКА ПРОМОКОДОВ ====================
 async function handleUserEnterPromocode(ctx, user, text) {
   try {
@@ -13226,7 +12930,6 @@ async function handleWithdrawalMC(ctx, user, text) {
     await ctx.reply('❌ Произошла ошибка при создании заявки на вывод. Попробуйте позже.');
   }
 }
-
 async function handleWithdrawalStars(ctx, user, text) {
   try {
     log(`⭐ Обработка вывода Stars от пользователя ${user.id}: "${text}"`);
@@ -13398,171 +13101,6 @@ async function handleWithdrawalStars(ctx, user, text) {
   }
 }
 
-// ==================== ТЕСТИРОВАНИЕ КАНАЛА ПОДДЕРЖКИ ====================
-bot.command('set_channel', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user || !config.ADMIN_IDS.includes(user.id)) {
-      await ctx.reply('❌ Доступ запрещен');
-      return;
-    }
-    
-    const args = ctx.message.text.split(' ');
-    if (args.length < 2) {
-      await ctx.reply('📝 Использование: /set_channel @channel_name\n\n💡 Примеры:\n├ /set_channel @magnumwithdraw\n├ /set_channel -1001234567890\n└ /set_channel off (для отключения)');
-      return;
-    }
-    
-    const channelName = args[1];
-    
-    if (channelName === 'off' || channelName === 'disable') {
-      // Отключаем канал поддержки
-      config.WITHDRAWAL_CHANNEL = null;
-      await ctx.reply('✅ Канал поддержки отключен. Заявки будут отправляться только админам.');
-      return;
-    }
-    
-    await ctx.reply(`🔍 Проверка канала ${channelName}...`);
-    
-    try {
-      const chat = await bot.telegram.getChat(channelName);
-      
-      // Проверяем права бота
-      const botMember = await bot.telegram.getChatMember(channelName, bot.botInfo.id);
-      
-      if (!botMember.can_post_messages) {
-        await ctx.reply(`❌ Бот не имеет прав на отправку сообщений в канал ${channelName}\n\n💡 Убедитесь, что бот добавлен как администратор с правами на отправку сообщений.`);
-        return;
-      }
-      
-      // Устанавливаем канал
-      config.WITHDRAWAL_CHANNEL = channelName;
-      
-      await ctx.reply(`✅ Канал поддержки установлен: ${channelName}\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n├ Username: ${chat.username || 'N/A'}\n└ Права бота: ✅ Может отправлять сообщения`);
-      
-    } catch (error) {
-      await ctx.reply(`❌ Ошибка доступа к каналу ${channelName}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Канал существует\n├ Бот добавлен в канал\n├ Бот имеет права администратора`);
-    }
-    
-  } catch (error) {
-    logError(error, 'Установка канала поддержки');
-    await ctx.reply('❌ Ошибка установки канала');
-  }
-});
-
-bot.command('setup_withdraw', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user || !config.ADMIN_IDS.includes(user.id)) {
-      await ctx.reply('❌ Доступ запрещен');
-      return;
-    }
-    
-    // Используем переменную окружения или значение по умолчанию
-    const channelName = config.WITHDRAWAL_CHANNEL ? 
-      (config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`) : 
-      '@magnumwithdraw';
-    
-    await ctx.reply(`🔧 Автоматическая настройка канала ${channelName}...`);
-    
-    try {
-      const chat = await bot.telegram.getChat(channelName);
-      
-      // Проверяем права бота
-      const botMember = await bot.telegram.getChatMember(channelName, bot.botInfo.id);
-      
-      if (!botMember.can_post_messages) {
-        await ctx.reply(`❌ Бот не имеет прав на отправку сообщений в канал ${channelName}\n\n💡 Убедитесь, что бот добавлен как администратор с правами на отправку сообщений.`);
-        return;
-      }
-      
-      // Устанавливаем канал
-      config.WITHDRAWAL_CHANNEL = channelName.replace('@', '');
-      
-      await ctx.reply(`✅ Канал поддержки автоматически настроен: ${channelName}\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n├ Username: ${chat.username || 'N/A'}\n└ Права бота: ✅ Может отправлять сообщения\n\n🎯 Теперь все заявки на вывод будут отправляться в этот канал!\n\n💡 Переменная окружения: ${config.WITHDRAWAL_CHANNEL}`);
-      
-    } catch (error) {
-      await ctx.reply(`❌ Ошибка доступа к каналу ${channelName}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Канал существует\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n\n🔗 Ссылка на канал: https://t.me/magnumwithdraw`);
-    }
-    
-  } catch (error) {
-    logError(error, 'Автоматическая настройка канала поддержки');
-    await ctx.reply('❌ Ошибка настройки канала');
-  }
-});
-
-bot.command('test_channel', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user || !config.ADMIN_IDS.includes(user.id)) {
-      await ctx.reply('❌ Доступ запрещен');
-      return;
-    }
-    
-    // Показываем текущую переменную окружения
-    await ctx.reply(`📋 *Текущие настройки канала поддержки:*\n\n🔧 Переменная окружения: \`${config.WITHDRAWAL_CHANNEL || 'не установлена'}\`\n📡 Полное имя канала: \`${config.WITHDRAWAL_CHANNEL ? (config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`) : 'не установлен'}\``);
-    
-    // Сначала проверяем установленный канал
-    if (config.WITHDRAWAL_CHANNEL) {
-      const channelName = config.WITHDRAWAL_CHANNEL.startsWith('@') ? config.WITHDRAWAL_CHANNEL : `@${config.WITHDRAWAL_CHANNEL}`;
-      
-      await ctx.reply(`🔍 Тестирование установленного канала ${channelName}...`);
-      
-      try {
-        const chat = await bot.telegram.getChat(channelName);
-        await ctx.reply(`✅ Канал ${channelName} найден!\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n└ Username: ${chat.username || 'N/A'}`);
-        
-        // Пробуем отправить тестовое сообщение
-        const testMessage = await bot.telegram.sendMessage(
-          channelName,
-          `🧪 *Тестовое сообщение*\n\n` +
-          `📅 Дата: ${new Date().toLocaleString('ru-RU')}\n` +
-          `🤖 Бот: @${bot.botInfo.username}\n` +
-          `✅ Канал работает корректно!`,
-          { parse_mode: 'Markdown' }
-        );
-        
-        await ctx.reply(`✅ Тестовое сообщение отправлено в канал!\n\n🆔 ID сообщения: ${testMessage.message_id}`);
-        
-      } catch (error) {
-        await ctx.reply(`❌ Ошибка доступа к каналу ${channelName}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n├ Канал существует и доступен`);
-      }
-    } else {
-      // Тестируем канал @magnumwithdraw по умолчанию
-      const testChannel = '@magnumwithdraw';
-      
-      await ctx.reply(`🔍 Тестирование канала по умолчанию ${testChannel}...`);
-      
-      try {
-        const chat = await bot.telegram.getChat(testChannel);
-        await ctx.reply(`✅ Канал ${testChannel} найден!\n\n📋 Информация:\n├ Тип: ${chat.type}\n├ Название: ${chat.title || 'N/A'}\n├ ID: ${chat.id}\n└ Username: ${chat.username || 'N/A'}`);
-        
-        // Пробуем отправить тестовое сообщение
-        const testMessage = await bot.telegram.sendMessage(
-          testChannel,
-          `🧪 *Тестовое сообщение*\n\n` +
-          `📅 Дата: ${new Date().toLocaleString('ru-RU')}\n` +
-          `🤖 Бот: @${bot.botInfo.username}\n` +
-          `✅ Канал работает корректно!`,
-          { parse_mode: 'Markdown' }
-        );
-        
-        await ctx.reply(`✅ Тестовое сообщение отправлено в канал!\n\n🆔 ID сообщения: ${testMessage.message_id}`);
-        
-        // Предлагаем установить этот канал
-        await ctx.reply(`💡 Хотите установить ${testChannel} как канал поддержки?\n\nИспользуйте команду:\n/setup_withdraw`);
-        
-      } catch (error) {
-        await ctx.reply(`❌ Ошибка доступа к каналу ${testChannel}:\n\n🚫 ${error.message}\n\n💡 Убедитесь, что:\n├ Бот добавлен в канал\n├ Бот имеет права администратора\n├ Канал существует и доступен`);
-      }
-    }
-    
-  } catch (error) {
-    logError(error, 'Тестирование канала поддержки');
-    await ctx.reply('❌ Ошибка тестирования канала');
-  }
-});
-
 // ==================== ОБРАБОТКА ЗАЯВОК НА ВЫВОД ====================
 bot.action(/^approve_(.+)$/, async (ctx) => {
   try {
@@ -13696,7 +13234,6 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка отклонения заявки');
   }
 });
-
 bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
