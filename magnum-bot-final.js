@@ -586,6 +586,21 @@ async function calculateExchangeRate() {
       exchangeRate24h = dynamicRate;
       lastRateUpdate = now;
       console.log(`📅 Обновлен курс за 24 часа: ${dynamicRate.toFixed(6)}`);
+      try {
+        // [Сохранение] Персистим 24ч курс и время обновления в MongoDB
+        await db.collection('config').updateOne(
+          { key: 'EXCHANGE_RATE_24H' },
+          { $set: { value: exchangeRate24h, updatedAt: now } },
+          { upsert: true }
+        );
+        await db.collection('config').updateOne(
+          { key: 'LAST_RATE_UPDATE' },
+          { $set: { value: lastRateUpdate.toISOString(), updatedAt: now } },
+          { upsert: true }
+        );
+      } catch (e) {
+        console.log('⚠️ Не удалось сохранить состояние курса в базу:', e.message);
+      }
     }
     
     console.log(`💱 Расчет курса обмена:`, {
@@ -12357,6 +12372,18 @@ async function startBot() {
     console.log('🔗 Подключение к базе данных...');
     await connectDB();
     console.log('✅ База данных подключена успешно');
+    
+    // [Восстановление] Читаем сохранённое состояние биржи (24ч курс)
+    try {
+      const items = await db.collection('config').find({ key: { $in: ['EXCHANGE_RATE_24H','LAST_RATE_UPDATE'] } }).toArray();
+      const map = {};
+      for (const it of items) map[it.key] = it.value;
+      if (typeof map.EXCHANGE_RATE_24H === 'number') exchangeRate24h = map.EXCHANGE_RATE_24H;
+      if (map.LAST_RATE_UPDATE) lastRateUpdate = new Date(map.LAST_RATE_UPDATE);
+      console.log('🔁 Восстановлено состояние биржи', { exchangeRate24h, lastRateUpdate });
+    } catch (e) {
+      console.log('⚠️ Не удалось восстановить состояние биржи:', e.message);
+    }
     
     console.log('⏰ Настройка интервалов...');
     console.log('Настройка интервалов:', {
