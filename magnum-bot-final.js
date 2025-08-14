@@ -37,10 +37,19 @@ app.get('/', (req, res) => {
 // Тестовый маршрут для проверки статических файлов
 app.get('/test', (req, res) => {
     // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
+    const webappEnabled = process.env.WEBAPP_ENABLED === 'true'; // [Изменение] Управляем логами WebApp через переменную окружения
     const webappPath = path.join(__dirname, 'webapp');
     const indexPath = path.join(webappPath, 'index.html');
     const stylesPath = path.join(webappPath, 'styles.css');
     const scriptPath = path.join(webappPath, 'script.js');
+    
+    if (webappEnabled) {
+        console.log('📁 Проверка файлов WebApp...');
+        console.log(`📁 Путь к WebApp: ${webappPath}`);
+        console.log(`📄 index.html: ${fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`🎨 styles.css: ${fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`⚡ script.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
+    }
     
     res.json({
         status: 'test',
@@ -742,7 +751,6 @@ async function initializeReserve() {
     console.error('❌ Ошибка инициализации резерва:', error);
   }
 }
-
 // Функция для полного сброса базы данных
 async function resetDatabase() {
   try {
@@ -1538,7 +1546,6 @@ async function checkSubscription(ctx) {
     return true;
   }
 }
-
 async function showSubscriptionMessage(ctx) {
   // Проверяем, что канал указан правильно
   if (!config.REQUIRED_CHANNEL || (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/'))) {
@@ -2338,7 +2345,6 @@ async function upgradeMiner(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка улучшения майнера');
   }
 }
-
 // ==================== ФАРМ ====================
 async function showFarmMenu(ctx, user) {
   const farm = user.farm;
@@ -3134,7 +3140,6 @@ async function handleAdminGiveTitle(ctx, user, text) {
     await ctx.reply('❌ Ошибка выдачи титула');
   }
 }
-
 // Функция для забора титула у пользователя
 async function handleAdminRemoveTitle(ctx, user, text) {
   try {
@@ -3907,7 +3912,6 @@ async function showAdminVoting(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления голосованием');
   }
 }
-
 // ==================== ДЕТАЛЬНЫЕ ФУНКЦИИ ГОЛОСОВАНИЯ ====================
 async function showAdminVotingCreate(ctx, user) {
   try {
@@ -4699,7 +4703,6 @@ async function handleAdminSetCommission(ctx, user, text) {
     await ctx.reply('❌ Ошибка установки комиссии.');
   }
 }
-
 async function showAdminSettings(ctx, user) {
   try {
     log(`⚙️ Показ настроек бота для админа ${user.id}`);
@@ -6263,7 +6266,6 @@ async function showReferralLink(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки реферальной ссылки');
   }
 }
-
 async function showReferralStats(ctx, user) {
   try {
     log(`📊 Показ статистики рефералов для пользователя ${user.id}`);
@@ -7799,7 +7801,6 @@ if (typeof afterActions !== 'undefined' && Array.isArray(afterActions)) {
     }
   }
 }
-
 // Обработка команды /start
 bot.start(async (ctx) => {
   try {
@@ -8532,7 +8533,6 @@ async function handleAdminAnswerTicket(ctx, user, text) {
     await ctx.reply('❌ Ошибка отправки ответа. Попробуйте позже.');
   }
 }
-
 // ==================== ВЫДАЧА РАНГА ====================
 async function handleAdminGiveRank(ctx, user, text) {
   try {
@@ -10086,7 +10086,6 @@ bot.action('exchange_auto', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка настроек автообмена');
   }
 });
-
 bot.action('exchange_limits', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -10874,7 +10873,6 @@ bot.action('admin_search_user', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка поиска пользователя');
   }
 });
-
 bot.action('admin_top_users', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -11188,7 +11186,6 @@ bot.action('admin_give_title', async (ctx) => {
       `├ ✨ Мастер\n` +
       `├ 💫 Эксперт\n` +
       `├ 🌟 Профессионал\n` +
-      `├ 🏆 Чемпион\n` +
       `├ 👑 Легенда\n` +
       `├ 🕵️ Скрытный\n` +
       `├ 🧠 Тактик\n` +
@@ -11664,7 +11661,6 @@ bot.action('admin_add_experience', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка добавления опыта');
   }
 });
-
 bot.action('admin_reserve_add_mc', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -12403,25 +12399,56 @@ async function startBot() {
     
     // Проверяем существование файлов WebApp
     // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
+    const webappEnabled = process.env.WEBAPP_ENABLED === 'true'; // [Изменение] Управляем логами WebApp через переменную окружения
+    
+    if (webappEnabled) {
+        console.log('📁 Проверка файлов WebApp...');
+        console.log(`📁 Путь к WebApp: ${webappPath}`);
+        console.log(`📄 index.html: ${fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`🎨 styles.css: ${fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`⚡ script.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
+    }
+    
+    console.log('🌐 Запуск Express сервера...');
+    app.listen(PORT, () => {
+      console.log(`✅ Express сервер готов принимать запросы на порту ${PORT}`);
+    });
+    
+    console.log('🤖 Запуск Telegram бота...');
+    console.log('🤖 Проверка токена бота...');
+    const botInfo = await bot.telegram.getMe();
+    console.log('🤖 Информация о боте:', botInfo);
+    
+    console.log('🚀 Magnum Stars Bot успешно запущен!');
+  } catch (error) {
+    console.error('❌ Ошибка при запуске Magnum Stars Bot:', error);
+    process.exit(1);
+  }
+}
+
+startBot();
     const webappPath = path.join(__dirname, 'webapp');
     const indexPath = path.join(webappPath, 'index.html');
     const stylesPath = path.join(webappPath, 'styles.css');
     const scriptPath = path.join(webappPath, 'script.js');
 
-    console.log('📁 Проверка файлов WebApp...');
-    console.log('📁 Путь к WebApp:', webappPath);
-    console.log('📄 index.html:', fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден');
-    console.log('🎨 styles.css:', fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден');
-    console.log('⚡ script.js:', fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден');
+    if (webappEnabled) {
+        console.log('📁 Проверка файлов WebApp...');
+        console.log(`📁 Путь к WebApp: ${webappPath}`);
+        console.log(`📄 index.html: ${fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`🎨 styles.css: ${fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`⚡ script.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
+    } else {
+        console.log('🛈 WebApp отключен — проверка файлов пропущена'); // [Изменение] Меньше шума в логах
+    }
 
     // Запускаем Express сервер независимо от бота
     console.log('🌐 Запуск Express сервера...');
     const server = app.listen(PORT, () => {
-        console.log(`✅ WebApp сервер запущен на порту ${PORT}`);
+        console.log(`✅ Express сервер запущен на порту ${PORT}`);
         console.log(`🌐 Переменная PORT: ${process.env.PORT || 'не установлена'}`);
-        console.log(`🌐 WebApp доступен по адресу: http://localhost:${PORT}/webapp`);
-        console.log(`🌐 Railway URL: https://magnumtapbot-production.up.railway.app`);
-        console.log('✅ Express сервер готов принимать запросы');
+        // [Чистка логов] WebApp отключён, URL для WebApp скрыт чтобы не вводить в заблуждение
+        console.log('✅ Сервер готов принимать запросы');
     });
 
     // Обработка ошибок сервера
