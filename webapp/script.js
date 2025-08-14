@@ -957,5 +957,78 @@ function initUpgrades(){
 }
 
 function initTasks(){
-    // Daily/achievements will be rendered server-side later; here only claim flows could be wired to buttons if present.
+    const dailyContainer = document.getElementById('daily-tasks');
+    const achContainer = document.getElementById('achievement-tasks');
+    if (dailyContainer) {
+        dailyContainer.innerHTML = '';
+        (gameState.tasks.daily||[]).forEach(task => {
+            const item = document.createElement('div');
+            item.className = 'glass-card';
+            item.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                    <div>
+                        <div style="font-weight:700;">${task.name}</div>
+                        <div style="color:#aaa;font-size:12px;">${task.description}</div>
+                    </div>
+                    <button class="btn" ${task.completed?'disabled':''} data-task="${task.id}">${task.completed?'Готово':('Забрать '+task.reward+' MC')}</button>
+                </div>`;
+            dailyContainer.appendChild(item);
+        });
+        dailyContainer.querySelectorAll('button[data-task]').forEach(btn => {
+            btn.addEventListener('click', (e)=>{
+                const id = e.currentTarget.getAttribute('data-task');
+                // простая имитация получения награды локально
+                const t = gameState.tasks.daily.find(x=>x.id===id);
+                if (!t || t.completed) return;
+                t.completed = true;
+                gameState.magnumCoins += t.reward;
+                updateUI();
+                saveUserData();
+                initTasks();
+                showNotification('Награда получена','success');
+            });
+        });
+    }
+    if (achContainer) {
+        achContainer.innerHTML = '';
+        (gameState.tasks.achievements||[]).forEach(task => {
+            const item = document.createElement('div');
+            item.className = 'glass-card';
+            item.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                    <div>
+                        <div style="font-weight:700;">${task.name}</div>
+                        <div style="color:#aaa;font-size:12px;">${task.description}</div>
+                    </div>
+                    <div style="color:#aaa;font-size:12px;">${task.progress||0}/${task.target}</div>
+                </div>`;
+            achContainer.appendChild(item);
+        });
+    }
+
+    // actions: daily bonus and promo
+    const dailyBtn = document.getElementById('daily-bonus-btn');
+    if (dailyBtn && userId){
+        dailyBtn.addEventListener('click', async ()=>{
+            try{
+                const r = await fetch('/api/webapp/bonus',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId})});
+                if (r.status===429){ showNotification('Бонус уже получен сегодня','warning'); return; }
+                const j = await r.json();
+                if (j.success){ gameState.magnumCoins = j.magnumCoins; updateUI(); showNotification('Бонус получен: +'+j.reward+' MC','success'); }
+            }catch{ showNotification('Ошибка получения бонуса','error'); }
+        });
+    }
+    const promoInput = document.getElementById('promo-code');
+    const promoBtn = document.getElementById('apply-promo-btn');
+    if (promoBtn && promoInput && userId){
+        promoBtn.addEventListener('click', async ()=>{
+            const code = promoInput.value.trim(); if (!code) return;
+            try{
+                const r = await fetch('/api/webapp/promocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,code})});
+                const j = await r.json();
+                if (j.success){ gameState.magnumCoins = j.magnumCoins; updateUI(); showNotification('Промокод активирован: +'+j.reward+' MC','success'); promoInput.value=''; }
+                else { showNotification('Промокод недействителен','warning'); }
+            }catch{ showNotification('Ошибка активации промокода','error'); }
+        });
+    }
 }
