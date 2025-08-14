@@ -612,6 +612,16 @@ function updateUI() {
         const income = calculateMinerIncome();
         elements.minerIncome.textContent = `${income} MC/мин`;
     }
+
+    // Referrals UI
+    const refCount = document.getElementById('referrals-count');
+    const refEarn = document.getElementById('referral-earnings');
+    if (refCount) refCount.textContent = formatNumber(gameState.referralsCount||0);
+    if (refEarn) refEarn.textContent = formatNumber(gameState.referralEarnings||0);
+
+    // Achievements UI top counter
+    const achCompleted = document.getElementById('achievements-completed');
+    if (achCompleted) achCompleted.textContent = formatNumber(gameState.achievementsCompleted||0);
 }
 
 // Start animations
