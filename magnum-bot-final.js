@@ -416,6 +416,121 @@ app.post('/api/webapp/miner/toggle', async (req, res) => {
     }
 });
 
+// API для обмена валют (MC <-> Stars)
+app.post('/api/webapp/exchange', async (req, res) => {
+    try {
+        const { userId, from, amount } = req.body;
+        if (!userId || !from || typeof amount !== 'number' || amount <= 0) {
+            return res.status(400).json({ error: 'Bad request' });
+        }
+        const user = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const rate = await calculateExchangeRate();
+        const commission = (config.EXCHANGE_COMMISSION || 2.5) / 100;
+
+        let inc = { magnumCoins: 0, stars: 0 };
+        let reserveInc = { magnumCoins: 0, stars: 0 };
+
+        if (from === 'mc') {
+            if (user.magnumCoins < amount) return res.status(400).json({ error: 'Insufficient MC' });
+            const starsOut = amount * rate * (1 - commission);
+            inc.magnumCoins -= amount;
+            inc.stars += starsOut;
+            reserveInc.magnumCoins += amount * commission;
+        } else if (from === 'stars') {
+            if ((user.stars || 0) < amount) return res.status(400).json({ error: 'Insufficient Stars' });
+            const mcOut = (amount / rate) * (1 - commission);
+            inc.stars -= amount;
+            inc.magnumCoins += mcOut;
+            reserveInc.stars += amount * commission;
+        } else {
+            return res.status(400).json({ error: 'Unknown from' });
+        }
+
+        await db.collection('webappUsers').updateOne(
+            { userId: parseInt(userId) },
+            { $inc: inc, $set: { updatedAt: new Date() } }
+        );
+
+        await db.collection('reserve').updateOne(
+            { currency: 'main' },
+            { $inc: reserveInc },
+            { upsert: true }
+        );
+
+        const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+        res.json({ success: true, rate, magnumCoins: updated.magnumCoins, stars: updated.stars });
+    } catch (error) {
+        console.error('WebApp exchange error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// API ежедневного бонуса
+app.post('/api/webapp/bonus', async (req, res) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) return res.status(400).json({ error: 'Bad request' });
+        const user = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const base = config.DAILY_BONUS_BASE || 10;
+        const now = Date.now();
+        const last = user.lastBonusAt ? new Date(user.lastBonusAt).getTime() : 0;
+        const oneDay = 24 * 60 * 60 * 1000;
+        if (now - last < oneDay) {
+            return res.status(429).json({ error: 'Already claimed' });
+        }
+        const streak = (user.bonusStreak || 0) + (now - last < 2 * oneDay && last > 0 ? 1 : 1);
+        const reward = base * (1 + Math.min(streak, 40) * 0.1);
+        await db.collection('webappUsers').updateOne(
+            { userId: parseInt(userId) },
+            { $inc: { magnumCoins: Math.floor(reward) }, $set: { lastBonusAt: new Date(now), bonusStreak: streak, updatedAt: new Date(now) } }
+        );
+        const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+        res.json({ success: true, reward: Math.floor(reward), magnumCoins: updated.magnumCoins, bonusStreak: streak });
+    } catch (error) {
+        console.error('WebApp bonus error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// API активации промокода
+app.post('/api/webapp/promocode', async (req, res) => {
+    try {
+        const { userId, code } = req.body;
+        if (!userId || !code) return res.status(400).json({ error: 'Bad request' });
+        const promo = await db.collection('promocodes').findOne({ code: String(code).trim().toUpperCase(), isActive: true });
+        if (!promo) return res.status(404).json({ error: 'Invalid code' });
+        if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) return res.status(400).json({ error: 'Expired' });
+        if (promo.maxActivations && (promo.activations || 0) >= promo.maxActivations) return res.status(400).json({ error: 'Limit reached' });
+
+        await db.collection('webappUsers').updateOne(
+            { userId: parseInt(userId) },
+            { $inc: { magnumCoins: promo.reward || 0 }, $set: { updatedAt: new Date() } }
+        );
+        await db.collection('promocodes').updateOne(
+            { _id: promo._id },
+            { $inc: { activations: 1 } }
+        );
+        const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+        res.json({ success: true, reward: promo.reward || 0, magnumCoins: updated.magnumCoins });
+    } catch (error) {
+        console.error('WebApp promocode error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// API информации о боте
+app.get('/api/bot-info', async (req, res) => {
+    try {
+        const username = process.env.BOT_PUBLIC_USERNAME || (bot?.botInfo?.username) || null;
+        res.json({ success: true, username });
+    } catch (error) {
+        res.json({ success: true, username: null });
+    }
+});
+
 // ==================== КОНФИГУРАЦИЯ ====================
 
 // Глобальные переменные для хранения курса за 24 часа

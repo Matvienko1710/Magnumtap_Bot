@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import './app.css';
 import Upgrades from './Upgrades';
 import Tasks from './Tasks';
+import Exchange from './Exchange';
+import Referrals from './Referrals';
+import Achievements from './Achievements';
+import Settings from './Settings';
 
 type UserData = {
 	userId?: number;
@@ -17,6 +21,9 @@ type UserData = {
 	farmCooldownMs?: number;
 	upgrades?: any;
 	tasks?: any;
+	referralsCount?: number;
+	referralEarnings?: number;
+	settings?: any;
 };
 
 const sections = ['farming','upgrades','exchange','miner','tasks','referrals','achievements','settings'] as const;
@@ -68,9 +75,12 @@ export default function App() {
 			<main className="main">
 				{active==='farming' && <Farming user={user} setUser={setUser} nextAvailableAt={nextAvailableAt} />}
 				{active==='upgrades' && <Upgrades user={user} setUser={setUser} />}
-				{active==='tasks' && <Tasks user={user} setUser={setUser} />}
+				{active==='exchange' && <Exchange user={user} setUser={setUser} />}
 				{active==='miner' && <Miner user={user} setUser={setUser} />}
-				{/* TODO: exchange/referrals/achievements/settings */}
+				{active==='tasks' && <Tasks user={user} setUser={setUser} />}
+				{active==='referrals' && <Referrals user={user} />}
+				{active==='achievements' && <Achievements user={user} />}
+				{active==='settings' && <Settings user={user} setUser={setUser} />}
 			</main>
 			<nav className="tabs">
 				{sections.map(s=> (
