@@ -19,12 +19,8 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Раздача WebApp отключена по запросу
-// app.use('/webapp', express.static(path.join(__dirname, 'webapp'), {
-//     maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
-//     etag: true,
-//     immutable: process.env.NODE_ENV === 'production'
-// }));
+// Раздача WebApp отключена по запросу (исторический код удалён для чистоты)
+
 
 
 // Тестовый маршрут для проверки работы сервера
@@ -40,7 +36,7 @@ app.get('/', (req, res) => {
 
 // Тестовый маршрут для проверки статических файлов
 app.get('/test', (req, res) => {
-    const fs = require('fs');
+    // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
     const webappPath = path.join(__dirname, 'webapp');
     const indexPath = path.join(webappPath, 'index.html');
     const stylesPath = path.join(webappPath, 'styles.css');
@@ -12406,7 +12402,7 @@ async function startBot() {
     }, 10 * 60 * 1000);
     
     // Проверяем существование файлов WebApp
-    const fs = require('fs');
+    // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
     const webappPath = path.join(__dirname, 'webapp');
     const indexPath = path.join(webappPath, 'index.html');
     const stylesPath = path.join(webappPath, 'styles.css');
@@ -12496,7 +12492,8 @@ async function startBot() {
         farmCooldown: config.FARM_COOLDOWN,
         farmReward: config.FARM_BASE_REWARD,
         bonusBase: config.DAILY_BONUS_BASE,
-        minerReward: config.MINER_REWARD,
+        // [Исправление] Неверное имя параметра, используем корректный ключ
+        minerReward: config.MINER_REWARD_PER_MINUTE,
         referralReward: config.REFERRAL_REWARD
       }
     });
