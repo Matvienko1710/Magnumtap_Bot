@@ -26,12 +26,6 @@ app.use('/webapp', express.static(path.join(__dirname, 'webapp'), {
     immutable: process.env.NODE_ENV === 'production'
 }));
 
-// Раздача React WebApp (собранного Vite) по /app
-app.use('/app', express.static(path.join(__dirname, 'webapp-react', 'dist'), {
-    maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
-    etag: true,
-    immutable: process.env.NODE_ENV === 'production'
-}));
 
 // Тестовый маршрут для проверки работы сервера
 app.get('/', (req, res) => {
