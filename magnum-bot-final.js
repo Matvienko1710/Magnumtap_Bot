@@ -26,12 +26,6 @@ app.use('/webapp', express.static(path.join(__dirname, 'webapp'), {
     immutable: process.env.NODE_ENV === 'production'
 }));
 
-// Раздача React WebApp (собранного Vite) по /app
-app.use('/app', express.static(path.join(__dirname, 'webapp-react', 'dist'), {
-    maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
-    etag: true,
-    immutable: process.env.NODE_ENV === 'production'
-}));
 
 // Тестовый маршрут для проверки работы сервера
 app.get('/', (req, res) => {
@@ -432,18 +426,21 @@ app.post('/api/webapp/exchange', async (req, res) => {
         let inc = { magnumCoins: 0, stars: 0 };
         let reserveInc = { magnumCoins: 0, stars: 0 };
 
+        let received = 0;
         if (from === 'mc') {
             if (user.magnumCoins < amount) return res.status(400).json({ error: 'Insufficient MC' });
             const starsOut = amount * rate * (1 - commission);
             inc.magnumCoins -= amount;
             inc.stars += starsOut;
             reserveInc.magnumCoins += amount * commission;
+            received = starsOut;
         } else if (from === 'stars') {
             if ((user.stars || 0) < amount) return res.status(400).json({ error: 'Insufficient Stars' });
             const mcOut = (amount / rate) * (1 - commission);
             inc.stars -= amount;
             inc.magnumCoins += mcOut;
             reserveInc.stars += amount * commission;
+            received = mcOut;
         } else {
             return res.status(400).json({ error: 'Unknown from' });
         }
@@ -458,6 +455,10 @@ app.post('/api/webapp/exchange', async (req, res) => {
             { $inc: reserveInc },
             { upsert: true }
         );
+
+        await db.collection('exchangeHistory').insertOne({
+            userId: parseInt(userId), direction: from, amount, rate, received, commission: commission * 100, timestamp: new Date()
+        });
 
         const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
         res.json({ success: true, rate, magnumCoins: updated.magnumCoins, stars: updated.stars });
@@ -528,6 +529,18 @@ app.get('/api/webapp/exchange-rate', async (req, res) => {
         res.json({ success: true, rate });
     } catch (error) {
         res.status(500).json({ success: false });
+    }
+});
+
+// История обменов пользователя
+app.get('/api/webapp/exchange-history', async (req, res) => {
+    try {
+        const userId = parseInt(String(req.query.user_id||'0'));
+        if (!userId) return res.status(400).json({ success:false });
+        const items = await db.collection('exchangeHistory').find({ userId }).sort({ timestamp:-1 }).limit(50).toArray();
+        res.json({ success:true, items });
+    } catch (error) {
+        res.status(500).json({ success:false });
     }
 });
 

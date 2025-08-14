@@ -65,6 +65,17 @@ const elements = {
     // Miner
     minerStatus: document.getElementById('miner-status'),
     minerIncome: document.getElementById('miner-income'),
+
+    // Exchange
+    exchangeRateText: document.getElementById('exchange-rate'),
+    exchangeAmount: document.getElementById('exchange-amount'),
+    exchangeFrom: document.getElementById('exchange-from'),
+    exchangeResult: document.getElementById('exchange-result'),
+    exchangeBtn: document.getElementById('exchange-btn'),
+    
+    // Referrals
+    referralLinkInput: document.getElementById('referral-link'),
+    copyReferralBtn: document.getElementById('copy-referral-btn'),
     
     // Navigation
     navItems: document.querySelectorAll('.nav-item'),
@@ -591,6 +602,9 @@ function updateUI() {
 
 // Start animations
 function startAnimations() {
+    initExchange();
+    initReferrals();
+
     // Add CSS animations
     const style = document.createElement('style');
     style.textContent = `
@@ -825,3 +839,68 @@ document.addEventListener('DOMContentLoaded', initWebApp);
 // Export for debugging
 window.gameState = gameState;
 window.elements = elements;
+
+async function initExchange(){
+    try{
+        // load rate
+        const r = await fetch('/api/webapp/exchange-rate');
+        const j = await r.json();
+        if(j?.success && elements.exchangeRateText){
+            elements.exchangeRateText.textContent = (j.rate||1).toFixed(6);
+        }
+        // listeners
+        if (elements.exchangeAmount && elements.exchangeFrom && elements.exchangeResult){
+            const updatePreview = ()=>{
+                const amount = Number(elements.exchangeAmount.value||0);
+                const from = elements.exchangeFrom.value;
+                const rate = Number(elements.exchangeRateText?.textContent||1);
+                const commission = 0.025;
+                if(!amount||amount<=0){ elements.exchangeResult.textContent = '0'; return; }
+                let out = 0;
+                if(from==='mc') out = amount*rate*(1-commission); else out = (amount/rate)*(1-commission);
+                elements.exchangeResult.textContent = out.toFixed(6);
+            };
+            elements.exchangeAmount.addEventListener('input', updatePreview);
+            elements.exchangeFrom.addEventListener('change', updatePreview);
+            updatePreview();
+        }
+        if (elements.exchangeBtn){
+            elements.exchangeBtn.addEventListener('click', async ()=>{
+                try{
+                    const amount = Number(elements.exchangeAmount.value||0);
+                    const from = elements.exchangeFrom.value;
+                    if (!userId){ showNotification('Авторизуйтесь в Telegram WebApp','warning'); return; }
+                    if (!amount||amount<=0){ return; }
+                    const resp = await fetch('/api/webapp/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,from,amount})});
+                    const jj = await resp.json();
+                    if (jj.success){
+                        gameState.magnumCoins = jj.magnumCoins;
+                        gameState.stars = jj.stars;
+                        updateUI();
+                        elements.exchangeAmount.value = '';
+                        elements.exchangeResult.textContent = '0';
+                        if (elements.exchangeRateText) elements.exchangeRateText.textContent = (jj.rate||1).toFixed(6);
+                        showNotification('Обмен выполнен','success');
+                    } else {
+                        showNotification('Ошибка обмена','error');
+                    }
+                }catch(e){ showNotification('Ошибка обмена','error'); }
+            });
+        }
+    }catch{}
+}
+
+async function initReferrals(){
+    try{
+        if (!elements.referralLinkInput || !elements.copyReferralBtn) return;
+        const info = await fetch('/api/bot-info').then(r=>r.json()).catch(()=>({success:false}));
+        const bot = info?.username;
+        if (userId && bot){
+            const link = `https://t.me/${bot}?start=${userId}`;
+            elements.referralLinkInput.value = link;
+            elements.copyReferralBtn.addEventListener('click', async ()=>{
+                try{ await navigator.clipboard.writeText(link); showNotification('Ссылка скопирована','success'); }catch{}
+            });
+        }
+    }catch{}
+}
