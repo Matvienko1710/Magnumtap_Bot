@@ -12403,25 +12403,29 @@ async function startBot() {
     
     // Проверяем существование файлов WebApp
     // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
+    const webappEnabled = process.env.WEBAPP_ENABLED === 'true'; // [Изменение] Управляем логами WebApp через переменную окружения
     const webappPath = path.join(__dirname, 'webapp');
     const indexPath = path.join(webappPath, 'index.html');
     const stylesPath = path.join(webappPath, 'styles.css');
     const scriptPath = path.join(webappPath, 'script.js');
 
-    console.log('📁 Проверка файлов WebApp...');
-    console.log('📁 Путь к WebApp:', webappPath);
-    console.log('📄 index.html:', fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден');
-    console.log('🎨 styles.css:', fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден');
-    console.log('⚡ script.js:', fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден');
+    if (webappEnabled) {
+        console.log('📁 Проверка файлов WebApp...');
+        console.log('📁 Путь к WebApp:', webappPath);
+        console.log('📄 index.html:', fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден');
+        console.log('🎨 styles.css:', fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден');
+        console.log('⚡ script.js:', fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден');
+    } else {
+        console.log('🛈 WebApp отключен — проверка файлов пропущена'); // [Изменение] Меньше шума в логах
+    }
 
     // Запускаем Express сервер независимо от бота
     console.log('🌐 Запуск Express сервера...');
     const server = app.listen(PORT, () => {
-        console.log(`✅ WebApp сервер запущен на порту ${PORT}`);
+        console.log(`✅ Express сервер запущен на порту ${PORT}`);
         console.log(`🌐 Переменная PORT: ${process.env.PORT || 'не установлена'}`);
-        console.log(`🌐 WebApp доступен по адресу: http://localhost:${PORT}/webapp`);
-        console.log(`🌐 Railway URL: https://magnumtapbot-production.up.railway.app`);
-        console.log('✅ Express сервер готов принимать запросы');
+        // [Чистка логов] WebApp отключён, URL для WebApp скрыт чтобы не вводить в заблуждение
+        console.log('✅ Сервер готов принимать запросы');
     });
 
     // Обработка ошибок сервера
