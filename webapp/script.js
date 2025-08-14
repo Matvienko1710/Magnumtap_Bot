@@ -218,6 +218,10 @@ async function initGame() {
         // Update UI
         updateUI();
         
+        // Init feature modules
+        initUpgrades();
+        initTasks();
+        
         // Start systems
         startAutoClicker();
         startMiner();
@@ -230,6 +234,15 @@ async function initGame() {
         if (typeof window.__farmNextAvailableAt === 'number' && Date.now() < window.__farmNextAvailableAt) {
             farmNextAvailableAt = window.__farmNextAvailableAt;
             startFarmCooldownProgress();
+        }
+        
+        // Telegram MainButton => Tasks
+        if (tg && tg.MainButton) {
+            try {
+                tg.MainButton.setText('Задания');
+                tg.MainButton.show();
+                tg.MainButton.onClick(() => switchSection('tasks'));
+            } catch (e) {}
         }
         
         console.log('🎮 Игра инициализирована');
@@ -903,4 +916,46 @@ async function initReferrals(){
             });
         }
     }catch{}
+}
+
+function initUpgrades(){
+    const grid = document.getElementById('upgrades-grid');
+    if (!grid) return;
+    const render = ()=>{
+        grid.innerHTML = '';
+        const entries = Object.entries(gameState.upgrades);
+        entries.forEach(([key, up])=>{
+            const card = document.createElement('div');
+            card.className = 'glass-card';
+            card.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                    <div>
+                        <div style="font-weight:700;text-transform:capitalize;">${key}</div>
+                        <div style="color:#aaa;font-size:12px;">Уровень: ${up.level}</div>
+                    </div>
+                    <button class="btn" data-up="${key}">Купить за ${up.cost} MC</button>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+        grid.querySelectorAll('button[data-up]').forEach(btn=>{
+            btn.addEventListener('click', async (e)=>{
+                const k = e.currentTarget.getAttribute('data-up');
+                const up = gameState.upgrades[k];
+                if (gameState.magnumCoins < up.cost) { showNotification('Недостаточно MC','warning'); return; }
+                gameState.magnumCoins -= up.cost;
+                up.level += 1;
+                up.cost = Math.floor(up.baseCost * Math.pow(up.multiplier, up.level));
+                if (k === 'clickPower') gameState.cps = Math.max(1, gameState.cps) + 1;
+                updateUI();
+                saveUserData();
+                render();
+            });
+        });
+    };
+    render();
+}
+
+function initTasks(){
+    // Daily/achievements will be rendered server-side later; here only claim flows could be wired to buttons if present.
 }
