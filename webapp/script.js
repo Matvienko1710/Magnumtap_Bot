@@ -864,6 +864,10 @@ document.addEventListener('DOMContentLoaded', initWebApp);
 window.gameState = gameState;
 window.elements = elements;
 
+// Connectivity notifications
+window.addEventListener('online', ()=> showNotification('Онлайн','success'));
+window.addEventListener('offline', ()=> showNotification('Оффлайн','warning'));
+
 async function initExchange(){
     try{
         const rateNode = elements.exchangeRateText;
@@ -882,6 +886,26 @@ async function initExchange(){
                 }
             }
         }
+        // auto refresh rate
+        let lastRate = Number(rateNode?.textContent||'0');
+        setInterval(async ()=>{
+            try{
+                const rr = await fetch('/api/webapp/exchange-rate');
+                const jj = await rr.json();
+                if (jj?.success && rateNode){
+                    const prev = lastRate>0?lastRate:Number(rateNode.textContent||'0');
+                    rateNode.textContent = (jj.rate||1).toFixed(6);
+                    lastRate = jj.rate||1;
+                    const diff = prev>0? ((jj.rate - prev)/prev)*100 : 0;
+                    const changeNode = document.getElementById('rate-change');
+                    if (changeNode){
+                        changeNode.innerHTML = `${diff>=0?'<i class=\"fas fa-arrow-up\"></i>':'<i class=\"fas fa-arrow-down\"></i>'} <span>${(diff).toFixed(2)}%</span>`;
+                        changeNode.style.color = diff>=0? 'var(--color-success)' : 'var(--color-danger)';
+                    }
+                }
+            }catch{}
+        }, 30000);
+        
         // listeners
         if (elements.exchangeAmount && elements.exchangeFrom && elements.exchangeResult){
             const updatePreview = ()=>{
@@ -899,7 +923,11 @@ async function initExchange(){
             updatePreview();
         }
         if (elements.exchangeBtn){
+            let exchanging = false;
             elements.exchangeBtn.addEventListener('click', async ()=>{
+                if (exchanging) return;
+                exchanging = true;
+                elements.exchangeBtn.disabled = true;
                 try{
                     const amount = Number(elements.exchangeAmount.value||0);
                     const from = elements.exchangeFrom.value;
@@ -919,6 +947,10 @@ async function initExchange(){
                         showNotification('Ошибка обмена','error');
                     }
                 }catch(e){ showNotification('Ошибка обмена','error'); }
+                finally {
+                    exchanging = false;
+                    elements.exchangeBtn.disabled = false;
+                }
             });
         }
         // history
@@ -932,9 +964,9 @@ async function initExchange(){
                         const row = document.createElement('div');
                         row.className = 'glass-card';
                         const dir = it.direction==='mc' ? 'MC→Stars' : 'Stars→MC';
-                        row.innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+                        row.innerHTML = `<div style=\"display:flex;justify-content:space-between;gap:12px;align-items:center;\">
                             <div>${dir}</div>
-                            <div style="color:#aaa;font-size:12px;">${new Date(it.timestamp).toLocaleString()}</div>
+                            <div style=\"color:#aaa;font-size:12px;\">${new Date(it.timestamp).toLocaleString()}</div>
                         </div>`;
                         historyWrap.appendChild(row);
                     });
@@ -1030,9 +1062,8 @@ function initTasks(){
             dailyContainer.appendChild(item);
         });
         dailyContainer.querySelectorAll('button[data-task]').forEach(btn => {
-            btn.addEventListener('click', (e)=>{
+            btn.addEventListener('click', async (e)=>{
                 const id = e.currentTarget.getAttribute('data-task');
-                // простая имитация получения награды локально
                 const t = gameState.tasks.daily.find(x=>x.id===id);
                 if (!t || t.completed) return;
                 t.completed = true;
@@ -1049,15 +1080,31 @@ function initTasks(){
         (gameState.tasks.achievements||[]).forEach(task => {
             const item = document.createElement('div');
             item.className = 'glass-card';
+            const canClaim = (task.completed && !task.claimed);
             item.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
                     <div>
                         <div style="font-weight:700;">${task.name}</div>
                         <div style="color:#aaa;font-size:12px;">${task.description}</div>
+                        <div style="color:#aaa;font-size:12px;margin-top:4px;">Прогресс: ${task.progress||0}/${task.target}</div>
                     </div>
-                    <div style="color:#aaa;font-size:12px;">${task.progress||0}/${task.target}</div>
+                    ${canClaim?`<button class=\"btn\" data-ach=\"${task.id}\">Забрать ${task.reward} MC</button>`:''}
                 </div>`;
             achContainer.appendChild(item);
+        });
+        achContainer.querySelectorAll('button[data-ach]').forEach(btn=>{
+            btn.addEventListener('click', async (e)=>{
+                const id = e.currentTarget.getAttribute('data-ach');
+                const t = gameState.tasks.achievements.find(x=>x.id===id);
+                if (!t || !t.completed || t.claimed) return;
+                t.claimed = true;
+                gameState.magnumCoins += t.reward;
+                gameState.achievementsCompleted = (gameState.achievementsCompleted||0)+1;
+                updateUI();
+                saveUserData();
+                initTasks();
+                showNotification('Достижение получено','success');
+            });
         });
     }
 
@@ -1087,6 +1134,20 @@ function initTasks(){
         });
     }
 }
+
+// Settings: reset data
+(function initSettings(){
+    const resetBtn = document.getElementById('reset-data-btn');
+    if (resetBtn){
+        resetBtn.addEventListener('click', ()=>{
+            try{
+                localStorage.removeItem('magnumStarsWebApp');
+                showNotification('Данные сброшены','success');
+                setTimeout(()=> location.reload(), 500);
+            }catch{}
+        });
+    }
+})();
 
 function initMinerUpgrades(){
     const wrap = document.getElementById('miner-upgrades');
