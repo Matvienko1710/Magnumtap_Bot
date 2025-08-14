@@ -221,6 +221,7 @@ async function initGame() {
         // Init feature modules
         initUpgrades();
         initTasks();
+        initMinerUpgrades();
         
         // Start systems
         startAutoClicker();
@@ -1074,5 +1075,48 @@ function initTasks(){
                 else { showNotification('Промокод недействителен','warning'); }
             }catch{ showNotification('Ошибка активации промокода','error'); }
         });
+    }
+}
+
+function initMinerUpgrades(){
+    const wrap = document.getElementById('miner-upgrades');
+    if (!wrap) return;
+    const render=()=>{
+        wrap.innerHTML='';
+        const entries = Object.entries(gameState.minerUpgrades);
+        entries.forEach(([k,u])=>{
+            const row = document.createElement('div');
+            row.className='glass-card';
+            row.innerHTML=`
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                    <div>
+                        <div style="font-weight:700;text-transform:capitalize;">${k}</div>
+                        <div style="color:#aaa;font-size:12px;">Уровень: ${u.level}</div>
+                    </div>
+                    <button class="btn" data-miner-up="${k}">Купить за ${u.cost} MC</button>
+                </div>`;
+            wrap.appendChild(row);
+        });
+        wrap.querySelectorAll('button[data-miner-up]').forEach(btn=>{
+            btn.addEventListener('click', async (e)=>{
+                const k = e.currentTarget.getAttribute('data-miner-up');
+                const u = gameState.minerUpgrades[k];
+                if (gameState.magnumCoins < u.cost){ showNotification('Недостаточно MC','warning'); return; }
+                gameState.magnumCoins -= u.cost;
+                u.level += 1;
+                u.cost = Math.floor(u.baseCost * Math.pow(u.multiplier, u.level));
+                updateUI();
+                saveUserData();
+                render();
+            });
+        });
+    };
+    render();
+
+    // Toggle button sync
+    const toggle = document.getElementById('miner-toggle-btn');
+    const status = document.getElementById('miner-status');
+    if (toggle && status){
+        status.textContent = gameState.minerActive ? 'Активен' : 'Неактивен';
     }
 }
