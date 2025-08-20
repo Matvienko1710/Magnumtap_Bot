@@ -2504,6 +2504,12 @@ async function doFarm(ctx, user) {
       if (levelResult.levelUp) {
         log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
       }
+      
+      // Проверяем и обновляем достижения
+      const achievementsResult = await checkAndUpdateAchievements(updatedUser);
+      if (achievementsResult.newAchievements.length > 0) {
+        log(`🏆 Пользователь ${user.id} получил ${achievementsResult.newAchievements.length} новых достижений!`);
+      }
     }
     
     // Обновляем прогресс ежедневного задания "Фармер дня"
@@ -6083,6 +6089,89 @@ function getAchievementsList(user) {
     }
   ];
 }
+
+// Функция для проверки и выдачи достижений
+async function checkAndUpdateAchievements(user) {
+  try {
+    log(`🏆 Проверка достижений для пользователя ${user.id}`);
+    
+    const achievements = getAchievementsList(user);
+    const userAchievements = user.achievements || [];
+    const userAchievementsProgress = user.achievementsProgress || {};
+    
+    let newAchievements = [];
+    let totalReward = 0;
+    
+    // Проверяем каждое достижение
+    for (const achievement of achievements) {
+      // Если достижение выполнено и еще не получено
+      if (achievement.condition && !userAchievements.includes(achievement.id)) {
+        newAchievements.push(achievement);
+        
+        // Вычисляем награду
+        const rewardAmount = parseInt(achievement.reward.split(' ')[0]);
+        totalReward += rewardAmount;
+        
+        log(`🎉 Пользователь ${user.id} получил достижение: ${achievement.title} (${achievement.reward})`);
+      }
+      
+      // Обновляем прогресс
+      userAchievementsProgress[achievement.id] = {
+        progress: achievement.progress,
+        target: achievement.target,
+        completed: achievement.condition,
+        lastUpdated: new Date()
+      };
+    }
+    
+    // Если есть новые достижения, выдаем награды
+    if (newAchievements.length > 0) {
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { 
+          $inc: { 
+            magnumCoins: totalReward,
+            totalEarnedMagnumCoins: totalReward,
+            experience: Math.floor(totalReward * 5),
+            achievementsCount: newAchievements.length
+          },
+          $push: { 
+            achievements: { $each: newAchievements.map(a => a.id) }
+          },
+          $set: { 
+            achievementsProgress: userAchievementsProgress,
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      // Очищаем кеш
+      userCache.delete(user.id);
+      
+      log(`✅ Пользователь ${user.id} получил ${newAchievements.length} новых достижений, награда: ${totalReward} MC`);
+      
+      return {
+        newAchievements,
+        totalReward,
+        totalAchievements: (user.achievements || []).length + newAchievements.length
+      };
+    }
+    
+    return {
+      newAchievements: [],
+      totalReward: 0,
+      totalAchievements: user.achievements?.length || 0
+    };
+    
+  } catch (error) {
+    logError(error, `Проверка достижений для пользователя ${user.id}`);
+    return {
+      newAchievements: [],
+      totalReward: 0,
+      totalAchievements: user.achievements?.length || 0
+    };
+  }
+}
 async function showAchievementsProgress(ctx, user) {
   try {
     log(`📊 Показ прогресса достижений для пользователя ${user.id}`);
@@ -8792,6 +8881,141 @@ async function handleAdminCreatePromocode(ctx, user, text) {
   } catch (error) {
     logError(error, `Создание промокода админом ${user.id}`);
     await ctx.reply('❌ Ошибка создания промокода. Попробуйте позже.');
+  }
+}
+
+// ==================== АКТИВАЦИЯ ПРОМОКОДОВ ====================
+async function handleUserEnterPromocode(ctx, user, text) {
+  try {
+    log(`🎫 Пользователь ${user.id} активирует промокод: "${text}"`);
+    
+    const code = text.trim().toUpperCase();
+    
+    // Валидация кода
+    if (!code || code.length < 3) {
+      await ctx.reply('❌ Неверный код промокода! Код должен содержать минимум 3 символа.');
+      return;
+    }
+    
+    // Проверяем, не использовал ли пользователь уже этот промокод
+    const usedPromocodes = user.usedPromocodes || [];
+    if (usedPromocodes.includes(code)) {
+      await ctx.reply('❌ Вы уже использовали этот промокод!');
+      return;
+    }
+    
+    // Ищем промокод в базе данных
+    const promocode = await db.collection('promocodes').findOne({ 
+      code: code, 
+      isActive: true 
+    });
+    
+    if (!promocode) {
+      await ctx.reply('❌ Промокод не найден или неактивен!');
+      return;
+    }
+    
+    // Проверяем срок действия
+    if (promocode.expiresAt && new Date(promocode.expiresAt) < new Date()) {
+      await ctx.reply('❌ Промокод истек!');
+      return;
+    }
+    
+    // Проверяем лимит активаций
+    if (promocode.maxActivations && promocode.activations >= promocode.maxActivations) {
+      await ctx.reply('❌ Лимит активаций промокода исчерпан!');
+      return;
+    }
+    
+    // Выдаем награду
+    const reward = promocode.reward || 0;
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $inc: { 
+          magnumCoins: reward,
+          totalEarnedMagnumCoins: reward,
+          experience: Math.floor(reward * 5)
+        },
+        $push: { usedPromocodes: code },
+        $unset: { adminState: "" },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
+    // Обновляем статистику промокода
+    await db.collection('promocodes').updateOne(
+      { _id: promocode._id },
+      { 
+        $inc: { 
+          activations: 1,
+          totalActivations: 1,
+          totalRewards: reward
+        },
+        $push: { 
+          activationsHistory: {
+            userId: user.id,
+            username: user.username || 'Неизвестно',
+            activatedAt: new Date(),
+            reward: reward
+          }
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
+      if (levelResult.levelUp) {
+        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+      }
+    }
+    
+    // Отправляем уведомление в канал (если настроен)
+    if (config.PROMO_NOTIFICATIONS_CHAT) {
+      try {
+        const notificationMessage = 
+          `🎫 *Активация промокода!*\n\n` +
+          `👤 Пользователь: ${user.firstName || 'Неизвестно'}\n` +
+          `🆔 ID: \`${user.id}\`\n` +
+          `🎫 Промокод: \`${code}\`\n` +
+          `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+          `📅 Время: ${new Date().toLocaleString('ru-RU')}`;
+        
+        await bot.telegram.sendMessage(config.PROMO_NOTIFICATIONS_CHAT, notificationMessage, {
+          parse_mode: 'Markdown'
+        });
+      } catch (notifyError) {
+        logError(notifyError, 'Отправка уведомления об активации промокода');
+      }
+    }
+    
+    // Отправляем подтверждение пользователю
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад к промокодам', 'promocode')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод активирован успешно!*\n\n` +
+      `🎫 Код: \`${code}\`\n` +
+      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `📅 Активирован: ${new Date().toLocaleString('ru-RU')}\n\n` +
+      `🎉 Поздравляем с получением награды!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Промокод ${code} успешно активирован пользователем ${user.id}, награда: ${reward} MC`);
+    
+  } catch (error) {
+    logError(error, `Активация промокода пользователем ${user.id}`);
+    await ctx.reply('❌ Ошибка активации промокода. Попробуйте позже.');
   }
 }
 
@@ -12249,6 +12473,42 @@ bot.action('promocode', async (ctx) => {
     await showPromocodeMenu(ctx, user);
   } catch (error) {
     logError(error, 'Меню промокодов');
+  }
+});
+
+bot.action('enter_promocode', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Устанавливаем состояние для ввода промокода
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'entering_promocode', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'promocode')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎫 *Ввод промокода*\n\n` +
+      `📝 Введите код промокода:\n\n` +
+      `💡 *Пример:* WELCOME2024\n\n` +
+      `⚠️ *Важно:*\n` +
+      `├ Каждый промокод можно использовать только один раз\n` +
+      `├ Промокод должен быть активным\n` +
+      `└ Не должно быть истекшим\n\n` +
+      `🎯 Введите промокод:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Ввод промокода');
+    await ctx.answerCbQuery('❌ Ошибка ввода промокода');
   }
 });
 
