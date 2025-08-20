@@ -860,13 +860,30 @@ const statsCache = new Map();
 function getCachedUser(id) {
   const cached = userCache.get(id);
   if (cached && (Date.now() - cached.timestamp) < config.USER_CACHE_TTL) {
-    return cached.user;
+    // Проверяем валидность данных пользователя
+    if (cached.user && typeof cached.user.magnumCoins === 'number' && typeof cached.user.stars === 'number') {
+      return cached.user;
+    } else {
+      // Если данные невалидны, удаляем из кеша
+      userCache.delete(id);
+      return null;
+    }
   }
   return null;
 }
 
 function setCachedUser(id, user) {
-  userCache.set(id, { user, timestamp: Date.now() });
+  // Проверяем валидность данных пользователя перед сохранением в кеш
+  if (user && typeof user.magnumCoins === 'number' && typeof user.stars === 'number') {
+    userCache.set(id, { user, timestamp: Date.now() });
+  } else {
+    // Если данные невалидны, не сохраняем в кеш и логируем ошибку
+    console.warn(`⚠️ Попытка сохранения невалидных данных пользователя ${id} в кеш:`, {
+      magnumCoins: user?.magnumCoins,
+      stars: user?.stars,
+      type: typeof user?.magnumCoins
+    });
+  }
 }
 
 function getCachedStats(key) {
@@ -879,6 +896,34 @@ function getCachedStats(key) {
 
 function setCachedStats(key, data) {
   statsCache.set(key, { data, timestamp: Date.now() });
+}
+
+// Функция для очистки невалидных данных из кеша
+function cleanupInvalidCache() {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  for (const [id, cached] of userCache.entries()) {
+    if (cached && cached.user) {
+      // Проверяем валидность данных
+      if (typeof cached.user.magnumCoins !== 'number' || typeof cached.user.stars !== 'number') {
+        userCache.delete(id);
+        cleanedCount++;
+        console.log(`🧹 Удален невалидный кеш пользователя ${id}`);
+      }
+      // Проверяем TTL
+      else if (now - cached.timestamp > config.USER_CACHE_TTL) {
+        userCache.delete(id);
+        cleanedCount++;
+      }
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`🧹 Очищено ${cleanedCount} записей из кеша пользователей`);
+  }
+  
+  return cleanedCount;
 }
 
 // ==================== УТИЛИТЫ ====================
@@ -1482,6 +1527,30 @@ async function getUser(id, ctx = null) {
       await db.collection('users').updateOne(
         { id: id },
         { $set: updateData }
+      );
+    }
+    
+    // Проверяем валидность данных пользователя перед возвратом
+    if (typeof user.magnumCoins !== 'number' || typeof user.stars !== 'number') {
+      console.error(`❌ Невалидные данные пользователя ${id}:`, {
+        magnumCoins: user.magnumCoins,
+        stars: user.stars,
+        type: typeof user.magnumCoins
+      });
+      // Исправляем невалидные данные
+      user.magnumCoins = user.magnumCoins || config.INITIAL_MAGNUM_COINS;
+      user.stars = user.stars || config.INITIAL_STARS;
+      
+      // Обновляем в базе данных
+      await db.collection('users').updateOne(
+        { id: id },
+        { 
+          $set: { 
+            magnumCoins: user.magnumCoins,
+            stars: user.stars,
+            updatedAt: new Date()
+          }
+        }
       );
     }
     
@@ -12992,6 +13061,13 @@ async function startBot() {
     await bot.launch();
     
     console.log('🚀 Magnum Stars Bot успешно запущен!');
+    
+    // Запускаем периодическую очистку кеша
+    setInterval(() => {
+      cleanupInvalidCache();
+    }, 5 * 60 * 1000); // Каждые 5 минут
+    
+    console.log('🧹 Периодическая очистка кеша запущена (каждые 5 минут)');
   } catch (error) {
     console.error('❌ Ошибка при запуске Magnum Stars Bot:', error);
     process.exit(1);
