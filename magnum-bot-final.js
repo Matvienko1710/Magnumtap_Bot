@@ -861,11 +861,13 @@ function getCachedUser(id) {
   const cached = userCache.get(id);
   if (cached && (Date.now() - cached.timestamp) < config.USER_CACHE_TTL) {
     // Проверяем валидность данных пользователя
-    if (cached.user && typeof cached.user.magnumCoins === 'number' && typeof cached.user.stars === 'number') {
+    if (cached.user && typeof cached.user.magnumCoins === 'number' && typeof cached.user.stars === 'number' &&
+        !isNaN(cached.user.magnumCoins) && !isNaN(cached.user.stars)) {
       return cached.user;
     } else {
       // Если данные невалидны, удаляем из кеша
       userCache.delete(id);
+      console.warn(`🧹 Удален невалидный кеш пользователя ${id} (NaN или null значения)`);
       return null;
     }
   }
@@ -874,14 +876,17 @@ function getCachedUser(id) {
 
 function setCachedUser(id, user) {
   // Проверяем валидность данных пользователя перед сохранением в кеш
-  if (user && typeof user.magnumCoins === 'number' && typeof user.stars === 'number') {
+  if (user && typeof user.magnumCoins === 'number' && typeof user.stars === 'number' &&
+      !isNaN(user.magnumCoins) && !isNaN(user.stars)) {
     userCache.set(id, { user, timestamp: Date.now() });
   } else {
     // Если данные невалидны, не сохраняем в кеш и логируем ошибку
     console.warn(`⚠️ Попытка сохранения невалидных данных пользователя ${id} в кеш:`, {
       magnumCoins: user?.magnumCoins,
       stars: user?.stars,
-      type: typeof user?.magnumCoins
+      type: typeof user?.magnumCoins,
+      isNaN_magnumCoins: isNaN(user?.magnumCoins),
+      isNaN_stars: isNaN(user?.stars)
     });
   }
 }
@@ -906,10 +911,11 @@ function cleanupInvalidCache() {
   for (const [id, cached] of userCache.entries()) {
     if (cached && cached.user) {
       // Проверяем валидность данных
-      if (typeof cached.user.magnumCoins !== 'number' || typeof cached.user.stars !== 'number') {
+      if (typeof cached.user.magnumCoins !== 'number' || typeof cached.user.stars !== 'number' ||
+          isNaN(cached.user.magnumCoins) || isNaN(cached.user.stars)) {
         userCache.delete(id);
         cleanedCount++;
-        console.log(`🧹 Удален невалидный кеш пользователя ${id}`);
+        console.log(`🧹 Удален невалидный кеш пользователя ${id} (NaN или невалидные значения)`);
       }
       // Проверяем TTL
       else if (now - cached.timestamp > config.USER_CACHE_TTL) {
@@ -924,6 +930,16 @@ function cleanupInvalidCache() {
   }
   
   return cleanedCount;
+}
+
+// Функция для принудительной очистки кеша конкретного пользователя
+function clearUserCache(userId) {
+  if (userCache.has(userId)) {
+    userCache.delete(userId);
+    console.log(`🧹 Принудительно очищен кеш пользователя ${userId}`);
+    return true;
+  }
+  return false;
 }
 
 // ==================== УТИЛИТЫ ====================
@@ -1531,15 +1547,21 @@ async function getUser(id, ctx = null) {
     }
     
     // Проверяем валидность данных пользователя перед возвратом
-    if (typeof user.magnumCoins !== 'number' || typeof user.stars !== 'number') {
+    if (typeof user.magnumCoins !== 'number' || typeof user.stars !== 'number' || 
+        isNaN(user.magnumCoins) || isNaN(user.stars)) {
       console.error(`❌ Невалидные данные пользователя ${id}:`, {
         magnumCoins: user.magnumCoins,
         stars: user.stars,
-        type: typeof user.magnumCoins
+        type: typeof user.magnumCoins,
+        isNaN_magnumCoins: isNaN(user.magnumCoins),
+        isNaN_stars: isNaN(user.stars)
       });
       // Исправляем невалидные данные
-      user.magnumCoins = user.magnumCoins || config.INITIAL_MAGNUM_COINS;
-      user.stars = user.stars || config.INITIAL_STARS;
+      user.magnumCoins = (typeof user.magnumCoins === 'number' && !isNaN(user.magnumCoins)) ? user.magnumCoins : config.INITIAL_MAGNUM_COINS;
+      user.stars = (typeof user.stars === 'number' && !isNaN(user.stars)) ? user.stars : config.INITIAL_STARS;
+      
+      // Очищаем кеш пользователя
+      clearUserCache(id);
       
       // Обновляем в базе данных
       await db.collection('users').updateOne(
