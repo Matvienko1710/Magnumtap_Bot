@@ -12240,6 +12240,18 @@ bot.action('admin_cooldown_stats', async (ctx) => {
   } catch (error) { logError(error, 'Статистика кулдаунов (обработчик)'); }
 });
 
+// Промокод
+bot.action('promocode', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showPromocodeMenu(ctx, user);
+  } catch (error) {
+    logError(error, 'Меню промокодов');
+  }
+});
+
 bot.action('promocode_history', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); if (!user) return;
