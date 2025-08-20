@@ -5957,6 +5957,74 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
   }
 }
 
+// Функция для обработки ввода суммы MC для обмена
+async function handleExchangeCustomMC(ctx, user, text) {
+  try {
+    log(`🪙 Пользователь ${user.id} вводит сумму MC для обмена: "${text}"`);
+    
+    const amount = parseFloat(text);
+    
+    // Валидация суммы
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Неверная сумма! Введите положительное число.');
+      return;
+    }
+    
+    if (amount > user.magnumCoins) {
+      await ctx.reply(`❌ Недостаточно Magnum Coins! У вас: ${formatNumber(user.magnumCoins)} MC`);
+      return;
+    }
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Выполняем обмен
+    await performExchange(ctx, user, amount);
+    
+  } catch (error) {
+    logError(error, `Обработка ввода суммы MC для обмена пользователем ${user.id}`);
+    await ctx.reply('❌ Ошибка обработки суммы. Попробуйте позже.');
+  }
+}
+
+// Функция для обработки ввода суммы Stars для обмена
+async function handleExchangeCustomStars(ctx, user, text) {
+  try {
+    log(`⭐ Пользователь ${user.id} вводит сумму Stars для обмена: "${text}"`);
+    
+    const amount = parseFloat(text);
+    
+    // Валидация суммы
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply('❌ Неверная сумма! Введите положительное число.');
+      return;
+    }
+    
+    if (amount > user.stars) {
+      await ctx.reply(`❌ Недостаточно Stars! У вас: ${formatNumber(user.stars)} Stars`);
+      return;
+    }
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Выполняем обмен
+    await performStarsToMCExchange(ctx, user, amount);
+    
+  } catch (error) {
+    logError(error, `Обработка ввода суммы Stars для обмена пользователем ${user.id}`);
+    await ctx.reply('❌ Ошибка обработки суммы. Попробуйте позже.');
+  }
+}
+
 // ==================== ДОСТИЖЕНИЯ ====================
 async function showAchievementsMenu(ctx, user) {
   try {
