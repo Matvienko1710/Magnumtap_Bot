@@ -12434,6 +12434,206 @@ bot.action('admin_cooldowns', async (ctx) => {
   }
 });
 
+bot.action('admin_farm_rewards', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ввода новой награды
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_farm_reward', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎯 *Изменение награды фарма*\n\n` +
+      `📝 Введите новое значение базовой награды:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 0.01 (1 цент)\n` +
+      `├ 0.1 (10 центов)\n` +
+      `├ 1.0 (1 монета)\n` +
+      `└ 10.0 (10 монет)\n\n` +
+      `⚠️ *Текущая награда:* \`${config.FARM_BASE_REWARD}\` Magnum Coins\n\n` +
+      `🎯 Введите новое значение:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Изменение награды фарма');
+    await ctx.answerCbQuery('❌ Ошибка изменения награды');
+  }
+});
+
+bot.action('admin_daily_bonus', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ввода нового бонуса
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_bonus_base', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎁 *Изменение ежедневного бонуса*\n\n` +
+      `📝 Введите новое значение базового бонуса:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 1 (1 монета)\n` +
+      `├ 5 (5 монет)\n` +
+      `├ 10 (10 монет)\n` +
+      `└ 50 (50 монет)\n\n` +
+      `⚠️ *Текущий бонус:* \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n\n` +
+      `🎯 Введите новое значение:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Изменение ежедневного бонуса');
+    await ctx.answerCbQuery('❌ Ошибка изменения бонуса');
+  }
+});
+
+bot.action('admin_miner_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ввода новой награды майнера
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_miner_reward', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `⛏️ *Изменение награды майнера*\n\n` +
+      `📝 Введите новое значение награды за минуту:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 0.01 (1 цент в минуту)\n` +
+      `├ 0.1 (10 центов в минуту)\n` +
+      `├ 1.0 (1 монета в минуту)\n` +
+      `└ 10.0 (10 монет в минуту)\n\n` +
+      `⚠️ *Текущая награда:* \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins/мин\n\n` +
+      `🎯 Введите новое значение:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Изменение награды майнера');
+    await ctx.answerCbQuery('❌ Ошибка изменения награды');
+  }
+});
+
+bot.action('admin_referral_settings', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ввода новой реферальной награды
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_referral_reward', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `👥 *Изменение реферальной награды*\n\n` +
+      `📝 Введите новое значение награды за реферала:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 10 (10 монет)\n` +
+      `├ 50 (50 монет)\n` +
+      `├ 100 (100 монет)\n` +
+      `└ 500 (500 монет)\n\n` +
+      `⚠️ *Текущая награда:* \`${config.REFERRAL_REWARD}\` Magnum Coins\n\n` +
+      `🎯 Введите новое значение:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Изменение реферальной награды');
+    await ctx.answerCbQuery('❌ Ошибка изменения награды');
+  }
+});
+
+bot.action('admin_cooldown_farm', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ввода нового кулдауна
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_farm_cooldown', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_cooldowns')]
+    ]);
+    
+    await ctx.editMessageText(
+      `⏰ *Изменение кулдауна фарма*\n\n` +
+      `📝 Введите новое значение кулдауна в секундах:\n\n` +
+      `💡 *Примеры:*\n` +
+      `├ 300 (5 минут)\n` +
+      `├ 600 (10 минут)\n` +
+      `├ 1800 (30 минут)\n` +
+      `└ 3600 (1 час)\n\n` +
+      `⚠️ *Текущий кулдаун:* \`${config.FARM_COOLDOWN}\` секунд\n\n` +
+      `🎯 Введите новое значение:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Изменение кулдауна фарма');
+    await ctx.answerCbQuery('❌ Ошибка изменения кулдауна');
+  }
+});
+
 bot.action('admin_cooldown_bonus', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); if (!user) return;
