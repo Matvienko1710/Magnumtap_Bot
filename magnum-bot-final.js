@@ -95,9 +95,9 @@ const config = {
   BOT_TOKEN: process.env.BOT_TOKEN,
   MONGODB_URI: process.env.MONGODB_URI,
   ADMIN_IDS: process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id.trim())) : [],
-  SUPPORT_CHANNEL: process.env.SUPPORT_CHANNEL,
-  WITHDRAWAL_CHANNEL: process.env.WITHDRAWAL_CHANNEL,
-  REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL,
+  SUPPORT_CHANNEL: process.env.SUPPORT_CHANNEL ? `@${process.env.SUPPORT_CHANNEL}` : null,
+  WITHDRAWAL_CHANNEL: process.env.WITHDRAWAL_CHANNEL ? `@${process.env.WITHDRAWAL_CHANNEL}` : null,
+  REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL ? `@${process.env.REQUIRED_CHANNEL}` : null,
   REQUIRED_BOT_LINK: process.env.REQUIRED_BOT_LINK || 'https://t.me/ReferalStarsRobot?start=6587897295',
   FIRESTARS_BOT_LINK: process.env.FIRESTARS_BOT_LINK || 'https://t.me/firestars_rbot?start=6587897295',
   FARMIK_BOT_LINK: process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295',
@@ -8596,7 +8596,7 @@ async function handleCreateSupportTicket(ctx, user, text) {
     userCache.delete(user.id);
     
     // Отправляем тикет в канал поддержки
-    const supportChannel = config.SUPPORT_CHANNEL || '@magnumsupported';
+    const supportChannel = config.SUPPORT_CHANNEL;
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Ответить', `support_answer_${ticket.id}`),
@@ -8621,20 +8621,24 @@ async function handleCreateSupportTicket(ctx, user, text) {
       `📝 *Проблема:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
       `🎯 Выберите действие:`;
     
-    try {
-      await ctx.telegram.sendMessage(supportChannel, supportMessage, {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      });
-      
-      log(`✅ Тикет ${ticket.id} отправлен в канал поддержки ${supportChannel}`);
-    } catch (error) {
-      logError(error, `Отправка тикета ${ticket.id} в канал поддержки`);
-      logDebug(`Ошибка отправки в канал`, {
-        channel: supportChannel,
-        ticketId: ticket.id,
-        error: error.message
-      });
+    if (supportChannel) {
+      try {
+        await ctx.telegram.sendMessage(supportChannel, supportMessage, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        });
+        
+        log(`✅ Тикет ${ticket.id} отправлен в канал поддержки ${supportChannel}`);
+      } catch (error) {
+        logError(error, `Отправка тикета ${ticket.id} в канал поддержки`);
+        logDebug(`Ошибка отправки в канал`, {
+          channel: supportChannel,
+          ticketId: ticket.id,
+          error: error.message
+        });
+      }
+    } else {
+      log(`⚠️ Канал поддержки не настроен, тикет ${ticket.id} не отправлен`);
     }
     
     // Отправляем подтверждение пользователю
@@ -13542,6 +13546,7 @@ bot.action(/^cancel_(.+)$/, async (ctx) => {
 async function handleWithdrawalStars(ctx, user, text) {
   try {
     log(`⭐ Пользователь ${user.id} создает заявку на вывод Stars: "${text}"`);
+    log(`🔍 Конфигурация каналов: WITHDRAWAL_CHANNEL=${config.WITHDRAWAL_CHANNEL}, SUPPORT_CHANNEL=${config.SUPPORT_CHANNEL}`);
     
     const amount = parseFloat(text);
     
@@ -13578,6 +13583,7 @@ async function handleWithdrawalStars(ctx, user, text) {
     userCache.delete(user.id);
     
     // Отправляем заявку в канал выплат
+    log(`🔍 Проверка канала выплат: ${config.WITHDRAWAL_CHANNEL}`);
     if (config.WITHDRAWAL_CHANNEL) {
       try {
         const keyboard = Markup.inlineKeyboard([
