@@ -12491,6 +12491,15 @@ bot.action('admin_broadcast', async (ctx) => {
   } catch (error) { logError(error, 'Рассылка (обработчик)'); }
 });
 
+bot.action('admin_create_promocode', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    await db.collection('users').updateOne({ id: user.id }, { $set: { adminState: 'creating_promocode', updatedAt: new Date() } });
+    await ctx.reply('🎫 Введите данные промокода в формате:\n\nКод Награда Тип Использований\n\nПример:\nBONUS100 100 stars 1\n\nГде:\n- Код: название промокода\n- Награда: количество\n- Тип: stars или mc\n- Использований: сколько раз можно использовать');
+  } catch (error) { logError(error, 'Создание промокода (обработчик)'); }
+});
+
 bot.action('admin_mass_give', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); if (!user || !isAdmin(user.id)) return;
@@ -13464,13 +13473,16 @@ bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
     
     // Уведомляем пользователя
     try {
+      const commission = withdrawalRequest.amount * 0.05;
+      const amountAfterCommission = withdrawalRequest.amount * 0.95;
+      
       await bot.telegram.sendMessage(
         withdrawalRequest.userId,
         `❌ *Заявка на вывод отклонена*\n\n` +
         `${withdrawalRequest.currency === 'magnum_coins' ? '💰' : '⭐'} *Детали заявки:*\n` +
         `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
-        `├ Комиссия: ${formatNumber(withdrawalRequest.commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
-        `├ К получению: ${formatNumber(withdrawalRequest.amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ К получению: ${formatNumber(amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
         `└ Статус: ❌ Отклонено\n\n` +
         `🚫 *Причина отклонения:* ${reasonText}\n` +
         `📅 *Дата отклонения:* ${new Date().toLocaleString('ru-RU')}\n` +
