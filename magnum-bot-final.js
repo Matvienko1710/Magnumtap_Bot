@@ -8596,7 +8596,7 @@ async function handleCreateSupportTicket(ctx, user, text) {
     userCache.delete(user.id);
     
     // Отправляем тикет в канал поддержки
-    const supportChannel = '@magnumsupported';
+    const supportChannel = config.SUPPORT_CHANNEL || '@magnumsupported';
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Ответить', `support_answer_${ticket.id}`),
@@ -13262,6 +13262,85 @@ bot.on('text', async (ctx) => {
     });
   }
 });
+// Обработчики для заявок на вывод
+bot.action(/^approve_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const requestId = ctx.match[1];
+    
+    // Получаем заявку из базы данных
+    const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
+    
+    if (!withdrawalRequest) {
+      await ctx.answerCbQuery('❌ Заявка не найдена');
+      return;
+    }
+    
+    if (withdrawalRequest.status !== 'pending') {
+      await ctx.answerCbQuery('❌ Заявка уже обработана');
+      return;
+    }
+    
+    // Обновляем статус заявки
+    await db.collection('withdrawalRequests').updateOne(
+      { _id: new ObjectId(requestId) },
+      { 
+        $set: { 
+          status: 'approved',
+          approvedBy: user.id,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Уведомляем пользователя
+    try {
+      await bot.telegram.sendMessage(
+        withdrawalRequest.userId,
+        `✅ *Заявка на вывод одобрена!*\n\n` +
+        `💰 *Детали заявки:*\n` +
+        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(withdrawalRequest.amount * 0.05)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ К выплате: ${formatNumber(withdrawalRequest.amount * 0.95)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `└ Статус: ✅ Одобрено\n\n` +
+        `📅 *Дата одобрения:* ${new Date().toLocaleString('ru-RU')}\n` +
+        `🆔 *Номер заявки:* #${requestId}\n\n` +
+        `💳 Выплата будет произведена в течение 24 часов!`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      console.log(`⚠️ Не удалось уведомить пользователя ${withdrawalRequest.userId}: ${error.message}`);
+    }
+    
+    // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('✅ Одобрено', 'withdrawal_approved')]
+    ]);
+    
+    await ctx.editMessageText(
+      ctx.callbackQuery.message.text + '\n\n✅ *Одобрено администратором*\n📅 *Дата:* ' + new Date().toLocaleString('ru-RU'),
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    await ctx.answerCbQuery('✅ Заявка одобрена');
+    
+    log(`✅ Заявка на вывод ${requestId} одобрена администратором ${user.id}`);
+    
+  } catch (error) {
+    logError(error, 'Одобрение заявки на вывод');
+    await ctx.answerCbQuery('❌ Ошибка одобрения заявки');
+  }
+});
+
 bot.action(/^reject_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -13458,6 +13537,98 @@ bot.action(/^cancel_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка отмены');
   }
 });
+
+// Функция для обработки заявки на вывод Stars
+async function handleWithdrawalStars(ctx, user, text) {
+  try {
+    log(`⭐ Пользователь ${user.id} создает заявку на вывод Stars: "${text}"`);
+    
+    const amount = parseFloat(text);
+    
+    // Валидация суммы
+    if (isNaN(amount) || amount < 15) {
+      await ctx.reply('❌ Минимальная сумма для вывода: 15 Stars');
+      return;
+    }
+    
+    if (amount > user.stars) {
+      await ctx.reply(`❌ Недостаточно Stars! У вас: ${formatNumber(user.stars)} Stars`);
+      return;
+    }
+    
+    // Создаем заявку на вывод
+    const withdrawalRequest = {
+      userId: user.id,
+      username: user.username,
+      firstName: user.firstName,
+      amount: amount,
+      currency: 'stars',
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    await db.collection('withdrawalRequests').insertOne(withdrawalRequest);
+    
+    // Сбрасываем состояние
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Отправляем заявку в канал выплат
+    if (config.WITHDRAWAL_CHANNEL) {
+      try {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Одобрить', `approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `reject_${withdrawalRequest._id}`)
+          ]
+        ]);
+        
+        const message = 
+          `💰 *Новая заявка на вывод Stars*\n\n` +
+          `👤 *Пользователь:*\n` +
+          `├ ID: \`${user.id}\`\n` +
+          `├ Имя: ${user.firstName || 'Не указано'}\n` +
+          `├ Username: ${user.username ? '@' + user.username : 'Не указан'}\n` +
+          `└ Баланс: ${formatNumber(user.stars)} Stars\n\n` +
+          `💸 *Заявка:*\n` +
+          `├ Сумма: ${formatNumber(amount)} Stars\n` +
+          `├ Комиссия: ${formatNumber(amount * 0.05)} Stars (5%)\n` +
+          `├ К выплате: ${formatNumber(amount * 0.95)} Stars\n` +
+          `└ Дата: ${new Date().toLocaleString('ru-RU')}\n\n` +
+          `🎯 Выберите действие:`;
+        
+        await bot.telegram.sendMessage(config.WITHDRAWAL_CHANNEL, message, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        });
+        
+        log(`✅ Заявка на вывод отправлена в канал ${config.WITHDRAWAL_CHANNEL}`);
+      } catch (channelError) {
+        logError(channelError, `Отправка заявки в канал ${config.WITHDRAWAL_CHANNEL}`);
+      }
+    }
+    
+    await ctx.reply(
+      `✅ Заявка на вывод ${formatNumber(amount)} Stars создана!\n\n` +
+      `📋 *Информация о заявке:*\n` +
+      `├ Сумма: ${formatNumber(amount)} Stars\n` +
+      `├ Комиссия: ${formatNumber(amount * 0.05)} Stars (5%)\n` +
+      `├ К выплате: ${formatNumber(amount * 0.95)} Stars\n` +
+      `└ Обработка: до 24 часов\n\n` +
+      `🔔 Вы получите уведомление о статусе заявки.`
+    );
+    
+    log(`✅ Заявка на вывод Stars успешно создана для пользователя ${user.id}`);
+    
+  } catch (error) {
+    logError(error, `Создание заявки на вывод Stars пользователем ${user.id}`);
+    await ctx.reply('❌ Ошибка создания заявки. Попробуйте позже.');
+  }
+}
 
 // Обработчики необработанных ошибок
 process.on('uncaughtException', (error) => {
