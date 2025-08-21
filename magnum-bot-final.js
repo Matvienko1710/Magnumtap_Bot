@@ -13601,8 +13601,8 @@ async function handleWithdrawalStars(ctx, user, text) {
       try {
         const keyboard = Markup.inlineKeyboard([
           [
-            Markup.button.callback('✅ Одобрить', `approve_\${requestId}`),
-            Markup.button.callback('❌ Отклонить', `reject_\${requestId}`)
+            Markup.button.callback('✅ Одобрить', `approve_${requestId}`),
+            Markup.button.callback('❌ Отклонить', `reject_${requestId}`)
           ]
         ]);
         
