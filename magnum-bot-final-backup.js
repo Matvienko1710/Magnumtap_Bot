@@ -13585,8 +13585,7 @@ async function handleWithdrawalStars(ctx, user, text) {
       updatedAt: new Date()
     };
     
-    const result = await db.collection('withdrawalRequests').insertOne(withdrawalRequest);
-    const requestId = result.insertedId;
+    await db.collection('withdrawalRequests').insertOne(withdrawalRequest);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -13601,8 +13600,8 @@ async function handleWithdrawalStars(ctx, user, text) {
       try {
         const keyboard = Markup.inlineKeyboard([
           [
-            Markup.button.callback('✅ Одобрить', `approve_\${requestId}`),
-            Markup.button.callback('❌ Отклонить', `reject_\${requestId}`)
+            Markup.button.callback('✅ Одобрить', `approve_${withdrawalRequest._id}`),
+            Markup.button.callback('❌ Отклонить', `reject_${withdrawalRequest._id}`)
           ]
         ]);
         
