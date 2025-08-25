@@ -9487,6 +9487,55 @@ bot.action('faq_tasks', async (ctx) => {
     logError(error, 'FAQ Задания');
   }
 });
+// Обработчик для кнопки поддержки
+bot.action('support', async (ctx) => {
+  try {
+    logFunction('bot.action.support', ctx.from.id);
+    log(`🆘 Запрос меню поддержки от пользователя ${ctx.from.id}`);
+    
+    const user = await getUser(ctx.from.id);
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для меню поддержки`);
+      return;
+    }
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('📝 Создать тикет', 'contact_support')],
+      [Markup.button.callback('❓ FAQ', 'support_faq')],
+      [Markup.button.callback('📞 Telegram', 'support_telegram')],
+      [Markup.button.callback('📱 WhatsApp', 'support_whatsapp')],
+      [Markup.button.callback('📧 Email', 'support_email')],
+      [Markup.button.callback('🔙 Назад', 'settings')]
+    ]);
+    
+    const message = 
+      `🆘 *Поддержка*\n\n` +
+      `👋 Привет! Мы готовы помочь вам с любыми вопросами.\n\n` +
+      `📋 *Выберите способ связи:*\n\n` +
+      `📝 *Создать тикет* - Опишите проблему и получите ответ\n` +
+      `❓ *FAQ* - Часто задаваемые вопросы\n` +
+      `📞 *Telegram* - Быстрая связь через Telegram\n` +
+      `📱 *WhatsApp* - Связь через WhatsApp\n` +
+      `📧 *Email* - Отправить письмо на почту\n\n` +
+      `⏰ *Время ответа:*\n` +
+      `├ Telegram: до 30 минут\n` +
+      `├ WhatsApp: до 1 часа\n` +
+      `├ Email: до 24 часов\n` +
+      `└ Тикет: до 2 часов\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Пользователю ${ctx.from.id} показано меню поддержки`);
+    
+  } catch (error) {
+    logError(error, `Показ меню поддержки для пользователя ${ctx.from.id}`);
+    await ctx.answerCbQuery('❌ Ошибка загрузки меню поддержки');
+  }
+});
 // Обработчик для создания тикета поддержки
 bot.action('contact_support', async (ctx) => {
   try {
