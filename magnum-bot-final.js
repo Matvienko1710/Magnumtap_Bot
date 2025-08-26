@@ -7142,17 +7142,18 @@ async function showSponsorTasks(ctx, user) {
       const isCompleted = userTasks[task.id]?.completed || false;
       const isClaimed = userTasks[task.id]?.claimed || false;
       const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
-      
-      message += `${status} *${task.title}*\n`;
-      message += `├ ${task.description}\n`;
-      message += `├ Награда: \`${task.reward}\` Magnum Coins\n`;
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+    
+    message += `${status} *${task.title}*\n`;
+    message += `├ ${task.description}\n`;
+    message += `├ Награда: \`${rewardText}\`\n`;
       message += `└ Сложность: ${task.difficulty}\n\n`;
     });
     
     message += `💡 *Как выполнить:*\n`;
     message += `├ Нажмите на задание для подробностей\n`;
     message += `├ Выполните требуемое действие\n`;
-    message += `├ Нажмите "Проверить выполнение"\n`;
+    message += `├ Отправьте скриншот\n`;
     message += `└ Получите награду!\n\n`;
     message += `🎯 Выберите действие:`;
     
@@ -7181,13 +7182,20 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     const userTask = userTasks[taskId] || {};
     const isCompleted = userTask.completed || false;
     const isClaimed = userTask.claimed || false;
+    const hasScreenshot = userTask.screenshot || false;
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.url('🔗 Выполнить задание', task.url),
-        Markup.button.callback('✅ Проверить выполнение', `verify_sponsor_${taskId}`)
+        Markup.button.url('📱 Подписаться', task.url),
+        Markup.button.callback('📸 Отправить скриншот', `send_screenshot_${taskId}`)
       ]
     ]);
+    
+    if (hasScreenshot && !isCompleted) {
+      keyboard.reply_markup.inline_keyboard.push([
+        Markup.button.callback('✅ Проверить выполнение', `verify_sponsor_${taskId}`)
+      ]);
+    }
     
     if (isCompleted && !isClaimed) {
       keyboard.reply_markup.inline_keyboard.push([
@@ -7196,12 +7204,15 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     }
     
     keyboard.reply_markup.inline_keyboard.push([
-      Markup.button.callback('🔙 Назад', 'tasks_sponsor')
+      Markup.button.callback('🔙 Назад', 'tasks_sponsor'),
+      Markup.button.callback('⏭️ Следующее задание', 'next_sponsor_task')
     ]);
+    
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
     
     let message = `🎯 *${task.title}*\n\n`;
     message += `📝 *Описание:*\n${task.description}\n\n`;
-    message += `💰 *Награда:* \`${task.reward}\` Magnum Coins\n`;
+    message += `💰 *Награда:* \`${rewardText}\`\n`;
     message += `⭐ *Сложность:* ${task.difficulty}\n`;
     message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
     
@@ -7218,8 +7229,10 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       if (isClaimed) {
         message += `🎁 *Награда:* Получена\n`;
       } else {
-        message += `🎁 *Награда:* Готова к получению\n`;
+      message += `🎁 *Награда:* Готова к получению\n`;
       }
+    } else if (hasScreenshot) {
+      message += `📸 *Статус:* Скриншот отправлен, ожидает проверки\n`;
     } else {
       message += `🔄 *Статус:* Задание не выполнено\n`;
     }
@@ -7256,36 +7269,43 @@ async function verifySponsorTask(ctx, user, taskId) {
       return;
     }
     
-    // Здесь должна быть логика проверки выполнения задания
-    // Для демонстрации считаем, что задание выполнено
-    const isCompleted = await checkTaskCompletion(ctx, user, task);
+    if (!userTask.screenshot) {
+      await ctx.answerCbQuery('❌ Сначала отправьте скриншот подписки');
+      return;
+    }
     
-    if (isCompleted) {
-      // Обновляем статус задания в базе данных
-      await db.collection('users').updateOne(
-        { id: user.id },
-        { 
-          $set: { 
-            [`tasks.sponsorTasks.${taskId}.completed`]: true,
-            [`tasks.sponsorTasks.${taskId}.completedAt`]: new Date(),
-            updatedAt: new Date()
-          }
+    // Проверяем, что скриншот был отправлен недавно (в течение 24 часов)
+    const screenshotTime = userTask.screenshotAt;
+    const hoursSinceScreenshot = screenshotTime ? (Date.now() - screenshotTime.getTime()) / (1000 * 60 * 60) : 0;
+    
+    if (hoursSinceScreenshot > 24) {
+      await ctx.answerCbQuery('❌ Скриншот устарел. Отправьте новый скриншот');
+      return;
+    }
+    
+    // Отмечаем задание как выполненное
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          [`tasks.sponsorTasks.${taskId}.completed`]: true,
+          [`tasks.sponsorTasks.${taskId}.completedAt`]: new Date(),
+          updatedAt: new Date()
         }
-      );
-      
-      // Очищаем кеш
-      userCache.delete(user.id);
-      
-      log(`✅ Спонсорское задание ${taskId} выполнено пользователем ${user.id}`);
-      await ctx.answerCbQuery(`✅ Задание выполнено! Награда: ${task.reward} Magnum Coins`);
-      
-      // Обновляем детали задания
-      const updatedUser = await getUser(ctx.from.id);
-      if (updatedUser) {
-        await showSponsorTaskDetails(ctx, updatedUser, taskId);
       }
-    } else {
-      await ctx.answerCbQuery('❌ Задание не выполнено. Проверьте требования.');
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+    log(`✅ Спонсорское задание ${taskId} выполнено пользователем ${user.id}`);
+    await ctx.answerCbQuery(`✅ Задание выполнено! Награда: ${rewardText}`);
+    
+    // Обновляем детали задания
+    const updatedUser = await getUser(ctx.from.id);
+    if (updatedUser) {
+      await showSponsorTaskDetails(ctx, updatedUser, taskId);
     }
   } catch (error) {
     logError(error, 'Проверка спонсорского задания');
@@ -7318,27 +7338,36 @@ async function claimSponsorTask(ctx, user, taskId) {
     }
     
     // Начисляем награду
+    const rewardType = task.rewardType || 'magnumCoins';
+    const updateData = { 
+      $inc: { 
+        'tasks.completedTasks': 1,
+        'tasks.totalTaskEarnings': task.reward
+      },
+      $set: { 
+        [`tasks.sponsorTasks.${taskId}.claimed`]: true,
+        [`tasks.sponsorTasks.${taskId}.claimedAt`]: new Date(),
+        updatedAt: new Date()
+      }
+    };
+    
+    if (rewardType === 'stars') {
+      updateData.$inc.stars = task.reward;
+    } else {
+      updateData.$inc.magnumCoins = task.reward;
+    }
+    
     await db.collection('users').updateOne(
       { id: user.id },
-      { 
-        $inc: { 
-          magnumCoins: task.reward,
-          'tasks.completedTasks': 1,
-          'tasks.totalTaskEarnings': task.reward
-        },
-        $set: { 
-          [`tasks.sponsorTasks.${taskId}.claimed`]: true,
-          [`tasks.sponsorTasks.${taskId}.claimedAt`]: new Date(),
-          updatedAt: new Date()
-        }
-      }
+      updateData
     );
     
     // Очищаем кеш
     userCache.delete(user.id);
     
-    log(`🎁 Награда спонсорского задания ${taskId} получена пользователем ${user.id}: ${task.reward} Magnum Coins`);
-    await ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} Magnum Coins`);
+    const rewardText = rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+    log(`🎁 Награда спонсорского задания ${taskId} получена пользователем ${user.id}: ${rewardText}`);
+    await ctx.answerCbQuery(`🎁 Награда получена! +${rewardText}`);
     
     // Обновляем детали задания
     const updatedUser = await getUser(ctx.from.id);
@@ -7407,6 +7436,156 @@ async function showDailyTasks(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка загрузки ежедневных заданий');
   }
 }
+
+// Функция обработки отправки скриншота
+async function handleSendScreenshot(ctx, user, taskId) {
+  try {
+    log(`📸 Запрос отправки скриншота для задания ${taskId} от пользователя ${user.id}`);
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено');
+      return;
+    }
+    
+    // Устанавливаем состояние ожидания скриншота
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          adminState: `sending_screenshot_${taskId}`,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    await ctx.answerCbQuery('📸 Теперь отправьте скриншот подписки на канал');
+    await ctx.reply('📸 Пожалуйста, отправьте скриншот, подтверждающий вашу подписку на канал @musice46');
+  } catch (error) {
+    logError(error, 'Запрос отправки скриншота');
+    await ctx.answerCbQuery('❌ Ошибка запроса скриншота');
+  }
+}
+
+// Функция обработки загрузки скриншота
+async function handleScreenshotUpload(ctx, user, taskId) {
+  try {
+    log(`📸 Обработка скриншота для задания ${taskId} от пользователя ${user.id}`);
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.reply('❌ Задание не найдено');
+      return;
+    }
+    
+    // Получаем информацию о фото
+    const photo = ctx.message.photo[ctx.message.photo.length - 1]; // Самое большое фото
+    const fileId = photo.file_id;
+    
+    // Сохраняем информацию о скриншоте
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $set: { 
+          [`tasks.sponsorTasks.${taskId}.screenshot`]: true,
+          [`tasks.sponsorTasks.${taskId}.screenshotFileId`]: fileId,
+          [`tasks.sponsorTasks.${taskId}.screenshotAt`]: new Date(),
+          adminState: null,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Отправляем заявку в канал поддержки
+    const supportChannel = config.SUPPORT_CHANNEL;
+    if (supportChannel) {
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Одобрить', `approve_screenshot_${user.id}_${taskId}`),
+          Markup.button.callback('❌ Отклонить', `reject_screenshot_${user.id}_${taskId}`)
+        ],
+        [
+          Markup.button.callback('🚫 Не подписан', `reject_reason_${user.id}_${taskId}_not_subscribed`),
+          Markup.button.callback('📸 Нечеткий скриншот', `reject_reason_${user.id}_${taskId}_blurry`)
+        ],
+        [
+          Markup.button.callback('🔗 Неверный канал', `reject_reason_${user.id}_${taskId}_wrong_channel`),
+          Markup.button.callback('⏰ Слишком быстро', `reject_reason_${user.id}_${taskId}_too_fast`)
+        ]
+      ]);
+      
+      const supportMessage = 
+        `📸 *Новая заявка на спонсорское задание*\n\n` +
+        `🎯 *Задание:* ${task.title}\n` +
+        `👤 *Пользователь:* ${getDisplayName(user)}\n` +
+        `📱 *Username:* ${user.username ? '@' + user.username : 'Не указан'}\n` +
+        `🆔 *User ID:* \`${user.id}\`\n` +
+        `💰 *Награда:* ${task.reward} ${task.rewardType === 'stars' ? '⭐ Stars' : 'Magnum Coins'}\n` +
+        `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n\n` +
+        `🎯 Выберите действие:`;
+      
+      try {
+        await ctx.telegram.sendPhoto(supportChannel, fileId, {
+          caption: supportMessage,
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        });
+        
+        log(`✅ Заявка на спонсорское задание ${taskId} отправлена в канал поддержки ${supportChannel}`);
+      } catch (error) {
+        logError(error, `Отправка заявки ${taskId} в канал поддержки`);
+      }
+    }
+    
+    await ctx.reply('✅ Скриншот отправлен! Заявка передана на проверку администратору. Ожидайте уведомления о результате.');
+    
+    // Возвращаем пользователя к деталям задания
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      await showSponsorTaskDetails(ctx, updatedUser, taskId);
+    }
+  } catch (error) {
+    logError(error, 'Обработка скриншота');
+    await ctx.reply('❌ Ошибка обработки скриншота');
+  }
+}
+
+// Функция показа следующего задания
+async function showNextSponsorTask(ctx, user) {
+  try {
+    log(`⏭️ Показ следующего спонсорского задания для пользователя ${user.id}`);
+    
+    const sponsorTasks = getSponsorTasks();
+    const userTasks = user.tasks?.sponsorTasks || {};
+    
+    // Находим следующее невыполненное задание
+    const nextTask = sponsorTasks.find(task => {
+      const userTask = userTasks[task.id] || {};
+      return !userTask.completed;
+    });
+    
+    if (nextTask) {
+      await showSponsorTaskDetails(ctx, user, nextTask.id);
+    } else {
+      await ctx.answerCbQuery('🎉 Все спонсорские задания выполнены!');
+      await showSponsorTasks(ctx, user);
+    }
+  } catch (error) {
+    logError(error, 'Показ следующего спонсорского задания');
+    await ctx.answerCbQuery('❌ Ошибка загрузки следующего задания');
+  }
+}
+
 async function showTasksProgress(ctx, user) {
   try {
     log(`📊 Показ прогресса заданий для пользователя ${user.id}`);
@@ -7566,43 +7745,16 @@ function getSponsorTasks() {
   return [
     {
       id: 1,
-      title: 'Подписка на канал',
-      description: 'Подпишитесь на наш официальный канал',
-      reward: 50,
+      title: 'Подписка на канал @musice46',
+      description: 'Подпишитесь на канал @musice46 и отправьте скриншот',
+      reward: 0.3,
+      rewardType: 'stars',
       difficulty: '⭐ Легкое',
-      estimatedTime: '1 минута',
-      url: 'https://t.me/magnumstars',
-      requirements: [
-        'Подпишитесь на канал @magnumstars',
-        'Останьтесь подписанным минимум 24 часа'
-      ]
-    },
-    {
-      id: 2,
-      title: 'Запуск бота',
-      description: 'Запустите нашего партнерского бота',
-      reward: 100,
-      difficulty: '⭐⭐ Среднее',
       estimatedTime: '2 минуты',
-      url: 'https://t.me/partner_bot',
+      url: 'https://t.me/musice46',
       requirements: [
-        'Запустите бота @partner_bot',
-        'Нажмите кнопку /start',
-        'Выполните одно действие в боте'
-      ]
-    },
-    {
-      id: 3,
-      title: 'Приглашение друзей',
-      description: 'Пригласите 3 друзей в наш бот',
-      reward: 200,
-      difficulty: '⭐⭐⭐ Сложное',
-      estimatedTime: '10 минут',
-      url: 'https://t.me/magnumstars',
-      requirements: [
-        'Отправьте реферальную ссылку 3 друзьям',
-        'Друзья должны присоединиться к боту',
-        'Каждый друг должен выполнить одно действие'
+        'Подпишитесь на канал @musice46',
+        'Отправьте скриншот подписки'
       ]
     }
   ];
@@ -10038,6 +10190,205 @@ bot.action('support_email', async (ctx) => {
   }
 });
 
+// ==================== ОБРАБОТЧИКИ СПОНСОРСКИХ ЗАДАНИЙ ====================
+
+// Обработчик одобрения скриншота
+bot.action(/^approve_screenshot_(\d+)_(\d+)$/, async (ctx) => {
+  try {
+    const userId = parseInt(ctx.match[1]);
+    const taskId = parseInt(ctx.match[2]);
+    
+    const user = await getUser(userId);
+    if (!user) {
+      await ctx.answerCbQuery('❌ Пользователь не найден');
+      return;
+    }
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено');
+      return;
+    }
+    
+    // Отмечаем задание как выполненное
+    await db.collection('users').updateOne(
+      { id: userId },
+      { 
+        $set: { 
+          [`tasks.sponsorTasks.${taskId}.completed`]: true,
+          [`tasks.sponsorTasks.${taskId}.completedAt`]: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(userId);
+    
+    // Уведомляем пользователя
+    try {
+      await ctx.telegram.sendMessage(userId, 
+        `✅ *Скриншот одобрен!*\n\n` +
+        `🎯 Задание: ${task.title}\n` +
+        `💰 Награда: ${task.reward} ${task.rewardType === 'stars' ? '⭐ Stars' : 'Magnum Coins'}\n\n` +
+        `🎁 Теперь вы можете получить награду в разделе "Задания"!`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      logError(error, `Уведомление пользователя ${userId} об одобрении скриншота`);
+    }
+    
+    await ctx.answerCbQuery('✅ Скриншот одобрен');
+    await ctx.editMessageReplyMarkup({
+      inline_keyboard: [
+        [Markup.button.callback('✅ Одобрено', 'approved')]
+      ]
+    });
+    
+  } catch (error) {
+    logError(error, 'Одобрение скриншота');
+    await ctx.answerCbQuery('❌ Ошибка одобрения');
+  }
+});
+
+// Обработчик отклонения скриншота
+bot.action(/^reject_screenshot_(\d+)_(\d+)$/, async (ctx) => {
+  try {
+    const userId = parseInt(ctx.match[1]);
+    const taskId = parseInt(ctx.match[2]);
+    
+    const user = await getUser(userId);
+    if (!user) {
+      await ctx.answerCbQuery('❌ Пользователь не найден');
+      return;
+    }
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено');
+      return;
+    }
+    
+    // Сбрасываем скриншот
+    await db.collection('users').updateOne(
+      { id: userId },
+      { 
+        $unset: { 
+          [`tasks.sponsorTasks.${taskId}.screenshot`]: "",
+          [`tasks.sponsorTasks.${taskId}.screenshotFileId`]: "",
+          [`tasks.sponsorTasks.${taskId}.screenshotAt`]: ""
+        },
+        $set: { 
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(userId);
+    
+    // Уведомляем пользователя
+    try {
+      await ctx.telegram.sendMessage(userId, 
+        `❌ *Скриншот отклонен*\n\n` +
+        `🎯 Задание: ${task.title}\n` +
+        `📝 Причина: Не соответствует требованиям\n\n` +
+        `🔄 Попробуйте отправить скриншот еще раз в разделе "Задания"`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      logError(error, `Уведомление пользователя ${userId} об отклонении скриншота`);
+    }
+    
+    await ctx.answerCbQuery('❌ Скриншот отклонен');
+    await ctx.editMessageReplyMarkup({
+      inline_keyboard: [
+        [Markup.button.callback('❌ Отклонено', 'rejected')]
+      ]
+    });
+    
+  } catch (error) {
+    logError(error, 'Отклонение скриншота');
+    await ctx.answerCbQuery('❌ Ошибка отклонения');
+  }
+});
+
+// Обработчик отклонения с причиной
+bot.action(/^reject_reason_(\d+)_(\d+)_(.+)$/, async (ctx) => {
+  try {
+    const userId = parseInt(ctx.match[1]);
+    const taskId = parseInt(ctx.match[2]);
+    const reason = ctx.match[3];
+    
+    const user = await getUser(userId);
+    if (!user) {
+      await ctx.answerCbQuery('❌ Пользователь не найден');
+      return;
+    }
+    
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      await ctx.answerCbQuery('❌ Задание не найдено');
+      return;
+    }
+    
+    const reasonText = {
+      'not_subscribed': 'Пользователь не подписан на канал',
+      'blurry': 'Нечеткий скриншот',
+      'wrong_channel': 'Неверный канал',
+      'too_fast': 'Слишком быстрое выполнение'
+    }[reason] || 'Не соответствует требованиям';
+    
+    // Сбрасываем скриншот
+    await db.collection('users').updateOne(
+      { id: userId },
+      { 
+        $unset: { 
+          [`tasks.sponsorTasks.${taskId}.screenshot`]: "",
+          [`tasks.sponsorTasks.${taskId}.screenshotFileId`]: "",
+          [`tasks.sponsorTasks.${taskId}.screenshotAt`]: ""
+        },
+        $set: { 
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(userId);
+    
+    // Уведомляем пользователя
+    try {
+      await ctx.telegram.sendMessage(userId, 
+        `❌ *Скриншот отклонен*\n\n` +
+        `🎯 Задание: ${task.title}\n` +
+        `📝 Причина: ${reasonText}\n\n` +
+        `🔄 Попробуйте отправить скриншот еще раз в разделе "Задания"`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      logError(error, `Уведомление пользователя ${userId} об отклонении скриншота`);
+    }
+    
+    await ctx.answerCbQuery(`❌ Отклонено: ${reasonText}`);
+    await ctx.editMessageReplyMarkup({
+      inline_keyboard: [
+        [Markup.button.callback(`❌ Отклонено: ${reasonText}`, 'rejected_with_reason')]
+      ]
+    });
+    
+  } catch (error) {
+    logError(error, 'Отклонение скриншота с причиной');
+    await ctx.answerCbQuery('❌ Ошибка отклонения');
+  }
+});
+
 // Обработка кнопок главного меню
 bot.action('main_menu', async (ctx) => {
   try {
@@ -11069,6 +11420,31 @@ bot.action(/^verify_sponsor_(\d+)$/, async (ctx) => {
     await verifySponsorTask(ctx, user, taskId);
   } catch (error) {
     logError(error, 'Проверка спонсорского задания');
+  }
+});
+
+// Обработчик отправки скриншота
+bot.action(/^send_screenshot_(\d+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const taskId = parseInt(ctx.match[1]);
+    await handleSendScreenshot(ctx, user, taskId);
+  } catch (error) {
+    logError(error, 'Отправка скриншота');
+  }
+});
+
+// Обработчик следующего задания
+bot.action('next_sponsor_task', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showNextSponsorTask(ctx, user);
+  } catch (error) {
+    logError(error, 'Следующее спонсорское задание');
   }
 });
 bot.action('do_farm', async (ctx) => {
@@ -13157,6 +13533,23 @@ async function startBot() {
     process.exit(1);
   }
 }
+// ==================== ОБРАБОТЧИК ФОТОГРАФИЙ ====================
+// Обработка скриншотов для спонсорских заданий
+bot.on('photo', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Проверяем, ожидает ли пользователь скриншот для спонсорского задания
+    if (user.adminState && user.adminState.startsWith('sending_screenshot_')) {
+      const taskId = user.adminState.replace('sending_screenshot_', '');
+      await handleScreenshotUpload(ctx, user, parseInt(taskId));
+    }
+  } catch (error) {
+    logError(error, 'Обработка фотографии');
+  }
+});
+
 // ==================== ОБРАБОТЧИК ТЕКСТОВЫХ СООБЩЕНИЙ ====================
 // Должен быть в конце, после всех остальных обработчиков
 bot.on('text', async (ctx) => {
