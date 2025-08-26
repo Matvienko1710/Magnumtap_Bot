@@ -122,6 +122,13 @@ const config = {
   MIN_WITHDRAWAL: 100,
   MAX_WITHDRAWAL: 10000,
   
+  // Система сезонов майнинга
+  MINING_SEASON_DURATION: 5, // дней
+  MINING_SEASON_START_DATE: new Date('2025-11-22'), // Дата начала первого сезона
+  MINING_TOTAL_MAGNUM_COINS: 1000000, // Общее количество MC для всех пользователей
+  MINING_TOTAL_STARS: 100, // Общее количество Stars для всех пользователей
+  MINING_SEASON_MULTIPLIER: 1.2, // Множитель увеличения наград каждый сезон
+  
   // Кеширование
   USER_CACHE_TTL: 30000,
   STATS_CACHE_TTL: 120000,
@@ -1785,9 +1792,6 @@ async function showMainMenu(ctx, user) {
   // Создаем базовые кнопки
   const buttons = [
     [
-      Markup.button.callback('🌾 Фарм', 'farm')
-    ],
-    [
       Markup.button.callback('📈 Биржа', 'exchange'),
       Markup.button.callback('💰 Вывод', 'withdrawal')
     ],
@@ -1830,9 +1834,6 @@ async function showMainMenuStart(ctx, user) {
   
   // Создаем базовые кнопки
   const buttons = [
-    [
-      Markup.button.callback('🌾 Фарм', 'farm')
-    ],
     [
       Markup.button.callback('📈 Биржа', 'exchange'),
       Markup.button.callback('💰 Вывод', 'withdrawal')
@@ -4568,13 +4569,23 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
       return;
     }
     
-    // Обновляем резерв
+    // Обновляем резерв (списываем средства)
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
         $inc: { magnumCoins: -amount },
         $set: { updatedAt: new Date() }
       }
+    );
+    
+    // Списываем средства из общего баланса системы
+    await db.collection('systemStats').updateOne(
+      { type: 'global' },
+      { 
+        $inc: { totalMagnumCoinsSpent: amount },
+        $set: { updatedAt: new Date() }
+      },
+      { upsert: true }
     );
     
     // Очищаем кеш резерва
@@ -9361,6 +9372,278 @@ async function handleAdminCreatePromocode(ctx, user, text) {
   }
 }
 
+// ==================== СОЗДАНИЕ ПРОМОКОДОВ ПО ТИПАМ ====================
+
+// Создание промокода Magnum Coins
+async function handleAdminCreatePromoMC(ctx, user, text) {
+  try {
+    log(`💰 Админ ${user.id} создает промокод MC: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Парсим данные промокода
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 3) {
+      await ctx.reply('❌ Неверный формат! Используйте: КОД НАГРАДА АКТИВАЦИИ\n\n💡 Пример: WELCOME 100 50');
+      return;
+    }
+    
+    const code = parts[0].toUpperCase();
+    const reward = parseFloat(parts[1]);
+    const maxActivations = parseInt(parts[2]);
+    
+    // Валидация данных
+    if (!code || code.length < 3) {
+      await ctx.reply('❌ Код промокода должен содержать минимум 3 символа!');
+      return;
+    }
+    
+    if (!reward || reward <= 0) {
+      await ctx.reply('❌ Награда должна быть больше 0!');
+      return;
+    }
+    
+    if (!maxActivations || maxActivations <= 0 || maxActivations > 10000) {
+      await ctx.reply('❌ Количество активаций должно быть от 1 до 10000!');
+      return;
+    }
+    
+    // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
+    if (existingPromocode) {
+      await ctx.reply(`❌ Промокод "${code}" уже существует!`);
+      return;
+    }
+    
+    // Создаем промокод
+    const promocode = {
+      code: code,
+      reward: reward,
+      rewardType: 'mc',
+      maxActivations: maxActivations,
+      activations: 0,
+      totalActivations: 0,
+      totalRewards: 0,
+      isActive: true,
+      createdAt: new Date(),
+      createdBy: user.id,
+      activationsHistory: []
+    };
+    
+    // Сохраняем в базу данных
+    await db.collection('promocodes').insertOne(promocode);
+    
+    // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод Magnum Coins создан успешно!*\n\n` +
+      `🎫 Код: \`${code}\`\n` +
+      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `📊 Максимум активаций: \`${maxActivations}\`\n` +
+      `📅 Создан: ${new Date().toLocaleString('ru-RU')}\n\n` +
+      `🎯 Промокод готов к использованию!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Промокод MC ${code} успешно создан админом ${user.id}, награда: ${reward} MC, активаций: ${maxActivations}`);
+    
+  } catch (error) {
+    logError(error, `Создание промокода MC админом ${user.id}`);
+    await ctx.reply('❌ Ошибка создания промокода. Попробуйте позже.');
+  }
+}
+
+// Создание промокода Stars
+async function handleAdminCreatePromoStars(ctx, user, text) {
+  try {
+    log(`⭐ Админ ${user.id} создает промокод Stars: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Парсим данные промокода
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 3) {
+      await ctx.reply('❌ Неверный формат! Используйте: КОД НАГРАДА АКТИВАЦИИ\n\n💡 Пример: STARS50 50 25');
+      return;
+    }
+    
+    const code = parts[0].toUpperCase();
+    const reward = parseFloat(parts[1]);
+    const maxActivations = parseInt(parts[2]);
+    
+    // Валидация данных
+    if (!code || code.length < 3) {
+      await ctx.reply('❌ Код промокода должен содержать минимум 3 символа!');
+      return;
+    }
+    
+    if (!reward || reward <= 0) {
+      await ctx.reply('❌ Награда должна быть больше 0!');
+      return;
+    }
+    
+    if (!maxActivations || maxActivations <= 0 || maxActivations > 10000) {
+      await ctx.reply('❌ Количество активаций должно быть от 1 до 10000!');
+      return;
+    }
+    
+    // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
+    if (existingPromocode) {
+      await ctx.reply(`❌ Промокод "${code}" уже существует!`);
+      return;
+    }
+    
+    // Создаем промокод
+    const promocode = {
+      code: code,
+      reward: reward,
+      rewardType: 'stars',
+      maxActivations: maxActivations,
+      activations: 0,
+      totalActivations: 0,
+      totalRewards: 0,
+      isActive: true,
+      createdAt: new Date(),
+      createdBy: user.id,
+      activationsHistory: []
+    };
+    
+    // Сохраняем в базу данных
+    await db.collection('promocodes').insertOne(promocode);
+    
+    // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод Stars создан успешно!*\n\n` +
+      `🎫 Код: \`${code}\`\n` +
+      `⭐ Награда: \`${formatNumber(reward)}\` Stars\n` +
+      `📊 Максимум активаций: \`${maxActivations}\`\n` +
+      `📅 Создан: ${new Date().toLocaleString('ru-RU')}\n\n` +
+      `🎯 Промокод готов к использованию!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Промокод Stars ${code} успешно создан админом ${user.id}, награда: ${reward} Stars, активаций: ${maxActivations}`);
+    
+  } catch (error) {
+    logError(error, `Создание промокода Stars админом ${user.id}`);
+    await ctx.reply('❌ Ошибка создания промокода. Попробуйте позже.');
+  }
+}
+
+// Создание промокода с титулом
+async function handleAdminCreatePromoTitle(ctx, user, text) {
+  try {
+    log(`👑 Админ ${user.id} создает промокод с титулом: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Парсим данные промокода
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 3) {
+      await ctx.reply('❌ Неверный формат! Используйте: КОД ТИТУЛ АКТИВАЦИИ\n\n💡 Пример: LEGEND 👑 Легенда 10');
+      return;
+    }
+    
+    const code = parts[0].toUpperCase();
+    const title = parts.slice(1, -1).join(' '); // Все части кроме первой и последней
+    const maxActivations = parseInt(parts[parts.length - 1]);
+    
+    // Валидация данных
+    if (!code || code.length < 3) {
+      await ctx.reply('❌ Код промокода должен содержать минимум 3 символа!');
+      return;
+    }
+    
+    if (!title || title.length < 2) {
+      await ctx.reply('❌ Название титула должно содержать минимум 2 символа!');
+      return;
+    }
+    
+    if (!maxActivations || maxActivations <= 0 || maxActivations > 10000) {
+      await ctx.reply('❌ Количество активаций должно быть от 1 до 10000!');
+      return;
+    }
+    
+    // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
+    if (existingPromocode) {
+      await ctx.reply(`❌ Промокод "${code}" уже существует!`);
+      return;
+    }
+    
+    // Создаем промокод
+    const promocode = {
+      code: code,
+      reward: title,
+      rewardType: 'title',
+      maxActivations: maxActivations,
+      activations: 0,
+      totalActivations: 0,
+      totalRewards: 0,
+      isActive: true,
+      createdAt: new Date(),
+      createdBy: user.id,
+      activationsHistory: []
+    };
+    
+    // Сохраняем в базу данных
+    await db.collection('promocodes').insertOne(promocode);
+    
+    // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод с титулом создан успешно!*\n\n` +
+      `🎫 Код: \`${code}\`\n` +
+      `👑 Титул: \`${title}\`\n` +
+      `📊 Максимум активаций: \`${maxActivations}\`\n` +
+      `📅 Создан: ${new Date().toLocaleString('ru-RU')}\n\n` +
+      `🎯 Промокод готов к использованию!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Промокод с титулом ${code} успешно создан админом ${user.id}, титул: ${title}, активаций: ${maxActivations}`);
+    
+  } catch (error) {
+    logError(error, `Создание промокода с титулом админом ${user.id}`);
+    await ctx.reply('❌ Ошибка создания промокода. Попробуйте позже.');
+  }
+}
+
 // ==================== АКТИВАЦИЯ ПРОМОКОДОВ ====================
 async function handleUserEnterPromocode(ctx, user, text) {
   try {
@@ -9404,20 +9687,38 @@ async function handleUserEnterPromocode(ctx, user, text) {
       return;
     }
     
-    // Выдаем награду
+    // Выдаем награду в зависимости от типа
     const reward = promocode.reward || 0;
+    const rewardType = promocode.rewardType || 'mc';
+    
+    let updateData = {
+      $push: { usedPromocodes: code },
+      $unset: { adminState: "" },
+      $set: { updatedAt: new Date() }
+    };
+    
+    if (rewardType === 'mc') {
+      updateData.$inc = {
+        magnumCoins: reward,
+        totalEarnedMagnumCoins: reward,
+        experience: Math.floor(reward * 5)
+      };
+    } else if (rewardType === 'stars') {
+      updateData.$inc = {
+        stars: reward,
+        totalEarnedStars: reward,
+        experience: Math.floor(reward * 10)
+      };
+    } else if (rewardType === 'title') {
+      updateData.$set.title = reward;
+      updateData.$inc = {
+        experience: 50
+      };
+    }
+    
     await db.collection('users').updateOne(
       { id: user.id },
-      { 
-        $inc: { 
-          magnumCoins: reward,
-          totalEarnedMagnumCoins: reward,
-          experience: Math.floor(reward * 5)
-        },
-        $push: { usedPromocodes: code },
-        $unset: { adminState: "" },
-        $set: { updatedAt: new Date() }
-      }
+      updateData
     );
     
     // Обновляем статистику промокода
@@ -9455,12 +9756,21 @@ async function handleUserEnterPromocode(ctx, user, text) {
     // Отправляем уведомление в канал (если настроен)
     if (config.PROMO_NOTIFICATIONS_CHAT) {
       try {
+        let rewardText = '';
+        if (rewardType === 'mc') {
+          rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
+        } else if (rewardType === 'stars') {
+          rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
+        } else if (rewardType === 'title') {
+          rewardText = `👑 Награда: \`${reward}\``;
+        }
+        
         const notificationMessage = 
           `🎫 *Активация промокода!*\n\n` +
           `👤 Пользователь: ${user.firstName || 'Неизвестно'}\n` +
           `🆔 ID: \`${user.id}\`\n` +
           `🎫 Промокод: \`${code}\`\n` +
-          `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+          `${rewardText}\n` +
           `📅 Время: ${new Date().toLocaleString('ru-RU')}`;
         
         await bot.telegram.sendMessage(config.PROMO_NOTIFICATIONS_CHAT, notificationMessage, {
@@ -9476,10 +9786,19 @@ async function handleUserEnterPromocode(ctx, user, text) {
       [Markup.button.callback('🔙 Назад к промокодам', 'promocode')]
     ]);
     
+    let rewardText = '';
+    if (rewardType === 'mc') {
+      rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
+    } else if (rewardType === 'stars') {
+      rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
+    } else if (rewardType === 'title') {
+      rewardText = `👑 Награда: \`${reward}\``;
+    }
+    
     await ctx.reply(
       `✅ *Промокод активирован успешно!*\n\n` +
       `🎫 Код: \`${code}\`\n` +
-      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `${rewardText}\n` +
       `📅 Активирован: ${new Date().toLocaleString('ru-RU')}\n\n` +
       `🎉 Поздравляем с получением награды!`,
       {
@@ -9488,7 +9807,15 @@ async function handleUserEnterPromocode(ctx, user, text) {
       }
     );
     
-    log(`✅ Промокод ${code} успешно активирован пользователем ${user.id}, награда: ${reward} MC`);
+    let logReward = '';
+    if (rewardType === 'mc') {
+      logReward = `${reward} MC`;
+    } else if (rewardType === 'stars') {
+      logReward = `${reward} Stars`;
+    } else if (rewardType === 'title') {
+      logReward = `титул "${reward}"`;
+    }
+    log(`✅ Промокод ${code} успешно активирован пользователем ${user.id}, награда: ${logReward}`);
     
   } catch (error) {
     logError(error, `Активация промокода пользователем ${user.id}`);
@@ -13082,9 +13409,156 @@ bot.action('admin_create_promocode', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
-    await db.collection('users').updateOne({ id: user.id }, { $set: { adminState: 'creating_promocode', updatedAt: new Date() } });
-    await ctx.reply('🎫 Введите данные промокода в формате:\n\nКод Награда Тип Использований\n\nПример:\nBONUS100 100 stars 1\n\nГде:\n- Код: название промокода\n- Награда: количество\n- Тип: stars или mc\n- Использований: сколько раз можно использовать');
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('💰 Magnum Coins', 'create_promo_mc'),
+        Markup.button.callback('⭐ Stars', 'create_promo_stars')
+      ],
+      [
+        Markup.button.callback('👑 Титул', 'create_promo_title'),
+        Markup.button.callback('🎫 Пользовательский', 'create_promo_custom')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎫 *Создание промокода*\n\n` +
+      `Выберите тип награды для промокода:\n\n` +
+      `💰 **Magnum Coins** - награда в монетах\n` +
+      `⭐ **Stars** - награда в звездах\n` +
+      `👑 **Титул** - выдача титула\n` +
+      `🎫 **Пользовательский** - ручной ввод\n\n` +
+      `🎯 Выберите тип награды:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
   } catch (error) { logError(error, 'Создание промокода (обработчик)'); }
+});
+
+// Обработчики создания промокодов по типам
+bot.action('create_promo_mc', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promo_mc', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    await ctx.editMessageText(
+      `💰 *Создание промокода Magnum Coins*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД НАГРАДА АКТИВАЦИИ**\n\n` +
+      `💡 Пример: WELCOME 100 50\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода (3+ символов)\n` +
+      `├ НАГРАДА - количество Magnum Coins\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎯 Введите данные:`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) { logError(error, 'Создание промокода MC (обработчик)'); }
+});
+
+bot.action('create_promo_stars', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promo_stars', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    await ctx.editMessageText(
+      `⭐ *Создание промокода Stars*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД НАГРАДА АКТИВАЦИИ**\n\n` +
+      `💡 Пример: STARS50 50 25\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода (3+ символов)\n` +
+      `├ НАГРАДА - количество Stars\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎯 Введите данные:`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) { logError(error, 'Создание промокода Stars (обработчик)'); }
+});
+
+bot.action('create_promo_title', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promo_title', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+    
+    await ctx.editMessageText(
+      `👑 *Создание промокода с титулом*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД ТИТУЛ АКТИВАЦИИ**\n\n` +
+      `💡 Пример: LEGEND 👑 Легенда 10\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода (3+ символов)\n` +
+      `├ ТИТУЛ - название титула\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎯 Введите данные:`,
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) { logError(error, 'Создание промокода Title (обработчик)'); }
+});
+
+bot.action('create_promo_custom', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promocode', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎫 *Создание пользовательского промокода*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД НАГРАДА ТИП АКТИВАЦИИ**\n\n` +
+      `💡 Примеры:\n` +
+      `├ WELCOME 100 mc 50\n` +
+      `├ STARS50 50 stars 25\n` +
+      `└ LEGEND 👑 Легенда 10\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода\n` +
+      `├ НАГРАДА - количество или название титула\n` +
+      `├ ТИП - mc, stars, или title\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎯 Введите данные:`,
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) { logError(error, 'Создание пользовательского промокода (обработчик)'); }
 });
 
 bot.action('admin_mass_give', async (ctx) => {
@@ -13800,6 +14274,15 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'creating_promocode') {
           console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
           await handleAdminCreatePromocode(ctx, user, text);
+        } else if (user.adminState === 'creating_promo_mc') {
+          console.log(`💰 Админ ${ctx.from.id} создает промокод MC: "${text}"`);
+          await handleAdminCreatePromoMC(ctx, user, text);
+        } else if (user.adminState === 'creating_promo_stars') {
+          console.log(`⭐ Админ ${ctx.from.id} создает промокод Stars: "${text}"`);
+          await handleAdminCreatePromoStars(ctx, user, text);
+        } else if (user.adminState === 'creating_promo_title') {
+          console.log(`👑 Админ ${ctx.from.id} создает промокод с титулом: "${text}"`);
+          await handleAdminCreatePromoTitle(ctx, user, text);
         } else if (user.adminState === 'reporting_bug') {
           console.log(`🐛 Пользователь ${ctx.from.id} сообщает об ошибке: "${text}"`);
           await handleBugReport(ctx, user, text);
