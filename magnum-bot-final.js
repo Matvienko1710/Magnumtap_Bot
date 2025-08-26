@@ -2156,10 +2156,20 @@ async function showMinerMenu(ctx, user) {
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
   
-      // Рассчитываем текущую награду с учетом курса, количества майнеров и титула
-    const currentReward = await calculateMinerReward(efficiency, user);
+  // Получаем информацию о текущем сезоне
+  const currentSeason = getCurrentMiningSeason();
+  const seasonInfo = currentSeason ? 
+    `\n📅 *Сезон ${currentSeason.season}* (День ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION})\n` +
+    `📈 *Множитель сезона:* ${currentSeason.multiplier.toFixed(2)}x\n` +
+    `⏰ *До следующего сезона:* ${currentSeason.daysUntilNextSeason} дней` :
+    `\n📅 *Выходные* - майнинг приостановлен`;
+  
+  // Рассчитываем текущую награду с учетом сезона
+  const baseReward = await calculateMinerReward(efficiency, user);
+  const seasonMultiplier = currentSeason ? currentSeason.multiplier : 0;
+  const currentReward = baseReward * seasonMultiplier;
   const rewardPerMinute = currentReward;
-  const rewardPerHour = currentReward * 60; // Примерная награда за час
+  const rewardPerHour = currentReward * 60;
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
   let lastRewardText = '';
@@ -2454,6 +2464,174 @@ async function upgradeMiner(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка улучшения майнера');
   }
 }
+
+// ==================== СИСТЕМА СЕЗОНОВ МАЙНИНГА ====================
+
+// Получение текущего сезона
+function getCurrentMiningSeason() {
+  const now = new Date();
+  const startDate = config.MINING_SEASON_START_DATE;
+  const seasonDuration = config.MINING_SEASON_DURATION;
+  
+  // Пропускаем субботу и воскресенье
+  const dayOfWeek = now.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return null; // Выходные не считаются
+  }
+  
+  const daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+  const currentSeason = Math.floor(daysSinceStart / seasonDuration) + 1;
+  
+  return {
+    season: currentSeason,
+    dayInSeason: (daysSinceStart % seasonDuration) + 1,
+    daysUntilNextSeason: seasonDuration - (daysSinceStart % seasonDuration),
+    startDate: new Date(startDate.getTime() + (currentSeason - 1) * seasonDuration * 24 * 60 * 60 * 1000),
+    endDate: new Date(startDate.getTime() + currentSeason * seasonDuration * 24 * 60 * 60 * 1000),
+    multiplier: Math.pow(config.MINING_SEASON_MULTIPLIER, currentSeason - 1)
+  };
+}
+
+// Получение лимитов сезона
+function getSeasonLimits(season) {
+  const baseMCLimit = config.MINING_TOTAL_MAGNUM_COINS;
+  const baseStarsLimit = config.MINING_TOTAL_STARS;
+  const multiplier = Math.pow(config.MINING_SEASON_MULTIPLIER, season - 1);
+  
+  return {
+    magnumCoins: Math.floor(baseMCLimit * multiplier),
+    stars: Math.floor(baseStarsLimit * multiplier)
+  };
+}
+
+// Получение статистики сезона
+async function getSeasonStats(season) {
+  const startDate = new Date(config.MINING_SEASON_START_DATE.getTime() + (season - 1) * config.MINING_SEASON_DURATION * 24 * 60 * 60 * 1000);
+  const endDate = new Date(startDate.getTime() + config.MINING_SEASON_DURATION * 24 * 60 * 60 * 1000);
+  
+  const stats = await db.collection('miningSeasonStats').findOne({ season: season });
+  
+  if (!stats) {
+    return {
+      season: season,
+      totalMinedMC: 0,
+      totalMinedStars: 0,
+      activeMiners: 0,
+      startDate: startDate,
+      endDate: endDate
+    };
+  }
+  
+  return {
+    ...stats,
+    startDate: startDate,
+    endDate: endDate
+  };
+}
+
+// Обновление статистики сезона
+async function updateSeasonStats(season, minedMC, minedStars) {
+  await db.collection('miningSeasonStats').updateOne(
+    { season: season },
+    { 
+      $inc: { 
+        totalMinedMC: minedMC,
+        totalMinedStars: minedStars
+      },
+      $set: { 
+        updatedAt: new Date()
+      }
+    },
+    { upsert: true }
+  );
+}
+
+// Проверка лимитов сезона
+async function checkSeasonLimits(season, minedMC, minedStars) {
+  const limits = getSeasonLimits(season);
+  const stats = await getSeasonStats(season);
+  
+  const canMineMC = stats.totalMinedMC + minedMC <= limits.magnumCoins;
+  const canMineStars = stats.totalMinedStars + minedStars <= limits.stars;
+  
+  return {
+    canMineMC,
+    canMineStars,
+    remainingMC: Math.max(0, limits.magnumCoins - stats.totalMinedMC),
+    remainingStars: Math.max(0, limits.stars - stats.totalMinedStars)
+  };
+}
+
+// Показ информации о сезоне майнинга
+async function showMinerSeasonInfo(ctx, user) {
+  try {
+    log(`📅 Показ информации о сезоне майнинга для пользователя ${user.id}`);
+    
+    const currentSeason = getCurrentMiningSeason();
+    
+    if (!currentSeason) {
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 Назад', 'miner')]
+      ]);
+      
+      await ctx.editMessageText(
+        `📅 *Информация о сезоне майнинга*\n\n` +
+        `🌅 *Выходные*\n\n` +
+        `⏸️ Майнинг приостановлен в выходные дни\n` +
+        `📅 Суббота и воскресенье не считаются сезонными днями\n\n` +
+        `🔄 Майнинг возобновится в понедельник`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        }
+      );
+      return;
+    }
+    
+    const limits = getSeasonLimits(currentSeason.season);
+    const stats = await getSeasonStats(currentSeason.season);
+    const limitsCheck = await checkSeasonLimits(currentSeason.season, 0, 0);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'miner')]
+    ]);
+    
+    const message = 
+      `📅 *Информация о сезоне майнинга*\n\n` +
+      `🎯 *Текущий сезон:* ${currentSeason.season}\n` +
+      `📅 *День сезона:* ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\n` +
+      `⏰ *До следующего сезона:* ${currentSeason.daysUntilNextSeason} дней\n\n` +
+      `📈 *Множитель сезона:* ${currentSeason.multiplier.toFixed(2)}x\n` +
+      `📊 *Прогресс сезона:* ${((currentSeason.dayInSeason / config.MINING_SEASON_DURATION) * 100).toFixed(1)}%\n\n` +
+      `💰 *Лимиты сезона:*\n` +
+      `├ Magnum Coins: ${formatNumber(limits.magnumCoins)}\n` +
+      `└ Stars: ${formatNumber(limits.stars)}\n\n` +
+      `📊 *Статистика сезона:*\n` +
+      `├ Добыто MC: ${formatNumber(stats.totalMinedMC)} / ${formatNumber(limits.magnumCoins)}\n` +
+      `├ Добыто Stars: ${formatNumber(stats.totalMinedStars)} / ${formatNumber(limits.stars)}\n` +
+      `├ Осталось MC: ${formatNumber(limitsCheck.remainingMC)}\n` +
+      `└ Осталось Stars: ${formatNumber(limitsCheck.remainingStars)}\n\n` +
+      `📅 *Даты сезона:*\n` +
+      `├ Начало: ${currentSeason.startDate.toLocaleDateString('ru-RU')}\n` +
+      `└ Конец: ${currentSeason.endDate.toLocaleDateString('ru-RU')}\n\n` +
+      `💡 *Информация:*\n` +
+      `├ Каждый сезон длится ${config.MINING_SEASON_DURATION} дней\n` +
+      `├ Выходные не считаются сезонными днями\n` +
+      `├ Множитель увеличивается на ${((config.MINING_SEASON_MULTIPLIER - 1) * 100).toFixed(0)}% каждый сезон\n` +
+      `└ Лимиты также увеличиваются с каждым сезоном`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Информация о сезоне показана для пользователя ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ информации о сезоне для пользователя ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка загрузки информации о сезоне');
+  }
+}
+
 // ==================== ФАРМ ====================
 async function showFarmMenu(ctx, user) {
   const farm = user.farm;
@@ -2757,8 +2935,18 @@ async function updateMinerMenu(ctx, user) {
   const isActive = miner.active || false;
   const efficiency = miner.efficiency || 1;
   
-  // Рассчитываем текущую награду с учетом курса, количества майнеров и титула
-  const currentReward = await calculateMinerReward(efficiency, user);
+  // Получаем информацию о текущем сезоне
+  const currentSeason = getCurrentMiningSeason();
+  const seasonInfo = currentSeason ? 
+    `\n📅 *Сезон ${currentSeason.season}* (День ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION})\n` +
+    `📈 *Множитель сезона:* ${currentSeason.multiplier.toFixed(2)}x\n` +
+    `⏰ *До следующего сезона:* ${currentSeason.daysUntilNextSeason} дней` :
+    `\n📅 *Выходные* - майнинг приостановлен`;
+  
+  // Рассчитываем текущую награду с учетом сезона
+  const baseReward = await calculateMinerReward(efficiency, user);
+  const seasonMultiplier = currentSeason ? currentSeason.multiplier : 0;
+  const currentReward = baseReward * seasonMultiplier;
   const rewardPerMinute = currentReward;
   const rewardPerHour = currentReward * 60;
   
@@ -5376,17 +5564,40 @@ async function processMinerRewards() {
     
     for (const user of activeMiners) {
       try {
-        // Рассчитываем награду с учетом курса, количества майнеров и титула
-        const reward = await calculateMinerReward(user.miner.efficiency, user);
+        // Получаем текущий сезон
+        const currentSeason = getCurrentMiningSeason();
+        
+        // Если выходные - пропускаем награды
+        if (!currentSeason) {
+          log(`📅 Выходные - майнинг приостановлен для пользователя ${user.id}`);
+          continue;
+        }
+        
+        // Рассчитываем базовую награду
+        const baseReward = await calculateMinerReward(user.miner.efficiency, user);
+        
+        // Применяем сезонный множитель
+        const seasonReward = baseReward * currentSeason.multiplier;
+        
+        // Проверяем лимиты сезона
+        const limits = await checkSeasonLimits(currentSeason.season, seasonReward, 0);
+        
+        if (!limits.canMineMC) {
+          log(`⚠️ Лимит сезона ${currentSeason.season} исчерпан для пользователя ${user.id}`);
+          continue;
+        }
+        
+        // Обновляем статистику сезона
+        await updateSeasonStats(currentSeason.season, seasonReward, 0);
         
         await db.collection('users').updateOne(
           { id: user.id },
           { 
             $inc: { 
-              magnumCoins: reward,
-              totalEarnedMagnumCoins: reward,
-              experience: Math.floor(reward * 5),
-              'miner.totalMined': reward
+              magnumCoins: seasonReward,
+              totalEarnedMagnumCoins: seasonReward,
+              experience: Math.floor(seasonReward * 5),
+              'miner.totalMined': seasonReward
             },
             $set: { 
               'miner.lastReward': now,
@@ -11031,6 +11242,17 @@ bot.action('miner_stats', async (ctx) => {
     await showMinerStats(ctx, user);
   } catch (error) {
     logError(error, 'Статистика майнера (обработчик)');
+  }
+});
+
+bot.action('miner_season_info', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerSeasonInfo(ctx, user);
+  } catch (error) {
+    logError(error, 'Информация о сезоне майнера (обработчик)');
   }
 });
 bot.action('confirm_miner_upgrade', async (ctx) => {
