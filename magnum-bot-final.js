@@ -99,6 +99,7 @@ const config = {
   WITHDRAWAL_CHANNEL: process.env.WITHDRAWAL_CHANNEL ? `@${process.env.WITHDRAWAL_CHANNEL}` : null,
   REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL ? `@${process.env.REQUIRED_CHANNEL}` : null,
   SPONSOR_TASK_CHANNEL: process.env.SPONSOR_TASK_CHANNEL || '@musice46',
+  SPONSOR_TASK_BOT: process.env.SPONSOR_TASK_BOT || 'https://t.me/farmikstars_bot?start=6587897295',
   REQUIRED_BOT_LINK: process.env.REQUIRED_BOT_LINK || 'https://t.me/ReferalStarsRobot?start=6587897295',
   FIRESTARS_BOT_LINK: process.env.FIRESTARS_BOT_LINK || 'https://t.me/firestars_rbot?start=6587897295',
   FARMIK_BOT_LINK: process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295',
@@ -7090,9 +7091,24 @@ async function showTasksMenu(ctx, user) {
     const completedTasks = tasks.completedTasks || 0;
     const totalEarnings = tasks.totalTaskEarnings || 0;
     
+    // Подсчитываем статус спонсорских заданий
+    const sponsorTasks = getSponsorTasks();
+    const userSponsorTasks = tasks.sponsorTasks || {};
+    const completedSponsorTasks = Object.values(userSponsorTasks).filter(task => task.completed).length;
+    const totalSponsorTasks = sponsorTasks.length;
+    
+    let sponsorStatus = '';
+    if (completedSponsorTasks === 0) {
+      sponsorStatus = '🔄';
+    } else if (completedSponsorTasks === totalSponsorTasks) {
+      sponsorStatus = '✅';
+    } else {
+      sponsorStatus = '🎁';
+    }
+    
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🎯 Спонсорские задания', 'tasks_sponsor'),
+        Markup.button.callback(`${sponsorStatus} Спонсорские задания`, 'tasks_sponsor'),
         Markup.button.callback('📅 Ежедневные задания', 'tasks_daily')
       ],
       [
@@ -7137,17 +7153,26 @@ async function showSponsorTasks(ctx, user) {
     sponsorTasks.forEach((task, index) => {
       const isCompleted = userTasks[task.id]?.completed || false;
       const isClaimed = userTasks[task.id]?.claimed || false;
-      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
+      const hasScreenshot = userTasks[task.id]?.screenshot || false;
       
-      taskButtons.push([
-        Markup.button.callback(`${status} ${task.title}`, `sponsor_task_${task.id}`)
-      ]);
+      // Если задание выполнено и получена награда - показываем как завершенное
+      if (isCompleted && isClaimed) {
+        taskButtons.push([
+          Markup.button.callback(`✅ ${task.title} (Завершено)`, `sponsor_task_${task.id}`)
+        ]);
+      } else {
+        // Иначе показываем как активное
+        const status = isCompleted ? '🎁' : (hasScreenshot ? '📸' : '🔄');
+        taskButtons.push([
+          Markup.button.callback(`${status} ${task.title}`, `sponsor_task_${task.id}`)
+        ]);
+      }
     });
     
     // Добавляем кнопку "Следующее задание" если есть невыполненные
     const hasUncompletedTasks = sponsorTasks.some(task => {
       const userTask = userTasks[task.id] || {};
-      return !userTask.completed;
+      return !userTask.completed || !userTask.claimed;
     });
     
     if (hasUncompletedTasks) {
@@ -7163,7 +7188,19 @@ async function showSponsorTasks(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard(taskButtons);
     
-    let message = `🎯 *Спонсорские задания*\n\n`;
+    // Подсчитываем общий статус
+    const completedTasks = Object.values(userTasks).filter(task => task.completed).length;
+    const totalTasks = sponsorTasks.length;
+    let overallStatus = '';
+    if (completedTasks === 0) {
+      overallStatus = '🔄';
+    } else if (completedTasks === totalTasks) {
+      overallStatus = '✅';
+    } else {
+      overallStatus = '🎁';
+    }
+    
+    let message = `${overallStatus} *Спонсорские задания*\n\n`;
     message += `💰 *Выполняйте задания от спонсоров и получайте награды!*\n\n`;
     
     sponsorTasks.forEach((task, index) => {
@@ -7212,33 +7249,91 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     const isClaimed = userTask.claimed || false;
     const hasScreenshot = userTask.screenshot || false;
     
+    // Если задание полностью завершено (выполнено и получена награда)
+    if (isCompleted && isClaimed) {
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
+      ]);
+      
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+      
+      let message = `✅ *${task.title}*\n\n`;
+      message += `📝 *Описание:*\n${task.description}\n\n`;
+      message += `💰 *Награда:* \`${rewardText}\` ✅ Получена\n`;
+      message += `⭐ *Сложность:* ${task.difficulty}\n`;
+      message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
+      message += `🎉 *Задание полностью выполнено!*\n`;
+      message += `✅ Скриншот одобрен\n`;
+      message += `🎁 Награда получена\n`;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+      return;
+    }
+    
+    // Если задание выполнено, но награда не получена
+    if (isCompleted && !isClaimed) {
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('🎁 Получить награду', `claim_sponsor_${taskId}`)],
+        [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
+      ]);
+      
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+      
+      let message = `🎁 *${task.title}*\n\n`;
+      message += `📝 *Описание:*\n${task.description}\n\n`;
+      message += `💰 *Награда:* \`${rewardText}\` 🎁 Готова к получению\n`;
+      message += `⭐ *Сложность:* ${task.difficulty}\n`;
+      message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
+      message += `✅ *Скриншот одобрен!*\n`;
+      message += `🎁 Получите награду за выполнение задания\n`;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+      return;
+    }
+    
+    // Если скриншот отправлен, но не проверен
+    if (hasScreenshot && !isCompleted) {
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Проверить выполнение', `verify_sponsor_${taskId}`)],
+        [Markup.button.callback('📸 Отправить новый скриншот', `send_screenshot_${taskId}`)],
+        [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
+      ]);
+      
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+      
+      let message = `📸 *${task.title}*\n\n`;
+      message += `📝 *Описание:*\n${task.description}\n\n`;
+      message += `💰 *Награда:* \`${rewardText}\`\n`;
+      message += `⭐ *Сложность:* ${task.difficulty}\n`;
+      message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
+      message += `📸 *Скриншот отправлен*\n`;
+      message += `⏳ Ожидает проверки администратором\n`;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+      return;
+    }
+    
+    // Если задание не начато или скриншот отклонен
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.url('📱 Подписаться', task.url),
         Markup.button.callback('📸 Отправить скриншот', `send_screenshot_${taskId}`)
-      ]
-    ]);
-    
-    if (hasScreenshot && !isCompleted) {
-      keyboard.reply_markup.inline_keyboard.push([
-        Markup.button.callback('✅ Проверить выполнение', `verify_sponsor_${taskId}`)
-      ]);
-    }
-    
-    if (isCompleted && !isClaimed) {
-      keyboard.reply_markup.inline_keyboard.push([
-        Markup.button.callback('🎁 Получить награду', `claim_sponsor_${taskId}`)
-      ]);
-    }
-    
-    keyboard.reply_markup.inline_keyboard.push([
-      Markup.button.callback('🔙 Назад', 'tasks_sponsor'),
-      Markup.button.callback('⏭️ Следующее задание', 'next_sponsor_task')
+      ],
+      [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
     ]);
     
     const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
     
-    let message = `🎯 *${task.title}*\n\n`;
+    let message = `🔄 *${task.title}*\n\n`;
     message += `📝 *Описание:*\n${task.description}\n\n`;
     message += `💰 *Награда:* \`${rewardText}\`\n`;
     message += `⭐ *Сложность:* ${task.difficulty}\n`;
@@ -7252,18 +7347,8 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       message += `\n`;
     }
     
-    if (isCompleted) {
-      message += `✅ *Статус:* Задание выполнено\n`;
-      if (isClaimed) {
-        message += `🎁 *Награда:* Получена\n`;
-      } else {
-      message += `🎁 *Награда:* Готова к получению\n`;
-      }
-    } else if (hasScreenshot) {
-      message += `📸 *Статус:* Скриншот отправлен, ожидает проверки\n`;
-    } else {
-      message += `🔄 *Статус:* Задание не выполнено\n`;
-    }
+    message += `🔄 *Статус:* Задание не выполнено\n`;
+    message += `📱 Подпишитесь на канал и отправьте скриншот\n`;
     
     message += `\n🎯 Выберите действие:`;
     
@@ -7292,8 +7377,13 @@ async function verifySponsorTask(ctx, user, taskId) {
     const userTasks = user.tasks?.sponsorTasks || {};
     const userTask = userTasks[taskId] || {};
     
-    if (userTask.completed) {
-      await ctx.answerCbQuery('✅ Задание уже выполнено!');
+    if (userTask.completed && userTask.claimed) {
+      await ctx.answerCbQuery('❌ Задание уже выполнено и награда получена');
+      return;
+    }
+    
+    if (userTask.completed && !userTask.claimed) {
+      await ctx.answerCbQuery('🎁 Задание выполнено! Получите награду');
       return;
     }
     
@@ -7478,6 +7568,15 @@ async function handleSendScreenshot(ctx, user, taskId) {
       return;
     }
     
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
+    
+    // Проверяем, не было ли задание уже одобрено
+    if (userTask.completed && userTask.claimed) {
+      await ctx.answerCbQuery('❌ Задание уже выполнено и награда получена');
+      return;
+    }
+    
     // Устанавливаем состояние ожидания скриншота
     await db.collection('users').updateOne(
       { id: user.id },
@@ -7493,8 +7592,22 @@ async function handleSendScreenshot(ctx, user, taskId) {
     userCache.delete(user.id);
     
     const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
-    await ctx.answerCbQuery(`📸 Теперь отправьте скриншот подписки на канал ${sponsorChannel}`);
-    await ctx.reply(`📸 Пожалуйста, отправьте скриншот, подтверждающий вашу подписку на канал ${sponsorChannel}`);
+    const sponsorBot = config.SPONSOR_TASK_BOT;
+    const botName = sponsorBot.includes('farmikstars_bot') ? '@farmikstars_bot' : '@sponsor_bot';
+    
+    let message = '';
+    if (taskId === 1) {
+      message = `📸 Пожалуйста, отправьте скриншот, подтверждающий вашу подписку на канал ${sponsorChannel}`;
+      await ctx.answerCbQuery(`📸 Теперь отправьте скриншот подписки на канал ${sponsorChannel}`);
+    } else if (taskId === 2) {
+      message = `📸 Пожалуйста, отправьте скриншот запуска бота ${botName} (кнопка /start)`;
+      await ctx.answerCbQuery(`📸 Теперь отправьте скриншот запуска бота ${botName}`);
+    } else {
+      message = `📸 Пожалуйста, отправьте скриншот выполнения задания`;
+      await ctx.answerCbQuery(`📸 Теперь отправьте скриншот выполнения задания`);
+    }
+    
+    await ctx.reply(message);
   } catch (error) {
     logError(error, 'Запрос отправки скриншота');
     await ctx.answerCbQuery('❌ Ошибка запроса скриншота');
@@ -7773,6 +7886,8 @@ async function showTasksAchievements(ctx, user) {
 function getSponsorTasks() {
   const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
   const channelName = sponsorChannel.replace('@', '');
+  const sponsorBot = config.SPONSOR_TASK_BOT;
+  const botName = sponsorBot.includes('farmikstars_bot') ? '@farmikstars_bot' : '@sponsor_bot';
   
   return [
     {
@@ -7787,6 +7902,21 @@ function getSponsorTasks() {
       requirements: [
         `Подпишитесь на канал ${sponsorChannel}`,
         'Отправьте скриншот подписки'
+      ]
+    },
+    {
+      id: 2,
+      title: `Запуск бота ${botName}`,
+      description: `Запустите бота ${botName} и отправьте скриншот`,
+      reward: 0.5,
+      rewardType: 'stars',
+      difficulty: '⭐ Легкое',
+      estimatedTime: '1 минута',
+      url: sponsorBot,
+      requirements: [
+        `Запустите бота ${botName}`,
+        'Нажмите кнопку /start',
+        'Отправьте скриншот запуска бота'
       ]
     }
   ];
