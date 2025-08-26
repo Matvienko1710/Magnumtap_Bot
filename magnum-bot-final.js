@@ -1792,22 +1792,23 @@ async function showMainMenu(ctx, user) {
   // Создаем базовые кнопки
   const buttons = [
     [
-      Markup.button.callback('📈 Биржа', 'exchange'),
-      Markup.button.callback('💰 Вывод', 'withdrawal')
+      Markup.button.callback('⛏️ Майнер', 'miner'),
+      Markup.button.callback('📈 Биржа', 'exchange')
     ],
     [
-      Markup.button.callback('🎁 Бонус', 'bonus'),
-      Markup.button.callback('📋 Задания', 'tasks')
+      Markup.button.callback('💰 Вывод', 'withdrawal'),
+      Markup.button.callback('🎁 Бонус', 'bonus')
     ],
     [
-      Markup.button.callback('🏆 Достижения', 'achievements'),
-      Markup.button.callback('👥 Рефералы', 'referrals')
+      Markup.button.callback('📋 Задания', 'tasks'),
+      Markup.button.callback('🏆 Достижения', 'achievements')
     ],
     [
-      Markup.button.callback('🎫 Промокод', 'promocode'),
-      Markup.button.callback('🗺️ Роадмап', 'roadmap')
+      Markup.button.callback('👥 Рефералы', 'referrals'),
+      Markup.button.callback('🎫 Промокод', 'promocode')
     ],
     [
+      Markup.button.callback('🗺️ Роадмап', 'roadmap'),
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
@@ -1835,22 +1836,23 @@ async function showMainMenuStart(ctx, user) {
   // Создаем базовые кнопки
   const buttons = [
     [
-      Markup.button.callback('📈 Биржа', 'exchange'),
-      Markup.button.callback('💰 Вывод', 'withdrawal')
+      Markup.button.callback('⛏️ Майнер', 'miner'),
+      Markup.button.callback('📈 Биржа', 'exchange')
     ],
     [
-      Markup.button.callback('🎁 Бонус', 'bonus'),
-      Markup.button.callback('📋 Задания', 'tasks')
+      Markup.button.callback('💰 Вывод', 'withdrawal'),
+      Markup.button.callback('🎁 Бонус', 'bonus')
     ],
     [
-      Markup.button.callback('🏆 Достижения', 'achievements'),
-      Markup.button.callback('👥 Рефералы', 'referrals')
+      Markup.button.callback('📋 Задания', 'tasks'),
+      Markup.button.callback('🏆 Достижения', 'achievements')
     ],
     [
-      Markup.button.callback('🎫 Промокод', 'promocode'),
-      Markup.button.callback('🗺️ Роадмап', 'roadmap')
+      Markup.button.callback('👥 Рефералы', 'referrals'),
+      Markup.button.callback('🎫 Промокод', 'promocode')
     ],
     [
+      Markup.button.callback('🗺️ Роадмап', 'roadmap'),
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
