@@ -17,10 +17,12 @@ services:
         sync: false
       - key: WITHDRAWAL_CHANNEL
         sync: false
-      - key: REQUIRED_CHANNEL
-        sync: false
-      - key: REQUIRED_BOT_LINK
-        sync: false
+                   - key: REQUIRED_CHANNEL
+               sync: false
+             - key: SPONSOR_TASK_CHANNEL
+               sync: false
+             - key: REQUIRED_BOT_LINK
+               sync: false
       - key: FIRESTARS_BOT_LINK
         sync: false
       - key: FARMIK_BOT_LINK

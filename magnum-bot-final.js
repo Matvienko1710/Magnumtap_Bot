@@ -98,6 +98,7 @@ const config = {
   SUPPORT_CHANNEL: process.env.SUPPORT_CHANNEL ? `@${process.env.SUPPORT_CHANNEL}` : null,
   WITHDRAWAL_CHANNEL: process.env.WITHDRAWAL_CHANNEL ? `@${process.env.WITHDRAWAL_CHANNEL}` : null,
   REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL ? `@${process.env.REQUIRED_CHANNEL}` : null,
+  SPONSOR_TASK_CHANNEL: process.env.SPONSOR_TASK_CHANNEL || '@musice46',
   REQUIRED_BOT_LINK: process.env.REQUIRED_BOT_LINK || 'https://t.me/ReferalStarsRobot?start=6587897295',
   FIRESTARS_BOT_LINK: process.env.FIRESTARS_BOT_LINK || 'https://t.me/firestars_rbot?start=6587897295',
   FARMIK_BOT_LINK: process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295',
@@ -7131,9 +7132,36 @@ async function showSponsorTasks(ctx, user) {
     const sponsorTasks = getSponsorTasks();
     const userTasks = user.tasks?.sponsorTasks || {};
     
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад', 'tasks')]
+    // Создаем кнопки для каждого задания
+    const taskButtons = [];
+    sponsorTasks.forEach((task, index) => {
+      const isCompleted = userTasks[task.id]?.completed || false;
+      const isClaimed = userTasks[task.id]?.claimed || false;
+      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
+      
+      taskButtons.push([
+        Markup.button.callback(`${status} ${task.title}`, `sponsor_task_${task.id}`)
+      ]);
+    });
+    
+    // Добавляем кнопку "Следующее задание" если есть невыполненные
+    const hasUncompletedTasks = sponsorTasks.some(task => {
+      const userTask = userTasks[task.id] || {};
+      return !userTask.completed;
+    });
+    
+    if (hasUncompletedTasks) {
+      taskButtons.push([
+        Markup.button.callback('⏭️ Следующее задание', 'next_sponsor_task')
+      ]);
+    }
+    
+    // Добавляем кнопку "Назад"
+    taskButtons.push([
+      Markup.button.callback('🔙 Назад', 'tasks')
     ]);
+    
+    const keyboard = Markup.inlineKeyboard(taskButtons);
     
     let message = `🎯 *Спонсорские задания*\n\n`;
     message += `💰 *Выполняйте задания от спонсоров и получайте награды!*\n\n`;
@@ -7464,8 +7492,9 @@ async function handleSendScreenshot(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
-    await ctx.answerCbQuery('📸 Теперь отправьте скриншот подписки на канал');
-    await ctx.reply('📸 Пожалуйста, отправьте скриншот, подтверждающий вашу подписку на канал @musice46');
+    const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
+    await ctx.answerCbQuery(`📸 Теперь отправьте скриншот подписки на канал ${sponsorChannel}`);
+    await ctx.reply(`📸 Пожалуйста, отправьте скриншот, подтверждающий вашу подписку на канал ${sponsorChannel}`);
   } catch (error) {
     logError(error, 'Запрос отправки скриншота');
     await ctx.answerCbQuery('❌ Ошибка запроса скриншота');
@@ -7742,18 +7771,21 @@ async function showTasksAchievements(ctx, user) {
 }
 // Вспомогательные функции
 function getSponsorTasks() {
+  const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
+  const channelName = sponsorChannel.replace('@', '');
+  
   return [
     {
       id: 1,
-      title: 'Подписка на канал @musice46',
-      description: 'Подпишитесь на канал @musice46 и отправьте скриншот',
+      title: `Подписка на канал ${sponsorChannel}`,
+      description: `Подпишитесь на канал ${sponsorChannel} и отправьте скриншот`,
       reward: 0.3,
       rewardType: 'stars',
       difficulty: '⭐ Легкое',
       estimatedTime: '2 минуты',
-      url: 'https://t.me/musice46',
+      url: `https://t.me/${channelName}`,
       requirements: [
-        'Подпишитесь на канал @musice46',
+        `Подпишитесь на канал ${sponsorChannel}`,
         'Отправьте скриншот подписки'
       ]
     }
