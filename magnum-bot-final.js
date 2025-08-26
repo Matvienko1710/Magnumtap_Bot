@@ -2195,6 +2195,9 @@ async function showMinerMenu(ctx, user) {
       Markup.button.callback('⬆️ Улучшить майнер', 'upgrade_miner'),
       Markup.button.callback('📊 Статистика', 'miner_stats')
     ],
+    [
+      Markup.button.callback('📅 Информация о сезоне', 'miner_season_info')
+    ],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
@@ -2206,13 +2209,14 @@ async function showMinerMenu(ctx, user) {
   const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
   const message = 
-    `⛏️ *Майнер*\n\n` +
+    `⛏️ *Майнер*${seasonInfo}\n\n` +
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level || 1}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
-    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
-    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
+    `💰 *Базовая награда/минуту:* ${formatNumber(baseReward)} Magnum Coins\n` +
+    `💰 *Сезонная награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
+    `💰 *Сезонная награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
     `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
   
