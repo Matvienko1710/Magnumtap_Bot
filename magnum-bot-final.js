@@ -968,7 +968,9 @@ function escapeMarkdown(text) {
     .replace(/\|/g, '\\|')
     .replace(/\{/g, '\\{')
     .replace(/\}/g, '\\}')
-    .replace(/!/g, '\\!');
+    .replace(/!/g, '\\!')
+    .replace(/_/g, '\\_')
+    .replace(/\./g, '\\.');
 }
 
 function formatNumber(num) {
@@ -7610,7 +7612,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     message += `\n🎯 Выберите действие:`;
     
-    log(`🎯 Сообщение для задания ${taskId} (последняя часть): ${message.substring(message.length - 100)}`);
+    log(`🎯 Сообщение для задания ${taskId} (полное): ${message}`);
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -8012,8 +8014,8 @@ async function showTasksProgress(ctx, user) {
     const sponsorTasks = tasks.sponsorTasks || {};
     const dailyTasks = tasks.dailyTasks || {};
     
-    const completedSponsor = Object.values(sponsorTasks).filter(t => t.completed).length;
-    const completedDaily = Object.values(dailyTasks).filter(t => t.claimed).length;
+    const completedSponsor = Object.values(sponsorTasks).filter(t => t && t.completed).length;
+    const completedDaily = Object.values(dailyTasks).filter(t => t && t.claimed).length;
     
     message += `🎯 *По типам заданий:*\n`;
     message += `├ Спонсорские: \`${completedSponsor}\` выполнено\n`;
