@@ -2425,7 +2425,7 @@ async function showMinerMenu(ctx, user) {
       Markup.button.callback('📊 Статистика', 'miner_stats')
     ],
     [
-      Markup.button.callback('⚡ Активный клик', 'miner_active_click'),
+              Markup.button.callback('⚡ Клик', 'miner_active_click'),
       Markup.button.callback('📅 Сезон', 'miner_season_info')
     ],
     [
@@ -2988,23 +2988,28 @@ async function processMiningRewards() {
         const userWithMining = initializeNewMiningSystem(user);
         const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
-        if (totalSpeed > 0) {
+        const totalSpeedSum = totalSpeed.magnumCoins + totalSpeed.stars;
+        if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
           const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
           
           if (timeDiff >= config.MINING_REWARD_INTERVAL) {
-            const reward = totalSpeed * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             // Обновляем статистику
             await db.collection('users').updateOne(
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnumCoins: reward,
-                  'miningStats.totalMinedMC': reward,
-                  'miningStats.seasonMinedMC': reward,
-                  'miningStats.passiveRewards': reward
+                  magnumCoins: rewardMC,
+                  stars: rewardStars,
+                  'miningStats.totalMinedMC': rewardMC,
+                  'miningStats.totalMinedStars': rewardStars,
+                  'miningStats.seasonMinedMC': rewardMC,
+                  'miningStats.seasonMinedStars': rewardStars,
+                  'miningStats.passiveRewards': rewardMC + rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -3069,7 +3074,7 @@ async function processActiveMiningClick(user) {
     userCache.delete(userWithMining.id);
     
     const totalBonus = bonusRewardMC + bonusRewardStars;
-    let message = `✅ Активный клик!`;
+    let message = `✅ Клик!`;
     if (bonusRewardMC > 0) message += `\n+${formatNumber(bonusRewardMC)} MC`;
     if (bonusRewardStars > 0) message += `\n+${formatNumber(bonusRewardStars)} ⭐`;
     
@@ -3079,7 +3084,7 @@ async function processActiveMiningClick(user) {
       message: message
     };
   } catch (error) {
-    console.error('❌ Ошибка активного клика майнинга:', error);
+    console.error('❌ Ошибка клика майнинга:', error);
     return { success: false, message: '❌ Ошибка обработки клика' };
   }
 }
@@ -6009,23 +6014,28 @@ async function processMinerRewards() {
         const userWithMining = initializeNewMiningSystem(user);
         const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
-        if (totalSpeed > 0) {
+        const totalSpeedSum = totalSpeed.magnumCoins + totalSpeed.stars;
+        if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
           const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
           
           if (timeDiff >= config.MINING_REWARD_INTERVAL) {
-            const reward = totalSpeed * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             // Обновляем статистику
             await db.collection('users').updateOne(
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnumCoins: reward,
-                  'miningStats.totalMinedMC': reward,
-                  'miningStats.seasonMinedMC': reward,
-                  'miningStats.passiveRewards': reward
+                  magnumCoins: rewardMC,
+                  stars: rewardStars,
+                  'miningStats.totalMinedMC': rewardMC,
+                  'miningStats.totalMinedStars': rewardStars,
+                  'miningStats.seasonMinedMC': rewardMC,
+                  'miningStats.seasonMinedStars': rewardStars,
+                  'miningStats.passiveRewards': rewardMC + rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -11747,6 +11757,12 @@ bot.action('miner_active_click', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    // Проверяем, является ли пользователь админом
+    if (!config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
+    
     const result = await processActiveMiningClick(user);
     await ctx.answerCbQuery(result.message);
     
@@ -11755,8 +11771,8 @@ bot.action('miner_active_click', async (ctx) => {
       await showMinerMenu(ctx, user);
     }
   } catch (error) {
-    logError(error, 'Активный клик майнинга');
-    await ctx.answerCbQuery('❌ Ошибка активного клика');
+    logError(error, 'Клик майнинга');
+    await ctx.answerCbQuery('❌ Ошибка клика');
   }
 });
 
@@ -11830,6 +11846,12 @@ bot.action(/^upgrade_miner_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
+    
+    // Проверяем, является ли пользователь админом
+    if (!config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
     
     const minerType = ctx.match[1];
     const result = await upgradeMiner(user, minerType);
