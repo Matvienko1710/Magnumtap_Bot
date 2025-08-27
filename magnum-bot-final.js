@@ -1756,6 +1756,12 @@ async function showSubscriptionMessage(ctx) {
 async function handleReferral(userId, referrerId) {
   try {
     console.log(`👥 Обработка реферала: ${userId} -> ${referrerId}`);
+    console.log(`🔍 Детали реферала:`, {
+      userId: userId,
+      referrerId: referrerId,
+      userIdType: typeof userId,
+      referrerIdType: typeof referrerId
+    });
     
     if (userId === referrerId) {
       console.log('❌ Пользователь не может быть своим реферером');
@@ -1763,12 +1769,25 @@ async function handleReferral(userId, referrerId) {
     }
     
     const user = await getUser(userId);
+    console.log(`👤 Пользователь получен:`, {
+      id: user.id,
+      referrerId: user.referrerId,
+      referralsCount: user.referralsCount
+    });
+    
     if (user.referrerId) {
-      console.log('❌ У пользователя уже есть реферер');
+      console.log('❌ У пользователя уже есть реферер:', user.referrerId);
       return;
     }
     
     const referrer = await getUser(referrerId);
+    console.log(`👤 Реферер получен:`, {
+      id: referrer.id,
+      referralsCount: referrer.referralsCount,
+      referralsEarnings: referrer.referralsEarnings,
+      totalReferralEarnings: referrer.totalReferralEarnings
+    });
+    
     if (!referrer) {
       console.log('❌ Реферер не найден');
       return;
@@ -1793,6 +1812,7 @@ async function handleReferral(userId, referrerId) {
         $inc: { 
           referralsCount: 1,
           totalReferralEarnings: referralReward,
+          referralsEarnings: referralReward, // Добавляем оба поля для совместимости
           magnumCoins: referralReward,
           totalEarnedMagnumCoins: referralReward
         },
@@ -1805,6 +1825,9 @@ async function handleReferral(userId, referrerId) {
     userCache.delete(userId);
     userCache.delete(referrerId);
     
+    console.log(`✅ База данных обновлена для реферала ${userId} -> ${referrerId}`);
+    console.log(`💰 Награда выдана: ${referralReward} MC`);
+    
     // Отправляем уведомление рефереру
     try {
       const referrerUser = await getUser(referrerId);
@@ -1816,7 +1839,7 @@ async function handleReferral(userId, referrerId) {
         `🆔 ID: \`${userId}\`\n` +
         `💰 Награда: +${formatNumber(referralReward)} Magnum Coins\n\n` +
         `📊 Всего рефералов: ${referrerUser.referralsCount}\n` +
-        `💎 Общий заработок с рефералов: ${formatNumber(referrerUser.totalReferralEarnings || 0)} MC`;
+        `💎 Общий заработок с рефералов: ${formatNumber(referrerUser.referralsEarnings || referrerUser.totalReferralEarnings || 0)} MC`;
       
       await bot.telegram.sendMessage(referrerId, notificationMessage, {
         parse_mode: 'Markdown'
