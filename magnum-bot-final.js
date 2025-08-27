@@ -5662,8 +5662,9 @@ function logError(error, context = '') {
   const logMessage = `[${timestamp}] [ERROR] ${context}: ${errorMessage}`;
   console.error(logMessage);
   
+  let stackMessage = '';
   if (stack) {
-    const stackMessage = `[${timestamp}] [ERROR] Stack: ${stack}`;
+    stackMessage = `[${timestamp}] [ERROR] Stack: ${stack}`;
     console.error(stackMessage);
   }
   
@@ -7335,7 +7336,7 @@ async function showTasksMenu(ctx, user) {
     log(`📋 Получены спонсорские задания: ${sponsorTasks.length} заданий`);
     
     const userSponsorTasks = tasks.sponsorTasks || {};
-    const completedSponsorTasks = Object.values(userSponsorTasks).filter(task => task.completed).length;
+    const completedSponsorTasks = Object.values(userSponsorTasks).filter(task => task && task.completed).length;
     const totalSponsorTasks = sponsorTasks.length;
     
     log(`📋 Статистика заданий: ${completedSponsorTasks}/${totalSponsorTasks} выполнено`);
@@ -7435,7 +7436,7 @@ async function showSponsorTasks(ctx, user) {
     const keyboard = Markup.inlineKeyboard(taskButtons);
     
     // Подсчитываем общий статус
-    const completedTasks = Object.values(userTasks).filter(task => task.completed).length;
+    const completedTasks = Object.values(userTasks).filter(task => task && task.completed).length;
     const totalTasks = sponsorTasks.length;
     let overallStatus = '';
     if (completedTasks === 0) {
