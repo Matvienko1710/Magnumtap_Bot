@@ -14829,7 +14829,7 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
+bot.action(/^reject_([a-fA-F0-9]{24})_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
