@@ -1675,6 +1675,13 @@ async function checkSubscription(ctx) {
     
     // Проверяем, что канал указан правильно
     if (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/')) {
+      console.log('⚠️ Неверный формат канала:', config.REQUIRED_CHANNEL);
+      return true;
+    }
+    
+    // Проверяем, что ctx.from.id существует
+    if (!ctx.from || !ctx.from.id) {
+      console.error('❌ ctx.from.id не найден');
       return true;
     }
     
@@ -1682,32 +1689,60 @@ async function checkSubscription(ctx) {
     return ['creator', 'administrator', 'member'].includes(member.status);
   } catch (error) {
     console.error('❌ Ошибка проверки подписки:', error);
-    // Если канал не найден, пропускаем проверку подписки
+    console.log('Детали ошибки:', {
+      channel: config.REQUIRED_CHANNEL,
+      userId: ctx.from?.id,
+      error: error.message,
+      stack: error.stack
+    });
+    // Если канал не найден или произошла ошибка, пропускаем проверку подписки
     return true;
   }
 }
 async function showSubscriptionMessage(ctx) {
-  // Проверяем, что канал указан правильно
-  if (!config.REQUIRED_CHANNEL || (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/'))) {
-    // Если канал не настроен, показываем главное меню
-    const user = await getUser(ctx.from.id);
-    if (user) {
-      await showMainMenu(ctx, user);
+  try {
+    // Проверяем, что канал указан правильно
+    if (!config.REQUIRED_CHANNEL || (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/'))) {
+      console.log('⚠️ Канал не настроен или неверный формат:', config.REQUIRED_CHANNEL);
+      // Если канал не настроен, показываем главное меню
+      const user = await getUser(ctx.from.id);
+      if (user) {
+        await showMainMenu(ctx, user);
+      }
+      return;
     }
-    return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.url('📢 Подписаться на канал', config.REQUIRED_CHANNEL)],
+      [Markup.button.callback('🔄 Проверить подписку', 'check_subscription')]
+    ]);
+    
+    await ctx.reply(
+      `🔒 Для использования бота необходимо подписаться на наш канал!\n\n` +
+      `📢 Канал: ${config.REQUIRED_CHANNEL}\n\n` +
+      `После подписки нажмите "🔄 Проверить подписку"`,
+      { reply_markup: keyboard.reply_markup }
+    );
+  } catch (error) {
+    console.error('❌ Ошибка показа сообщения о подписке:', error);
+    console.log('Детали ошибки:', {
+      channel: config.REQUIRED_CHANNEL,
+      userId: ctx.from?.id,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    // Пытаемся показать главное меню в случае ошибки
+    try {
+      const user = await getUser(ctx.from.id);
+      if (user) {
+        await showMainMenu(ctx, user);
+      }
+    } catch (fallbackError) {
+      console.error('❌ Не удалось показать главное меню:', fallbackError);
+      await ctx.reply('❌ Произошла ошибка. Попробуйте позже.');
+    }
   }
-  
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.url('📢 Подписаться на канал', config.REQUIRED_CHANNEL)],
-    [Markup.button.callback('🔄 Проверить подписку', 'check_subscription')]
-  ]);
-  
-  await ctx.reply(
-    `🔒 Для использования бота необходимо подписаться на наш канал!\n\n` +
-    `📢 Канал: ${config.REQUIRED_CHANNEL}\n\n` +
-    `После подписки нажмите "🔄 Проверить подписку"`,
-    keyboard
-  );
 }
 // ==================== РЕФЕРАЛЬНАЯ СИСТЕМА ====================
 async function handleReferral(userId, referrerId) {
@@ -8729,12 +8764,25 @@ bot.start(async (ctx) => {
     
     // Проверяем подписку
     console.log(`🔍 Проверка подписки для пользователя ${ctx.from.id}`);
-    const isSubscribed = await checkSubscription(ctx);
-    console.log(`Результат проверки подписки для ${ctx.from.id}:`, { isSubscribed });
+    let isSubscribed = false;
+    try {
+      isSubscribed = await checkSubscription(ctx);
+      console.log(`Результат проверки подписки для ${ctx.from.id}:`, { isSubscribed });
+    } catch (subscriptionError) {
+      console.error(`❌ Ошибка проверки подписки для пользователя ${ctx.from.id}:`, subscriptionError);
+      // В случае ошибки проверки подписки, пропускаем её
+      isSubscribed = true;
+    }
     
     if (!isSubscribed) {
       console.log(`❌ Пользователь ${ctx.from.id} не подписан на канал`);
-      await showSubscriptionMessage(ctx);
+      try {
+        await showSubscriptionMessage(ctx);
+      } catch (subscriptionMessageError) {
+        console.error(`❌ Ошибка показа сообщения о подписке для пользователя ${ctx.from.id}:`, subscriptionMessageError);
+        // В случае ошибки показываем главное меню
+        await showMainMenuStart(ctx, user);
+      }
       return;
     }
     
