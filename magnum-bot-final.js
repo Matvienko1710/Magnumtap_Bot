@@ -1712,8 +1712,16 @@ async function showSubscriptionMessage(ctx) {
       return;
     }
     
+    // Преобразуем канал в правильный URL формат
+    let channelUrl = config.REQUIRED_CHANNEL;
+    if (channelUrl.startsWith('@')) {
+      channelUrl = `https://t.me/${channelUrl.substring(1)}`;
+    } else if (!channelUrl.startsWith('https://')) {
+      channelUrl = `https://t.me/${channelUrl}`;
+    }
+    
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.url('📢 Подписаться на канал', config.REQUIRED_CHANNEL)],
+      [Markup.button.url('📢 Подписаться на канал', channelUrl)],
       [Markup.button.callback('🔄 Проверить подписку', 'check_subscription')]
     ]);
     
@@ -1888,16 +1896,33 @@ async function showMainMenu(ctx, user) {
   
   const message = formatProfileMessage(user, rankProgress);
   
-  await ctx.editMessageText(message, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard.reply_markup
-  });
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (editError) {
+    // Если не удалось отредактировать сообщение, отправляем новое
+    console.log(`⚠️ Не удалось отредактировать сообщение для пользователя ${user.id}, отправляем новое`);
+    await ctx.reply(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  }
   
   log(`✅ Главное меню успешно показано пользователю ${user.id}`);
   } catch (error) {
     logError(error, `Показ главного меню для пользователя ${user.id}`);
     log(`❌ Ошибка в showMainMenu для пользователя ${user.id}: ${error.message}`);
-    await ctx.answerCbQuery('❌ Ошибка загрузки главного меню');
+    
+    // Проверяем, доступен ли answerCbQuery в данном контексте
+    if (ctx.answerCbQuery) {
+      try {
+        await ctx.answerCbQuery('❌ Ошибка загрузки главного меню');
+      } catch (cbError) {
+        console.error('❌ Ошибка answerCbQuery:', cbError);
+      }
+    }
   }
 }
 
