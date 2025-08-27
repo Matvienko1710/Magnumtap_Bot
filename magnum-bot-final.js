@@ -1787,31 +1787,35 @@ async function handleReferral(userId, referrerId) {
 }
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 async function showMainMenu(ctx, user) {
-  const rankProgress = await getRankProgress(user);
-  
-  // Создаем базовые кнопки
-  const buttons = [
-    [
-      Markup.button.callback('⛏️ Майнер', 'miner'),
-      Markup.button.callback('📈 Биржа', 'exchange')
-    ],
-    [
-      Markup.button.callback('💰 Вывод', 'withdrawal'),
-      Markup.button.callback('🎁 Бонус', 'bonus')
-    ],
-    [
-      Markup.button.callback('📋 Задания', 'tasks'),
-      Markup.button.callback('🏆 Достижения', 'achievements')
-    ],
-    [
-      Markup.button.callback('👥 Рефералы', 'referrals'),
-      Markup.button.callback('🎫 Промокод', 'promocode')
-    ],
-    [
-      Markup.button.callback('🗺️ Роадмап', 'roadmap'),
-      Markup.button.callback('⚙️ Настройки', 'settings')
-    ]
-  ];
+  try {
+    log(`🏠 Показ главного меню для пользователя ${user.id}`);
+    
+    const rankProgress = await getRankProgress(user);
+    log(`🏠 Получен прогресс ранга для пользователя ${user.id}`);
+    
+    // Создаем базовые кнопки
+    const buttons = [
+      [
+        Markup.button.callback('⛏️ Майнер', 'miner'),
+        Markup.button.callback('📈 Биржа', 'exchange')
+      ],
+      [
+        Markup.button.callback('💰 Вывод', 'withdrawal'),
+        Markup.button.callback('🎁 Бонус', 'bonus')
+      ],
+      [
+        Markup.button.callback('📋 Задания', 'tasks'),
+        Markup.button.callback('🏆 Достижения', 'achievements')
+      ],
+      [
+        Markup.button.callback('👥 Рефералы', 'referrals'),
+        Markup.button.callback('🎫 Промокод', 'promocode')
+      ],
+      [
+        Markup.button.callback('🗺️ Роадмап', 'roadmap'),
+        Markup.button.callback('⚙️ Настройки', 'settings')
+      ]
+    ];
   
   // Добавляем админ кнопку если нужно
   if (isAdmin(user.id)) {
@@ -1828,6 +1832,13 @@ async function showMainMenu(ctx, user) {
     parse_mode: 'Markdown',
     reply_markup: keyboard.reply_markup
   });
+  
+  log(`✅ Главное меню успешно показано пользователю ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ главного меню для пользователя ${user.id}`);
+    log(`❌ Ошибка в showMainMenu для пользователя ${user.id}: ${error.message}`);
+    await ctx.answerCbQuery('❌ Ошибка загрузки главного меню');
+  }
 }
 
 async function showMainMenuStart(ctx, user) {
@@ -7321,9 +7332,13 @@ async function showTasksMenu(ctx, user) {
     
     // Подсчитываем статус спонсорских заданий
     const sponsorTasks = getSponsorTasks();
+    log(`📋 Получены спонсорские задания: ${sponsorTasks.length} заданий`);
+    
     const userSponsorTasks = tasks.sponsorTasks || {};
     const completedSponsorTasks = Object.values(userSponsorTasks).filter(task => task.completed).length;
     const totalSponsorTasks = sponsorTasks.length;
+    
+    log(`📋 Статистика заданий: ${completedSponsorTasks}/${totalSponsorTasks} выполнено`);
     
     let sponsorStatus = '';
     if (completedSponsorTasks === 0) {
@@ -7363,8 +7378,11 @@ async function showTasksMenu(ctx, user) {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
+    
+    log(`✅ Меню заданий успешно показано пользователю ${user.id}`);
   } catch (error) {
     logError(error, 'Показ меню заданий');
+    log(`❌ Ошибка в showTasksMenu для пользователя ${user.id}: ${error.message}`);
     await ctx.answerCbQuery('❌ Ошибка загрузки меню заданий');
   }
 }
@@ -8117,7 +8135,15 @@ function getSponsorTasks() {
   const sponsorBot = config.SPONSOR_TASK_BOT;
   const botName = sponsorBot.includes('farmikstars_bot') ? '@farmikstars_bot' : '@sponsor_bot';
   
-  return [
+  log(`📋 Получение спонсорских заданий: канал=${sponsorChannel}, бот=${sponsorBot}`);
+  
+  // Проверяем, что переменные окружения установлены
+  if (!sponsorChannel || !sponsorBot) {
+    log(`❌ Ошибка: переменные окружения не установлены. Канал: ${sponsorChannel}, Бот: ${sponsorBot}`);
+    return [];
+  }
+  
+  const tasks = [
     {
       id: 1,
       title: `Подписка на канал ${sponsorChannel}`,
@@ -8148,6 +8174,9 @@ function getSponsorTasks() {
       ]
     }
   ];
+  
+  log(`📋 Создано ${tasks.length} спонсорских заданий`);
+  return tasks;
 }
 
 function getDailyTasks() {
@@ -12038,12 +12067,20 @@ bot.action('confirm_reset', async (ctx) => {
 // Задания
 bot.action('tasks', async (ctx) => {
   try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
+    log(`📋 Запрос меню заданий от пользователя ${ctx.from.id}`);
     
+    const user = await getUser(ctx.from.id);
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для меню заданий`);
+      return;
+    }
+    
+    log(`📋 Показ меню заданий для пользователя ${ctx.from.id}`);
     await showTasksMenu(ctx, user);
+    log(`✅ Меню заданий показано пользователю ${ctx.from.id}`);
   } catch (error) {
     logError(error, 'Меню заданий');
+    log(`❌ Ошибка в меню заданий для пользователя ${ctx.from.id}: ${error.message}`);
   }
 });
 
