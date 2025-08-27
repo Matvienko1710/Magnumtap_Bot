@@ -6081,6 +6081,37 @@ function logError(error, context = '') {
   }
 }
 
+// Функция для детального логирования ошибок с контекстом
+function logErrorWithContext(error, context, userId = null) {
+  const timestamp = new Date().toISOString();
+  const errorLog = {
+    timestamp,
+    userId,
+    context,
+    error: {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    },
+    memory: process.memoryUsage(),
+    uptime: process.uptime()
+  };
+  
+  console.error(`❌ [ERROR] ${timestamp} | User: ${userId || 'N/A'} | Context: ${context} | Error:`, error.message);
+  console.error('Stack:', error.stack);
+  
+  // Сохраняем в файл
+  const fs = require('fs');
+  const logFile = 'error_log.log';
+  const logLine = JSON.stringify(errorLog) + '\n';
+  
+  try {
+    fs.appendFileSync(logFile, logLine);
+  } catch (err) {
+    console.error('❌ Ошибка записи error лога:', err.message);
+  }
+}
+
 function logDebug(message, data = null) {
   const timestamp = new Date().toISOString();
   let logMessage = `[${timestamp}] [DEBUG] ${message}`;
@@ -6096,6 +6127,27 @@ function logAction(userId, action, details = '') {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] [ACTION] User ${userId} | Action: ${action} | Details: ${details}`;
   console.log(logMessage);
+  
+  // Расширенное логирование для отладки
+  const logEntry = {
+    timestamp,
+    userId,
+    action,
+    details,
+    memory: process.memoryUsage(),
+    uptime: process.uptime()
+  };
+  
+  // Сохраняем в файл для анализа
+  const fs = require('fs');
+  const logFile = 'user_actions.log';
+  const logLine = JSON.stringify(logEntry) + '\n';
+  
+  try {
+    fs.appendFileSync(logFile, logLine);
+  } catch (error) {
+    console.error('❌ Ошибка записи action лога:', error.message);
+  }
 }
 
 function logFunction(functionName, userId = null, params = null) {
@@ -7794,9 +7846,11 @@ async function showTasksMenu(ctx, user) {
 
 async function showSponsorTasks(ctx, user) {
   try {
+    logAction(user.id, 'showSponsorTasks', 'Начало показа RichAds офферов');
     log(`🎯 Показ RichAds офферов для пользователя ${user.id}`);
     
     const sponsorTasks = await getRichAdsTasks();
+    logAction(user.id, 'getRichAdsTasks', { count: sponsorTasks.length, offers: sponsorTasks.map(o => ({ id: o.id, title: o.title })) });
     log(`🎯 Получены RichAds офферы: ${sponsorTasks.length} офферов`);
     
     const userTasks = user.tasks?.sponsorTasks || {};
@@ -7811,6 +7865,7 @@ async function showSponsorTasks(ctx, user) {
     
     if (firstUncompletedTask) {
       // Показываем первый невыполненный оффер
+      logAction(user.id, 'showFirstUncompletedTask', { taskId: firstUncompletedTask.id, taskTitle: firstUncompletedTask.title });
       await showSponsorTaskDetails(ctx, user, firstUncompletedTask.id);
     } else {
       // Все офферы выполнены - показываем общий список
@@ -7853,8 +7908,10 @@ async function showSponsorTasks(ctx, user) {
       });
     }
     
+    logAction(user.id, 'showSponsorTasks', 'Успешно завершено');
     log(`✅ RichAds офферы успешно показаны пользователю ${user.id}`);
   } catch (error) {
+    logErrorWithContext(error, 'showSponsorTasks', user.id);
     logError(error, 'Показ RichAds офферов');
     log(`❌ Ошибка в showSponsorTasks для пользователя ${user.id}: ${error.message}`);
     await ctx.answerCbQuery('❌ Ошибка загрузки RichAds офферов');
@@ -7862,12 +7919,16 @@ async function showSponsorTasks(ctx, user) {
 }
 async function showSponsorTaskDetails(ctx, user, taskId) {
   try {
+    logAction(user.id, 'showSponsorTaskDetails', { taskId, action: 'начало' });
     log(`🎯 Показ деталей RichAds оффера ${taskId} для пользователя ${user.id}`);
     
     const sponsorTasks = await getRichAdsTasks();
     const task = sponsorTasks.find(t => t.id === taskId);
     
+    logAction(user.id, 'findTaskInDetails', { taskId, taskFound: !!task, taskTitle: task?.title });
+    
     if (!task) {
+      logAction(user.id, 'taskNotFoundInDetails', { taskId });
       await ctx.answerCbQuery('❌ Задание не найдено');
       return;
     }
@@ -8592,16 +8653,21 @@ async function getRichAdsTasks() {
       log('⚠️ RichAds офферы недоступны, возвращаем демо-офферы');
       // Возвращаем демо-офферы из модуля RichAds
       const { richAdsIntegration } = require('./richads-integration');
-      return richAdsIntegration.getDemoOffers();
+      const demoOffers = richAdsIntegration.getDemoOffers();
+      log(`📋 Возвращено ${demoOffers.length} демо-офферов`);
+      return demoOffers;
     }
     
     log(`📋 Получено ${offers.length} RichAds офферов`);
     return offers;
   } catch (error) {
+    logErrorWithContext(error, 'getRichAdsTasks', 'system');
     logError(error, 'Получение RichAds офферов');
     // Возвращаем демо-офферы при ошибке
     const { richAdsIntegration } = require('./richads-integration');
-    return richAdsIntegration.getDemoOffers();
+    const demoOffers = richAdsIntegration.getDemoOffers();
+    log(`📋 Возвращено ${demoOffers.length} демо-офферов при ошибке`);
+    return demoOffers;
   }
 }
 
@@ -12528,18 +12594,23 @@ bot.action('tasks', async (ctx) => {
 
 bot.action('tasks_sponsor', async (ctx) => {
   try {
+    logAction(ctx.from.id, 'button_tasks_sponsor', 'Нажата кнопка RichAds офферы');
     log(`🎯 Запрос спонсорских заданий от пользователя ${ctx.from.id}`);
     
     const user = await getUser(ctx.from.id);
     if (!user) {
+      logAction(ctx.from.id, 'userNotFound', 'Пользователь не найден для RichAds офферов');
       log(`❌ Не удалось получить пользователя ${ctx.from.id} для спонсорских заданий`);
       return;
     }
     
+    logAction(ctx.from.id, 'userFound', { userId: user.id, username: user.username });
     log(`🎯 Показ спонсорских заданий для пользователя ${ctx.from.id}`);
     await showSponsorTasks(ctx, user);
+    logAction(ctx.from.id, 'showSponsorTasksComplete', 'RichAds офферы показаны успешно');
     log(`✅ Спонсорские задания показаны пользователю ${ctx.from.id}`);
   } catch (error) {
+    logErrorWithContext(error, 'button_tasks_sponsor', ctx.from.id);
     logError(error, 'Спонсорские задания');
     log(`❌ Ошибка в tasks_sponsor для пользователя ${ctx.from.id}: ${error.message}`);
   }

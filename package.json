@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node magnum-bot-final.js",
     "dev": "nodemon magnum-bot-final.js",
+    "logging": "node start-with-logging.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
