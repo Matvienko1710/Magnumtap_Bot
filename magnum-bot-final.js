@@ -1805,7 +1805,7 @@ async function handleReferral(userId, referrerId) {
     );
     
     // Обновляем реферера с правильной наградой
-    const referralReward = config.REFERRAL_REWARD; // 100 монет за реферала
+    const referralReward = config.REFERRAL_REWARD; // 5 Stars за реферала
     await db.collection('users').updateOne(
       { id: referrerId },
       { 
@@ -1813,8 +1813,8 @@ async function handleReferral(userId, referrerId) {
           referralsCount: 1,
           totalReferralEarnings: referralReward,
           referralsEarnings: referralReward, // Добавляем оба поля для совместимости
-          magnumCoins: referralReward,
-          totalEarnedMagnumCoins: referralReward
+          stars: referralReward, // Начисляем Stars вместо Magnum Coins
+          totalEarnedStars: referralReward
         },
         $push: { referrals: userId },
         $set: { updatedAt: new Date() }
@@ -1837,9 +1837,9 @@ async function handleReferral(userId, referrerId) {
         `🎉 *Новый реферал!*\n\n` +
         `👤 Пользователь: ${newUser.firstName || 'Неизвестно'}\n` +
         `🆔 ID: \`${userId}\`\n` +
-        `💰 Награда: +${formatNumber(referralReward)} Magnum Coins\n\n` +
+        `⭐ Награда: +${formatNumber(referralReward)} Stars\n\n` +
         `📊 Всего рефералов: ${referrerUser.referralsCount}\n` +
-        `💎 Общий заработок с рефералов: ${formatNumber(referrerUser.referralsEarnings || referrerUser.totalReferralEarnings || 0)} MC`;
+        `💎 Общий заработок с рефералов: ${formatNumber(referrerUser.referralsEarnings || referrerUser.totalReferralEarnings || 0)} Stars`;
       
       await bot.telegram.sendMessage(referrerId, notificationMessage, {
         parse_mode: 'Markdown'
@@ -5188,7 +5188,7 @@ async function showAdminSettings(ctx, user) {
       `├ ⏰ Кулдаун фарма: \`${config.FARM_COOLDOWN}\` секунд\n` +
       `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
       `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins/мин\n` +
-      `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Magnum Coins\n` +
+      `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Stars\n` +
       `├ 💸 Комиссия обмена: \`${config.EXCHANGE_COMMISSION}%\`\n` +
       `└ 📢 Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n\n` +
       `🎯 Выберите настройку для изменения:`;
@@ -5430,7 +5430,7 @@ async function showAdminReferralSettings(ctx, user) {
     const message = 
       `👥 *Реферальная система*\n\n` +
       `💰 *Текущие настройки:*\n` +
-      `├ Награда за реферала: \`${config.REFERRAL_REWARD}\` Magnum Coins\n` +
+      `├ Награда за реферала: \`${config.REFERRAL_REWARD}\` Stars\n` +
       `├ Бонус за 5 рефералов: \`50\` Magnum Coins\n` +
       `├ Бонус за 10 рефералов: \`100\` Magnum Coins\n` +
       `├ Бонус за 25 рефералов: \`250\` Magnum Coins\n` +
@@ -9222,7 +9222,7 @@ async function handleAdminSetReferralReward(ctx, user, text) {
     // Обновляем конфиг в памяти
     config.REFERRAL_REWARD = newReward;
     
-    await ctx.reply(`✅ Награда за реферала изменена на ${newReward} Magnum Coins`);
+    await ctx.reply(`✅ Награда за реферала изменена на ${newReward} Stars`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -14513,11 +14513,11 @@ bot.action('admin_referral_reward', async (ctx) => {
     
     await ctx.editMessageText(
       `💰 *Настройка награды за рефералов*\n\n` +
-      `📊 *Текущая награда:* \`${config.REFERRAL_REWARD}\` Magnum Coins\n\n` +
+      `📊 *Текущая награда:* \`${config.REFERRAL_REWARD}\` Stars\n\n` +
       `💡 *Введите новую награду:*\n` +
-      `├ Минимум: \`1\` MC\n` +
-      `├ Максимум: \`1000\` MC\n` +
-      `└ Рекомендуется: \`5-50\` MC\n\n` +
+      `├ Минимум: \`1\` Stars\n` +
+      `├ Максимум: \`1000\` Stars\n` +
+      `└ Рекомендуется: \`5-50\` Stars\n\n` +
       `⚠️ *Внимание:* Введите только цифры!`,
       {
         parse_mode: 'Markdown',
