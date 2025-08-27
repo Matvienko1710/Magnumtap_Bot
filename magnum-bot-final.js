@@ -8166,6 +8166,10 @@ async function showTasksAchievements(ctx, user) {
   }
 }
 // Вспомогательные функции
+function isValidObjectId(id) {
+  return id && typeof id === 'string' && id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id);
+}
+
 function getSponsorTasks() {
   const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
   const channelName = sponsorChannel.replace('@', '');
@@ -14684,6 +14688,15 @@ bot.action(/^approve_(.+)$/, async (ctx) => {
     
     const requestId = ctx.match[1];
     
+    log(`🔍 Попытка одобрения заявки с ID: ${requestId}`);
+    
+    // Проверяем, что requestId является валидным ObjectId
+    if (!isValidObjectId(requestId)) {
+      log(`❌ Неверный формат requestId: ${requestId}`);
+      await ctx.answerCbQuery('❌ Неверный ID заявки');
+      return;
+    }
+    
     // Получаем заявку из базы данных
     const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
     
@@ -14762,6 +14775,15 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
     
     const requestId = ctx.match[1];
     
+    log(`🔍 Попытка отклонения заявки с ID: ${requestId}`);
+    
+    // Проверяем, что requestId является валидным ObjectId
+    if (!isValidObjectId(requestId)) {
+      log(`❌ Неверный формат requestId: ${requestId}`);
+      await ctx.answerCbQuery('❌ Неверный ID заявки');
+      return;
+    }
+    
     // Получаем заявку из базы данных
     const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
     
@@ -14817,6 +14839,15 @@ bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
     
     const requestId = ctx.match[1];
     const reason = ctx.match[2];
+    
+    log(`🔍 Попытка отклонения заявки с ID: ${requestId}, причина: ${reason}`);
+    
+    // Проверяем, что requestId является валидным ObjectId
+    if (!isValidObjectId(requestId)) {
+      log(`❌ Неверный формат requestId: ${requestId}`);
+      await ctx.answerCbQuery('❌ Неверный ID заявки');
+      return;
+    }
     
     // Получаем заявку из базы данных
     const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
