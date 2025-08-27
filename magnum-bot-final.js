@@ -115,7 +115,7 @@ const config = {
   FARM_BASE_REWARD: 0.01,
   DAILY_BONUS_BASE: 3,
   REFERRAL_BONUS: 50,
-  REFERRAL_REWARD: 100, // Награда за каждого реферала
+  REFERRAL_REWARD: 5, // Награда за каждого реферала
   MINER_REWARD_PER_MINUTE: 0.01, // Базовая награда за минуту
   MINER_REWARD_PER_HOUR: 0.1, // Оставляем для обратной совместимости
   EXCHANGE_COMMISSION: 2.5,
@@ -14487,6 +14487,46 @@ bot.action('admin_reset_db_confirm', async (ctx) => {
   } catch (error) {
     logError(error, 'Сброс базы данных');
     await ctx.editMessageText('❌ Ошибка при сбросе базы данных');
+  }
+});
+
+// Обработчик изменения награды за рефералов
+bot.action('admin_referral_reward', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !config.ADMIN_IDS.includes(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Устанавливаем состояние для ввода новой награды
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_referral_reward', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_referral_settings')]
+    ]);
+    
+    await ctx.editMessageText(
+      `💰 *Настройка награды за рефералов*\n\n` +
+      `📊 *Текущая награда:* \`${config.REFERRAL_REWARD}\` Magnum Coins\n\n` +
+      `💡 *Введите новую награду:*\n` +
+      `├ Минимум: \`1\` MC\n` +
+      `├ Максимум: \`1000\` MC\n` +
+      `└ Рекомендуется: \`5-50\` MC\n\n` +
+      `⚠️ *Внимание:* Введите только цифры!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Настройка награды за рефералов');
+    await ctx.answerCbQuery('❌ Ошибка настройки награды');
   }
 });
 
