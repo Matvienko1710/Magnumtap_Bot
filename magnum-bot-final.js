@@ -7618,7 +7618,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     if (task.requirements) {
       message += `📋 *Требования:*\n`;
       task.requirements.forEach(req => {
-        message += `├ ${req}\n`;
+        message += `├ ${escapeMarkdown(req)}\n`;
       });
       message += `\n`;
     }
@@ -7627,6 +7627,8 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     message += `📱 Подпишитесь на канал и отправьте скриншот\n`;
     
     message += `\n🎯 Выберите действие:`;
+    
+    log(`🎯 Сообщение для задания ${taskId} (последняя часть): ${message.substring(message.length - 100)}`);
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
