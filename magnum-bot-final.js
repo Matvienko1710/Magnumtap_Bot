@@ -952,6 +952,29 @@ function clearUserCache(userId) {
 }
 
 // ==================== УТИЛИТЫ ====================
+function escapeMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/~/g, '\\~')
+    .replace(/`/g, '\\`')
+    .replace(/>/g, '\\>')
+    .replace(/#/g, '\\#')
+    .replace(/\+/g, '\\+')
+    .replace(/-/g, '\\-')
+    .replace(/=/g, '\\=')
+    .replace(/\|/g, '\\|')
+    .replace(/\{/g, '\\{')
+    .replace(/\}/g, '\\}')
+    .replace(/\./g, '\\.')
+    .replace(/!/g, '\\!');
+}
+
 function formatNumber(num) {
   // Проверяем, что num является числом
   if (num === null || num === undefined || isNaN(num)) {
@@ -7451,7 +7474,7 @@ async function showSponsorTasks(ctx, user) {
     }
     
     let message = `${overallStatus} *Спонсорские задания*\n\n`;
-    message += `💰 *Выполняйте задания от спонсоров и получайте награды!*\n\n`;
+    message += `💰 *Выполняйте задания от спонсоров и получайте награды\\!*\n\n`;
     
     sponsorTasks.forEach((task, index) => {
       const isCompleted = userTasks[task.id]?.completed || false;
@@ -7459,17 +7482,17 @@ async function showSponsorTasks(ctx, user) {
       const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
       const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
     
-    message += `${status} *${task.title}*\n`;
-    message += `├ ${task.description}\n`;
-    message += `├ Награда: \`${rewardText}\`\n`;
-      message += `└ Сложность: ${task.difficulty}\n\n`;
+    message += `${status} *${escapeMarkdown(task.title)}*\n`;
+    message += `├ ${escapeMarkdown(task.description)}\n`;
+    message += `├ Награда: \`${escapeMarkdown(rewardText)}\`\n`;
+      message += `└ Сложность: ${escapeMarkdown(task.difficulty)}\n\n`;
     });
     
     message += `💡 *Как выполнить:*\n`;
     message += `├ Нажмите на задание для подробностей\n`;
     message += `├ Выполните требуемое действие\n`;
     message += `├ Отправьте скриншот\n`;
-    message += `└ Получите награду!\n\n`;
+    message += `└ Получите награду\\!\n\n`;
     message += `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -7510,12 +7533,12 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       
       const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
       
-      let message = `✅ *${task.title}*\n\n`;
-      message += `📝 *Описание:*\n${task.description}\n\n`;
-      message += `💰 *Награда:* \`${rewardText}\` ✅ Получена\n`;
-      message += `⭐ *Сложность:* ${task.difficulty}\n`;
-      message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
-      message += `🎉 *Задание полностью выполнено!*\n`;
+      let message = `✅ *${escapeMarkdown(task.title)}*\n\n`;
+      message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
+      message += `💰 *Награда:* \`${escapeMarkdown(rewardText)}\` ✅ Получена\n`;
+      message += `⭐ *Сложность:* ${escapeMarkdown(task.difficulty)}\n`;
+      message += `⏰ *Время выполнения:* ${escapeMarkdown(task.estimatedTime)}\n\n`;
+      message += `🎉 *Задание полностью выполнено\\!*\n`;
       message += `✅ Скриншот одобрен\n`;
       message += `🎁 Награда получена\n`;
       
@@ -7535,12 +7558,12 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       
       const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
       
-      let message = `🎁 *${task.title}*\n\n`;
-      message += `📝 *Описание:*\n${task.description}\n\n`;
-      message += `💰 *Награда:* \`${rewardText}\` 🎁 Готова к получению\n`;
-      message += `⭐ *Сложность:* ${task.difficulty}\n`;
-      message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
-      message += `✅ *Скриншот одобрен!*\n`;
+      let message = `🎁 *${escapeMarkdown(task.title)}*\n\n`;
+      message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
+      message += `💰 *Награда:* \`${escapeMarkdown(rewardText)}\` 🎁 Готова к получению\n`;
+      message += `⭐ *Сложность:* ${escapeMarkdown(task.difficulty)}\n`;
+      message += `⏰ *Время выполнения:* ${escapeMarkdown(task.estimatedTime)}\n\n`;
+      message += `✅ *Скриншот одобрен\\!*\n`;
       message += `🎁 Получите награду за выполнение задания\n`;
       
       await ctx.editMessageText(message, {
@@ -7560,11 +7583,11 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       
       const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
       
-      let message = `📸 *${task.title}*\n\n`;
-      message += `📝 *Описание:*\n${task.description}\n\n`;
-      message += `💰 *Награда:* \`${rewardText}\`\n`;
-      message += `⭐ *Сложность:* ${task.difficulty}\n`;
-      message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
+      let message = `📸 *${escapeMarkdown(task.title)}*\n\n`;
+      message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
+      message += `💰 *Награда:* \`${escapeMarkdown(rewardText)}\`\n`;
+      message += `⭐ *Сложность:* ${escapeMarkdown(task.difficulty)}\n`;
+      message += `⏰ *Время выполнения:* ${escapeMarkdown(task.estimatedTime)}\n\n`;
       message += `📸 *Скриншот отправлен*\n`;
       message += `⏳ Ожидает проверки администратором\n`;
       
@@ -7586,11 +7609,11 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
     
-    let message = `🔄 *${task.title}*\n\n`;
-    message += `📝 *Описание:*\n${task.description}\n\n`;
-    message += `💰 *Награда:* \`${rewardText}\`\n`;
-    message += `⭐ *Сложность:* ${task.difficulty}\n`;
-    message += `⏰ *Время выполнения:* ${task.estimatedTime}\n\n`;
+    let message = `🔄 *${escapeMarkdown(task.title)}*\n\n`;
+    message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
+    message += `💰 *Награда:* \`${escapeMarkdown(rewardText)}\`\n`;
+    message += `⭐ *Сложность:* ${escapeMarkdown(task.difficulty)}\n`;
+    message += `⏰ *Время выполнения:* ${escapeMarkdown(task.estimatedTime)}\n\n`;
     
     if (task.requirements) {
       message += `📋 *Требования:*\n`;
