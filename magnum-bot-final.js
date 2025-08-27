@@ -7627,7 +7627,14 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     }
   } catch (error) {
     logError(error, 'Показ деталей спонсорского задания');
-    await ctx.answerCbQuery('❌ Ошибка загрузки деталей задания');
+    // Проверяем, поддерживает ли контекст answerCbQuery
+    if (ctx.answerCbQuery) {
+      try {
+        await ctx.answerCbQuery('❌ Ошибка загрузки деталей задания');
+      } catch (cbError) {
+        logError(cbError, 'Ошибка answerCbQuery');
+      }
+    }
   }
 }
 
@@ -7959,18 +7966,6 @@ async function handleScreenshotUpload(ctx, user, taskId) {
     }
     
     await ctx.reply('✅ Скриншот отправлен! Заявка передана на проверку администратору. Ожидайте уведомления о результате.');
-    
-    // Возвращаем пользователя к деталям задания
-    const updatedUser = await getUser(user.id);
-    if (updatedUser) {
-      try {
-        await showSponsorTaskDetails(ctx, updatedUser, taskId);
-      } catch (error) {
-        logError(error, 'Показ деталей задания после скриншота');
-        // Если не удалось показать детали, просто отправляем новое сообщение
-        await ctx.reply('✅ Скриншот отправлен! Заявка передана на проверку администратору.');
-      }
-    }
   } catch (error) {
     logError(error, 'Обработка скриншота');
     await ctx.reply('❌ Ошибка обработки скриншота');
