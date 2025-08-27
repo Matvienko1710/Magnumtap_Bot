@@ -121,7 +121,7 @@ const config = {
   
   // Новая система майнинга
   MINING_SEASON_DURATION: 30, // Длительность сезона в днях
-  MINING_REWARD_INTERVAL: 2, // Интервал начисления наград в минутах
+  MINING_REWARD_INTERVAL: 1, // Интервал начисления наград в минутах
   MINING_ACTIVE_CLICK_BONUS: 0.5, // Бонус за активный клик (дополнительно к пассивному)
   
   // Майнеры в магазине
@@ -3300,6 +3300,86 @@ async function showMinerLeaderboard(ctx, user) {
   }
 }
 
+// Функция для отображения общего рейтинга
+async function showMinerLeaderboardTotal(ctx, user) {
+  try {
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад к рейтингу', 'miner_leaderboard')]
+    ]);
+    
+    // Получаем топ-20 игроков по общему майнингу
+    const topTotal = await db.collection('users')
+      .find({ 'miningStats.totalMinedMC': { $exists: true } })
+      .sort({ 'miningStats.totalMinedMC': -1 })
+      .limit(20)
+      .toArray();
+    
+    let message = `🏆 *Общий рейтинг майнинга*\n\n`;
+    
+    for (let i = 0; i < topTotal.length; i++) {
+      const player = topTotal[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      const totalMC = player.miningStats?.totalMinedMC || 0;
+      const totalStars = player.miningStats?.totalMinedStars || 0;
+      message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
+      message += `   💎 ${formatNumber(totalMC)} MC | ⭐ ${formatNumber(totalStars)} Stars\n`;
+    }
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ общего рейтинга майнинга');
+    await ctx.answerCbQuery('❌ Ошибка загрузки рейтинга');
+  }
+}
+
+// Функция для отображения сезонного рейтинга
+async function showMinerLeaderboardSeason(ctx, user) {
+  try {
+    const currentSeason = getCurrentMiningSeason();
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад к рейтингу', 'miner_leaderboard')]
+    ]);
+    
+    // Получаем топ-20 игроков по сезонному майнингу
+    const topSeason = await db.collection('users')
+      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .limit(20)
+      .toArray();
+    
+    let message = `📅 *Сезонный рейтинг - Сезон ${currentSeason.season}*\n\n`;
+    message += `📊 День сезона: ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\n\n`;
+    
+    for (let i = 0; i < topSeason.length; i++) {
+      const player = topSeason[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      const seasonMC = player.miningStats?.seasonMinedMC || 0;
+      const seasonStars = player.miningStats?.seasonMinedStars || 0;
+      message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
+      message += `   💎 ${formatNumber(seasonMC)} MC | ⭐ ${formatNumber(seasonStars)} Stars\n`;
+    }
+    
+    message += `\n💡 *Награды за сезон:*\n`;
+    message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnumCoins)} MC + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
+    message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnumCoins)} MC + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
+    message += `├ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐\n`;
+    message += `└ 🏅 11-50 место: ${formatNumber(config.SEASON_REWARDS.top50.magnumCoins)} MC + ${config.SEASON_REWARDS.top50.stars} ⭐`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ сезонного рейтинга майнинга');
+    await ctx.answerCbQuery('❌ Ошибка загрузки рейтинга');
+  }
+}
+
 // Вспомогательная функция для получения эмодзи редкости
 function getRarityEmoji(rarity) {
   switch (rarity) {
@@ -5906,6 +5986,55 @@ async function showAdminDailyBonus(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа настроек бонуса');
   }
 }
+async function showAdminMiningSeasons(ctx, user) {
+  try {
+    log(`📅 Показ управления сезонами майнинга для админа ${user.id}`);
+    
+    const currentSeason = getCurrentMiningSeason();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🚀 Запустить новый сезон', 'admin_season_start'),
+        Markup.button.callback('⏹️ Завершить сезон', 'admin_season_end')
+      ],
+      [
+        Markup.button.callback('⚙️ Настройки сезона', 'admin_season_settings'),
+        Markup.button.callback('🏆 Выдать награды', 'admin_season_rewards')
+      ],
+      [
+        Markup.button.callback('📊 Статистика сезона', 'admin_season_stats'),
+        Markup.button.callback('🔄 Сброс рейтинга', 'admin_season_reset')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_miner_settings')]
+    ]);
+    
+    const message = 
+      `📅 *Управление сезонами майнинга*\n\n` +
+      `🎯 *Текущий сезон:*\n` +
+      `├ Номер сезона: \`${currentSeason.season}\`\n` +
+      `├ День сезона: \`${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\`\n` +
+      `├ Дней до конца: \`${currentSeason.daysUntilNextSeason}\`\n` +
+      `├ Множитель: \`${currentSeason.multiplier}x\`\n` +
+      `└ Статус: ${currentSeason.isActive ? '🟢 Активен' : '🔴 Неактивен'}\n\n` +
+      `⚙️ *Настройки сезонов:*\n` +
+      `├ Длительность сезона: \`${config.MINING_SEASON_DURATION}\` дней\n` +
+      `├ Интервал наград: \`${config.MINING_REWARD_INTERVAL}\` мин\n` +
+      `├ Бонус активного клика: \`${config.MINING_ACTIVE_CLICK_BONUS}x\`\n` +
+      `└ Множитель роста: \`+10%\` за сезон\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Управление сезонами показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления сезонами для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления сезонами');
+  }
+}
+
 async function showAdminMinerSettings(ctx, user) {
   try {
     log(`⛏️ Показ настроек майнера для админа ${user.id}`);
@@ -5916,7 +6045,7 @@ async function showAdminMinerSettings(ctx, user) {
         Markup.button.callback('⚡ Эффективность', 'admin_miner_efficiency')
       ],
       [
-        Markup.button.callback('📊 Статистика майнера', 'admin_miner_stats'),
+        Markup.button.callback('📅 Управление сезонами', 'admin_mining_seasons'),
         Markup.button.callback('🎯 Настройка уровней', 'admin_miner_levels')
       ],
       [Markup.button.callback('🔙 Назад', 'admin_settings')]
@@ -12032,6 +12161,28 @@ bot.action('miner_leaderboard', async (ctx) => {
   }
 });
 
+bot.action('miner_leaderboard_total', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerLeaderboardTotal(ctx, user);
+  } catch (error) {
+    logError(error, 'Общий рейтинг майнинга');
+  }
+});
+
+bot.action('miner_leaderboard_season', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerLeaderboardSeason(ctx, user);
+  } catch (error) {
+    logError(error, 'Сезонный рейтинг майнинга');
+  }
+});
+
 bot.action('miner_upgrades', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -14625,23 +14776,357 @@ bot.action('admin_mass_give', async (ctx) => {
     await ctx.reply('💰 Введите массовую выдачу (например: "stars 100" или "mc 50"):');
   } catch (error) { logError(error, 'Массовая выдача (обработчик)'); }
 });
-bot.action('admin_miner_stats', async (ctx) => {
+bot.action('admin_mining_seasons', async (ctx) => {
   try {
-    const user = await getUser(ctx.from.id); if (!user) return;
-    const active = await db.collection('users').countDocuments({ 'miner.active': true });
-    const agg = await db.collection('users').aggregate([
-      { $match: { miner: { $exists: true } } },
-      { $group: { _id: null, totalMined: { $sum: { $ifNull: ['$miner.totalMined', 0] } }, avgEff: { $avg: { $ifNull: ['$miner.efficiency', 1] } }, count: { $sum: 1 } } }
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminMiningSeasons(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление сезонами майнинга');
+    await ctx.answerCbQuery('❌ Ошибка управления сезонами');
+  }
+});
+
+bot.action('admin_season_start', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'season_start', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_mining_seasons')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🚀 *Запуск нового сезона*\n\n` +
+      `⚠️ *Внимание:* Это действие:\n` +
+      `├ Сбросит сезонную статистику всех игроков\n` +
+      `├ Увеличит номер сезона на 1\n` +
+      `├ Увеличит множитель на 10%\n` +
+      `└ Сохранит общую статистику\n\n` +
+      `💡 *Введите "ПОДТВЕРДИТЬ" для запуска:*`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Запуск сезона');
+    await ctx.answerCbQuery('❌ Ошибка запуска сезона');
+  }
+});
+
+bot.action('admin_season_end', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const currentSeason = getCurrentMiningSeason();
+    
+    // Получаем топ игроков сезона
+    const topPlayers = await db.collection('users')
+      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .limit(50)
+      .toArray();
+    
+    let message = `⏹️ *Завершение сезона ${currentSeason.season}*\n\n`;
+    message += `📊 *Топ-10 игроков сезона:*\n`;
+    
+    for (let i = 0; i < Math.min(10, topPlayers.length); i++) {
+      const player = topPlayers[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedMC || 0)} MC\n`;
+    }
+    
+    message += `\n💡 *Награды будут выданы автоматически*\n`;
+    message += `🎯 Выберите действие:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🏆 Выдать награды', 'admin_season_rewards'),
+        Markup.button.callback('🔄 Сбросить статистику', 'admin_season_reset')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_mining_seasons')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Завершение сезона');
+    await ctx.answerCbQuery('❌ Ошибка завершения сезона');
+  }
+});
+
+bot.action('admin_season_rewards', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const currentSeason = getCurrentMiningSeason();
+    
+    // Получаем топ игроков сезона
+    const topPlayers = await db.collection('users')
+      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .limit(50)
+      .toArray();
+    
+    let message = `🏆 *Выдача наград сезона ${currentSeason.season}*\n\n`;
+    message += `📊 *Топ-10 игроков:*\n`;
+    
+    let totalRewardsMC = 0;
+    let totalRewardsStars = 0;
+    
+    for (let i = 0; i < Math.min(10, topPlayers.length); i++) {
+      const player = topPlayers[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      
+      let rewardMC = 0;
+      let rewardStars = 0;
+      
+      if (position === 1) {
+        rewardMC = config.SEASON_REWARDS.top1.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top1.stars;
+      } else if (position <= 3) {
+        rewardMC = config.SEASON_REWARDS.top3.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top3.stars;
+      } else if (position <= 10) {
+        rewardMC = config.SEASON_REWARDS.top10.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top10.stars;
+      } else if (position <= 50) {
+        rewardMC = config.SEASON_REWARDS.top50.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top50.stars;
+      }
+      
+      totalRewardsMC += rewardMC;
+      totalRewardsStars += rewardStars;
+      
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: +${formatNumber(rewardMC)} MC +${rewardStars} ⭐\n`;
+    }
+    
+    message += `\n💰 *Итого наград:*\n`;
+    message += `├ Magnum Coins: \`${formatNumber(totalRewardsMC)}\`\n`;
+    message += `└ Stars: \`${totalRewardsStars}\`\n\n`;
+    message += `🎯 Выберите действие:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Выдать награды', 'admin_season_rewards_confirm'),
+        Markup.button.callback('📋 Список всех', 'admin_season_rewards_full')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_mining_seasons')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Выдача наград сезона');
+    await ctx.answerCbQuery('❌ Ошибка выдачи наград');
+  }
+});
+
+bot.action('admin_season_rewards_confirm', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const currentSeason = getCurrentMiningSeason();
+    
+    // Получаем топ игроков сезона
+    const topPlayers = await db.collection('users')
+      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .limit(50)
+      .toArray();
+    
+    let issuedCount = 0;
+    let totalRewardsMC = 0;
+    let totalRewardsStars = 0;
+    
+    for (let i = 0; i < topPlayers.length; i++) {
+      const player = topPlayers[i];
+      const position = i + 1;
+      
+      let rewardMC = 0;
+      let rewardStars = 0;
+      
+      if (position === 1) {
+        rewardMC = config.SEASON_REWARDS.top1.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top1.stars;
+      } else if (position <= 3) {
+        rewardMC = config.SEASON_REWARDS.top3.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top3.stars;
+      } else if (position <= 10) {
+        rewardMC = config.SEASON_REWARDS.top10.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top10.stars;
+      } else if (position <= 50) {
+        rewardMC = config.SEASON_REWARDS.top50.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top50.stars;
+      }
+      
+      if (rewardMC > 0 || rewardStars > 0) {
+        await db.collection('users').updateOne(
+          { id: player.id },
+          {
+            $inc: {
+              magnumCoins: rewardMC,
+              stars: rewardStars,
+              'miningStats.seasonRewardsMC': rewardMC,
+              'miningStats.seasonRewardsStars': rewardStars
+            }
+          }
+        );
+        
+        totalRewardsMC += rewardMC;
+        totalRewardsStars += rewardStars;
+        issuedCount++;
+      }
+    }
+    
+    const message = 
+      `✅ *Награды сезона ${currentSeason.season} выданы!*\n\n` +
+      `📊 *Результат:*\n` +
+      `├ Игроков получили награды: \`${issuedCount}\`\n` +
+      `├ Выдано Magnum Coins: \`${formatNumber(totalRewardsMC)}\`\n` +
+      `└ Выдано Stars: \`${totalRewardsStars}\`\n\n` +
+      `🎉 *Сезон завершен успешно!*`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад к управлению', 'admin_mining_seasons')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    await ctx.answerCbQuery('✅ Награды выданы успешно!');
+  } catch (error) {
+    logError(error, 'Подтверждение выдачи наград сезона');
+    await ctx.answerCbQuery('❌ Ошибка выдачи наград');
+  }
+});
+
+bot.action('admin_season_reset', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'season_reset', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_mining_seasons')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🔄 *Сброс сезонной статистики*\n\n` +
+      `⚠️ *Внимание:* Это действие:\n` +
+      `├ Сбросит сезонную статистику ВСЕХ игроков\n` +
+      `├ Обнулит сезонные награды\n` +
+      `├ Сохранит общую статистику\n` +
+      `└ НЕ изменит номер сезона\n\n` +
+      `💡 *Введите "СБРОСИТЬ" для подтверждения:*`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Сброс сезонной статистики');
+    await ctx.answerCbQuery('❌ Ошибка сброса статистики');
+  }
+});
+
+bot.action('admin_season_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    const currentSeason = getCurrentMiningSeason();
+    
+    // Статистика сезона
+    const seasonStats = await db.collection('users').aggregate([
+      { $match: { 'miningStats.seasonMinedMC': { $exists: true } } },
+      { 
+        $group: { 
+          _id: null, 
+          totalMC: { $sum: '$miningStats.seasonMinedMC' },
+          totalStars: { $sum: '$miningStats.seasonMinedStars' },
+          avgMC: { $avg: '$miningStats.seasonMinedMC' },
+          avgStars: { $avg: '$miningStats.seasonMinedStars' },
+          players: { $sum: 1 }
+        } 
+      }
     ]).toArray();
-    const g = agg[0] || { totalMined: 0, avgEff: 1, count: 0 };
-    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_miner_settings')]]);
-    const message = `⛏️ *Статистика майнера*`+"\n\n"+
-      `├ Активных майнеров: \`${active}\``+"\n"+
-      `├ Всего пользователей с майнером: \`${g.count}\``+"\n"+
-      `├ Суммарно намайнено: \`${formatNumber(g.totalMined)}\` MC`+"\n"+
-      `└ Средняя эффективность: \`${(g.avgEff || 1).toFixed(2)}\``;
-    await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
-  } catch (error) { logError(error, 'Статистика майнера (обработчик)'); }
+    
+    const stats = seasonStats[0] || { totalMC: 0, totalStars: 0, avgMC: 0, avgStars: 0, players: 0 };
+    
+    const message = 
+      `📊 *Статистика сезона ${currentSeason.season}*\n\n` +
+      `👥 *Участники:*\n` +
+      `├ Всего игроков: \`${stats.players}\`\n` +
+      `├ Активных майнеров: \`${stats.players}\`\n` +
+      `└ Средняя активность: \`${((stats.players / 100) * 100).toFixed(1)}%\`\n\n` +
+      `💰 *Добыча:*\n` +
+      `├ Всего MC: \`${formatNumber(stats.totalMC)}\`\n` +
+      `├ Всего Stars: \`${formatNumber(stats.totalStars)}\`\n` +
+      `├ Среднее MC/игрок: \`${formatNumber(stats.avgMC)}\`\n` +
+      `└ Среднее Stars/игрок: \`${formatNumber(stats.avgStars)}\`\n\n` +
+      `📅 *Время сезона:*\n` +
+      `├ День сезона: \`${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\`\n` +
+      `├ Дней до конца: \`${currentSeason.daysUntilNextSeason}\`\n` +
+      `└ Множитель: \`${currentSeason.multiplier}x\``;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_mining_seasons')]
+    ]);
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Статистика сезона');
+    await ctx.answerCbQuery('❌ Ошибка загрузки статистики');
+  }
 });
 
 bot.action('admin_miner_levels', async (ctx) => {
@@ -15417,6 +15902,50 @@ bot.on('text', async (ctx) => {
           }
           await db.collection('users').updateOne({ id: user.id }, { $unset: { adminState: '' } });
           await ctx.reply(`📢 Рассылка завершена. Отправлено: ${sent}, ошибок: ${errors}`);
+        } else if (user.adminState === 'season_start') {
+          console.log(`🚀 Админ ${ctx.from.id} запускает новый сезон: "${text}"`);
+          if (text.trim().toUpperCase() === 'ПОДТВЕРДИТЬ') {
+            // Сбрасываем сезонную статистику всех игроков
+            await db.collection('users').updateMany(
+              { 'miningStats.seasonMinedMC': { $exists: true } },
+              {
+                $set: {
+                  'miningStats.seasonMinedMC': 0,
+                  'miningStats.seasonMinedStars': 0,
+                  'miningStats.seasonRewardsMC': 0,
+                  'miningStats.seasonRewardsStars': 0,
+                  updatedAt: new Date()
+                }
+              }
+            );
+            
+            await db.collection('users').updateOne({ id: user.id }, { $unset: { adminState: '' } });
+            await ctx.reply(`✅ Новый сезон запущен! Сезонная статистика сброшена.`);
+          } else {
+            await ctx.reply('❌ Для запуска сезона введите "ПОДТВЕРДИТЬ"');
+          }
+        } else if (user.adminState === 'season_reset') {
+          console.log(`🔄 Админ ${ctx.from.id} сбрасывает сезонную статистику: "${text}"`);
+          if (text.trim().toUpperCase() === 'СБРОСИТЬ') {
+            // Сбрасываем сезонную статистику всех игроков
+            await db.collection('users').updateMany(
+              { 'miningStats.seasonMinedMC': { $exists: true } },
+              {
+                $set: {
+                  'miningStats.seasonMinedMC': 0,
+                  'miningStats.seasonMinedStars': 0,
+                  'miningStats.seasonRewardsMC': 0,
+                  'miningStats.seasonRewardsStars': 0,
+                  updatedAt: new Date()
+                }
+              }
+            );
+            
+            await db.collection('users').updateOne({ id: user.id }, { $unset: { adminState: '' } });
+            await ctx.reply(`✅ Сезонная статистика сброшена!`);
+          } else {
+            await ctx.reply('❌ Для сброса статистики введите "СБРОСИТЬ"');
+          }
         } else if (user.adminState === 'mass_give') {
           console.log(`💰 Админ ${ctx.from.id} выполняет массовую выдачу: "${text}"`);
           const parts = text.trim().split(/\s+/);
