@@ -3245,9 +3245,9 @@ async function showMinerUpgrades(ctx, user) {
   try {
     const userWithMining = initializeNewMiningSystem(user);
     
-    const keyboard = Markup.inlineKeyboard([
+    let keyboardButtons = [
       [Markup.button.callback('🔙 Назад', 'miner')]
-    ]);
+    ];
     
     let message = `⬆️ *Апгрейды майнеров*\n\n`;
     message += `💰 Ваш баланс: ${formatNumber(userWithMining.magnumCoins)} MC\n\n`;
@@ -3276,7 +3276,7 @@ async function showMinerUpgrades(ctx, user) {
           
           if (userWithMining.magnumCoins >= upgradeCost) {
             message += `└ [Улучшить](buy_miner_${miner.type})\n\n`;
-            keyboard.inline_keyboard.unshift([
+            keyboardButtons.unshift([
               Markup.button.callback(`⬆️ ${minerConfig.name} (${upgradeCost} MC)`, `upgrade_miner_${miner.type}`)
             ]);
           } else {
@@ -3290,6 +3290,8 @@ async function showMinerUpgrades(ctx, user) {
     message += `├ Каждый уровень +20% к скорости\n`;
     message += `├ Стоимость растет с уровнем\n`;
     message += `└ Апгрейд применяется ко всем майнерам этого типа`;
+    
+    const keyboard = Markup.inlineKeyboard(keyboardButtons);
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -8022,22 +8024,24 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       return !userTask.completed || !userTask.claimed;
     });
     
-    const keyboard = Markup.inlineKeyboard([
+    let keyboardButtons = [
       [
         Markup.button.url('📱 Подписаться', task.url),
         Markup.button.callback('📸 Отправить скриншот', `send_screenshot_${taskId}`)
       ]
-    ]);
+    ];
     
     if (hasNextTask) {
-      keyboard.inline_keyboard.push([
+      keyboardButtons.push([
         Markup.button.callback('⏭️ Следующее задание', 'next_sponsor_task')
       ]);
     }
     
-    keyboard.inline_keyboard.push([
+    keyboardButtons.push([
       Markup.button.callback('🔙 Назад', 'tasks_sponsor')
     ]);
+    
+    const keyboard = Markup.inlineKeyboard(keyboardButtons);
     
     const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
     
@@ -8047,12 +8051,15 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     message += `⭐ *Сложность:* ${escapeMarkdown(task.difficulty)}\n`;
     message += `⏰ *Время выполнения:* ${escapeMarkdown(task.estimatedTime)}\n\n`;
     
-    if (task.requirements) {
+    if (task.requirements && Array.isArray(task.requirements)) {
       message += `📋 *Требования:*\n`;
       task.requirements.forEach(req => {
         message += `├ ${escapeMarkdown(req)}\n`;
       });
       message += `\n`;
+    } else if (task.requirements && typeof task.requirements === 'string') {
+      message += `📋 *Требования:*\n`;
+      message += `├ ${escapeMarkdown(task.requirements)}\n\n`;
     }
     
     message += `🔄 *Статус:* Задание не выполнено\n`;

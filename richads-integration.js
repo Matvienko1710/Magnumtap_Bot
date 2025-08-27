@@ -8,7 +8,7 @@ const axios = require('axios');
 class RichAdsIntegration {
   constructor() {
     this.apiKey = process.env.RICHADS_API_KEY;
-    this.apiUrl = 'https://api.richads.com/v1';
+    this.apiUrl = 'https://api.richads.com/api/v1'; // Исправленный URL
     this.offers = [];
     this.lastUpdate = null;
     this.updateInterval = 30 * 60 * 1000; // 30 минут
@@ -54,8 +54,13 @@ class RichAdsIntegration {
       return [];
     } catch (error) {
       console.error('❌ Ошибка получения офферов RichAds:', error.message);
+      if (error.response) {
+        console.error('📊 Статус ответа:', error.response.status);
+        console.error('📊 Данные ответа:', error.response.data);
+      }
       
       // Возвращаем демо-офферы если API недоступен
+      console.log('🔄 Возвращаем демо-офферы из-за ошибки API');
       return this.getDemoOffers();
     }
   }
