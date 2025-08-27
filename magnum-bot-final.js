@@ -968,9 +968,7 @@ function escapeMarkdown(text) {
     .replace(/\|/g, '\\|')
     .replace(/\{/g, '\\{')
     .replace(/\}/g, '\\}')
-    .replace(/!/g, '\\!')
-    .replace(/_/g, '\\_')
-    .replace(/\./g, '\\.');
+    .replace(/!/g, '\\!');
 }
 
 function formatNumber(num) {
@@ -7855,7 +7853,7 @@ async function handleSendScreenshot(ctx, user, taskId) {
     
     const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
     const sponsorBot = config.SPONSOR_TASK_BOT;
-    const botName = sponsorBot.includes('farmikstars_bot') ? '@farmikstars_bot' : '@sponsor_bot';
+    const botName = sponsorBot.includes('farmikstars_bot') ? 'FarmikBot' : 'SponsorBot';
     
     let message = '';
     if (taskId === 1) {
@@ -8149,7 +8147,7 @@ function getSponsorTasks() {
   const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
   const channelName = sponsorChannel.replace('@', '');
   const sponsorBot = config.SPONSOR_TASK_BOT;
-  const botName = sponsorBot.includes('farmikstars_bot') ? '@farmikstars_bot' : '@sponsor_bot';
+  const botName = sponsorBot.includes('farmikstars_bot') ? 'FarmikBot' : 'SponsorBot';
   
   log(`📋 Получение спонсорских заданий: канал=${sponsorChannel}, бот=${sponsorBot}`);
   
@@ -8186,7 +8184,6 @@ function getSponsorTasks() {
       estimatedTime: '1 минута',
       url: sponsorBot,
       requirements: [
-        `Запустите бота ${botName}`,
         'Нажмите кнопку /start',
         'Отправьте скриншот запуска бота'
       ]
