@@ -14829,7 +14829,7 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^reject_([a-fA-F0-9]{24})_(.+)$/, async (ctx) => {
+bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
@@ -14837,10 +14837,15 @@ bot.action(/^reject_([a-fA-F0-9]{24})_(.+)$/, async (ctx) => {
       return;
     }
     
-    const requestId = ctx.match[1];
+    const fullRequestId = ctx.match[1];
     const reason = ctx.match[2];
     
-    log(`🔍 Попытка отклонения заявки с ID: ${requestId}, причина: ${reason}`);
+    log(`🔍 Попытка отклонения заявки с полным ID: ${fullRequestId}, причина: ${reason}`);
+    
+    // Извлекаем ObjectId из полного ID (убираем причину)
+    const requestId = fullRequestId.split('_')[0];
+    
+    log(`🔍 Извлеченный ObjectId: ${requestId}`);
     
     // Проверяем, что requestId является валидным ObjectId
     if (!isValidObjectId(requestId)) {
@@ -15017,12 +15022,18 @@ async function handleWithdrawalStars(ctx, user, text) {
     const result = await db.collection('withdrawalRequests').insertOne(withdrawalRequest);
     const requestId = result.insertedId;
     
-    // Сбрасываем состояние
+    // Списываем средства с баланса пользователя
     await db.collection('users').updateOne(
       { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+      { 
+        $inc: { stars: -amount },
+        $unset: { adminState: "" }, 
+        $set: { updatedAt: new Date() } 
+      }
     );
     userCache.delete(user.id);
+    
+    log(`💰 Списано ${amount} Stars с баланса пользователя ${user.id}`);
     
     // Отправляем заявку в канал выплат
     log(`🔍 Проверка канала выплат: ${config.WITHDRAWAL_CHANNEL}`);
