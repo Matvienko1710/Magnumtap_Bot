@@ -18,8 +18,8 @@ class RichAdsIntegration {
   async getOffers() {
     try {
       if (!this.apiKey) {
-        console.log('⚠️ RICHADS_API_KEY не установлен');
-        return [];
+        console.log('⚠️ RICHADS_API_KEY не установлен, возвращаем демо-офферы');
+        return this.getDemoOffers();
       }
 
       // Проверяем, нужно ли обновить кеш

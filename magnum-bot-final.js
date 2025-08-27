@@ -7862,9 +7862,9 @@ async function showSponsorTasks(ctx, user) {
 }
 async function showSponsorTaskDetails(ctx, user, taskId) {
   try {
-    log(`🎯 Показ деталей спонсорского задания ${taskId} для пользователя ${user.id}`);
+    log(`🎯 Показ деталей RichAds оффера ${taskId} для пользователя ${user.id}`);
     
-    const sponsorTasks = getSponsorTasks();
+    const sponsorTasks = await getRichAdsTasks();
     const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
@@ -7952,7 +7952,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     }
     
     // Если задание не начато или скриншот отклонен
-    const allSponsorTasks = getSponsorTasks();
+    const allSponsorTasks = await getRichAdsTasks();
     
     // Проверяем, есть ли следующее задание
     const hasNextTask = allSponsorTasks.some(t => {
@@ -8399,12 +8399,12 @@ async function handleScreenshotUpload(ctx, user, taskId) {
 // Функция показа следующего задания
 async function showNextSponsorTask(ctx, user) {
   try {
-    log(`⏭️ Показ следующего спонсорского задания для пользователя ${user.id}`);
+    log(`⏭️ Показ следующего RichAds оффера для пользователя ${user.id}`);
     
-    const sponsorTasks = getSponsorTasks();
+    const sponsorTasks = await getRichAdsTasks();
     const userTasks = user.tasks?.sponsorTasks || {};
     
-    // Находим следующее невыполненное задание
+    // Находим следующий невыполненный оффер
     const nextTask = sponsorTasks.find(task => {
       const userTask = userTasks[task.id] || {};
       return !userTask.completed;
@@ -8413,12 +8413,12 @@ async function showNextSponsorTask(ctx, user) {
     if (nextTask) {
       await showSponsorTaskDetails(ctx, user, nextTask.id);
     } else {
-      await ctx.answerCbQuery('🎉 Все спонсорские задания выполнены!');
+      await ctx.answerCbQuery('🎉 Все RichAds офферы выполнены!');
       await showSponsorTasks(ctx, user);
     }
   } catch (error) {
-    logError(error, 'Показ следующего спонсорского задания');
-    await ctx.answerCbQuery('❌ Ошибка загрузки следующего задания');
+    logError(error, 'Показ следующего RichAds оффера');
+    await ctx.answerCbQuery('❌ Ошибка загрузки следующего оффера');
   }
 }
 
@@ -8590,21 +8590,30 @@ async function getRichAdsTasks() {
     
     if (offers.length === 0) {
       log('⚠️ RichAds офферы недоступны, возвращаем демо-офферы');
-      return [];
+      // Возвращаем демо-офферы из модуля RichAds
+      const { richAdsIntegration } = require('./richads-integration');
+      return richAdsIntegration.getDemoOffers();
     }
     
     log(`📋 Получено ${offers.length} RichAds офферов`);
     return offers;
   } catch (error) {
     logError(error, 'Получение RichAds офферов');
-    return [];
+    // Возвращаем демо-офферы при ошибке
+    const { richAdsIntegration } = require('./richads-integration');
+    return richAdsIntegration.getDemoOffers();
   }
 }
 
 // Обратная совместимость - возвращаем RichAds офферы как спонсорские задания
-function getSponsorTasks() {
+async function getSponsorTasks() {
   log('📋 Вызов getSponsorTasks() - возвращаем RichAds офферы');
-  return getRichAdsTasks().catch(() => []);
+  try {
+    return await getRichAdsTasks();
+  } catch (error) {
+    logError(error, 'Ошибка в getSponsorTasks');
+    return [];
+  }
 }
 
 function getDailyTasks() {
