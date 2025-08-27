@@ -151,7 +151,8 @@ const config = {
       baseSpeed: 0.15,
       price: 50,
       currency: 'stars',
-      description: 'Мощный майнер за Stars'
+      miningCurrency: 'stars', // Добывает Stars
+      description: 'Мощный майнер за Stars, добывает Stars'
     },
     legendary: {
       id: 'legendary',
@@ -160,7 +161,8 @@ const config = {
       baseSpeed: 0.5,
       price: 200,
       currency: 'stars',
-      description: 'Самый мощный майнер'
+      miningCurrency: 'stars', // Добывает Stars
+      description: 'Самый мощный майнер, добывает Stars'
     }
   },
   
@@ -2346,8 +2348,10 @@ async function showMinerMenu(ctx, user) {
   
   // Рассчитываем общую скорость майнинга
   const totalSpeed = calculateTotalMiningSpeed(userWithMining);
-  const rewardPerMinute = totalSpeed * currentSeason.multiplier;
-  const rewardPerHour = rewardPerMinute * 60;
+  const rewardPerMinuteMC = totalSpeed.magnumCoins * currentSeason.multiplier;
+  const rewardPerHourMC = rewardPerMinuteMC * 60;
+  const rewardPerMinuteStars = totalSpeed.stars * currentSeason.multiplier;
+  const rewardPerHourStars = rewardPerMinuteStars * 60;
   
   // Подсчитываем общее количество майнеров
   const totalMiners = userWithMining.miners.reduce((sum, miner) => sum + miner.count, 0);
@@ -2378,12 +2382,17 @@ async function showMinerMenu(ctx, user) {
   const message = 
     `⛏️ *Новая система майнинга*${seasonInfo}\n\n` +
     `📊 *Ваши майнеры:* ${totalMiners} шт.\n` +
-    `⚡ *Общая скорость:* ${formatNumber(totalSpeed)} MC/мин\n` +
-    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} MC\n` +
-    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} MC\n` +
+    `⚡ *Скорость MC:* ${formatNumber(totalSpeed.magnumCoins)} MC/мин\n` +
+    `⭐ *Скорость Stars:* ${formatNumber(totalSpeed.stars)} ⭐/мин\n` +
+    `💰 *Награда MC/мин:* ${formatNumber(rewardPerMinuteMC)} MC\n` +
+    `💰 *Награда MC/час:* ${formatNumber(rewardPerHourMC)} MC\n` +
+    `⭐ *Награда Stars/мин:* ${formatNumber(rewardPerMinuteStars)} ⭐\n` +
+    `⭐ *Награда Stars/час:* ${formatNumber(rewardPerHourStars)} ⭐\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
     `💎 *Всего добыто:* ${formatNumber(userWithMining.miningStats?.totalMinedMC || 0)} MC\n` +
-    `⭐ *Сезон добыто:* ${formatNumber(userWithMining.miningStats?.seasonMinedMC || 0)} MC\n\n` +
+    `⭐ *Всего добыто Stars:* ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} ⭐\n` +
+    `💎 *Сезон добыто MC:* ${formatNumber(userWithMining.miningStats?.seasonMinedMC || 0)} MC\n` +
+    `⭐ *Сезон добыто Stars:* ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} ⭐\n\n` +
     `🎯 Выберите действие:`;
   
   await ctx.editMessageText(message, {
@@ -2861,14 +2870,23 @@ function initializeNewMiningSystem(user) {
 
 // Функция для расчета общей скорости майнинга пользователя
 function calculateTotalMiningSpeed(user) {
-  let totalSpeed = 0;
+  let totalSpeedMC = 0;
+  let totalSpeedStars = 0;
   
   if (user.miners && user.miners.length > 0) {
     for (const miner of user.miners) {
       const minerConfig = config.MINERS[miner.type];
       if (minerConfig) {
         const levelMultiplier = 1 + (miner.level - 1) * 0.2; // +20% за каждый уровень
-        totalSpeed += minerConfig.baseSpeed * levelMultiplier * miner.count;
+        const minerSpeed = minerConfig.baseSpeed * levelMultiplier * miner.count;
+        
+        // Определяем валюту майнинга
+        const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
+        if (miningCurrency === 'stars') {
+          totalSpeedStars += minerSpeed;
+        } else {
+          totalSpeedMC += minerSpeed;
+        }
       }
     }
   }
@@ -2879,7 +2897,10 @@ function calculateTotalMiningSpeed(user) {
   const currentTitle = titlesList.find(t => t.name === mainTitle);
   const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
   
-  return totalSpeed * titleBonus;
+  return {
+    magnumCoins: totalSpeedMC * titleBonus,
+    stars: totalSpeedStars * titleBonus
+  };
 }
 
 // Функция для начисления пассивных наград майнинга
@@ -2956,20 +2977,26 @@ async function processActiveMiningClick(user) {
     const userWithMining = initializeNewMiningSystem(user);
     const totalSpeed = calculateTotalMiningSpeed(userWithMining);
     
-    if (totalSpeed === 0) {
+    const totalSpeedSum = totalSpeed.magnumCoins + totalSpeed.stars;
+    
+    if (totalSpeedSum === 0) {
       return { success: false, message: '❌ У вас нет активных майнеров' };
     }
     
-    const bonusReward = totalSpeed * config.MINING_ACTIVE_CLICK_BONUS * currentSeason.multiplier;
+    const bonusRewardMC = totalSpeed.magnumCoins * config.MINING_ACTIVE_CLICK_BONUS * currentSeason.multiplier;
+    const bonusRewardStars = totalSpeed.stars * config.MINING_ACTIVE_CLICK_BONUS * currentSeason.multiplier;
     
     // Обновляем статистику
     await db.collection('users').updateOne(
       { id: userWithMining.id },
       {
         $inc: {
-          magnumCoins: bonusReward,
-          'miningStats.totalMinedMC': bonusReward,
-          'miningStats.seasonMinedMC': bonusReward,
+          magnumCoins: bonusRewardMC,
+          stars: bonusRewardStars,
+          'miningStats.totalMinedMC': bonusRewardMC,
+          'miningStats.totalMinedStars': bonusRewardStars,
+          'miningStats.seasonMinedMC': bonusRewardMC,
+          'miningStats.seasonMinedStars': bonusRewardStars,
           'miningStats.activeClickCount': 1
         }
       }
@@ -2978,10 +3005,15 @@ async function processActiveMiningClick(user) {
     // Очищаем кеш пользователя
     userCache.delete(userWithMining.id);
     
+    const totalBonus = bonusRewardMC + bonusRewardStars;
+    let message = `✅ Активный клик!`;
+    if (bonusRewardMC > 0) message += `\n+${formatNumber(bonusRewardMC)} MC`;
+    if (bonusRewardStars > 0) message += `\n+${formatNumber(bonusRewardStars)} ⭐`;
+    
     return { 
       success: true, 
-      reward: bonusReward,
-      message: `✅ +${formatNumber(bonusReward)} Magnum Coins за активный клик!`
+      reward: totalBonus,
+      message: message
     };
   } catch (error) {
     console.error('❌ Ошибка активного клика майнинга:', error);
@@ -3119,7 +3151,9 @@ async function showMinerShop(ctx, user) {
       const userCount = userMiner ? userMiner.count : 0;
       
       message += `🔸 *${minerConfig.name}*\n`;
-      message += `├ Скорость: ${formatNumber(minerConfig.baseSpeed)} MC/мин\n`;
+      const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
+      const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'MC';
+      message += `├ Скорость: ${formatNumber(minerConfig.baseSpeed)} ${currencySymbol}/мин\n`;
       message += `├ Редкость: ${getRarityEmoji(minerConfig.rarity)} ${minerConfig.rarity}\n`;
       message += `├ Цена: ${minerConfig.price} ${minerConfig.currency === 'magnumCoins' ? 'MC' : '⭐'}\n`;
       message += `├ У вас: ${userCount} шт.\n`;
@@ -3167,12 +3201,14 @@ async function showMinerUpgrades(ctx, user) {
           const currentSpeed = minerConfig.baseSpeed * (1 + (miner.level - 1) * 0.2);
           const nextLevelSpeed = minerConfig.baseSpeed * (1 + miner.level * 0.2);
           const upgradeCost = miner.level * 50;
+          const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
+          const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'MC';
           
           message += `🔸 *${minerConfig.name}*\n`;
           message += `├ Уровень: ${miner.level}\n`;
           message += `├ Количество: ${miner.count} шт.\n`;
-          message += `├ Текущая скорость: ${formatNumber(currentSpeed)} MC/мин\n`;
-          message += `├ Скорость после апгрейда: ${formatNumber(nextLevelSpeed)} MC/мин\n`;
+          message += `├ Текущая скорость: ${formatNumber(currentSpeed)} ${currencySymbol}/мин\n`;
+          message += `├ Скорость после апгрейда: ${formatNumber(nextLevelSpeed)} ${currencySymbol}/мин\n`;
           message += `├ Стоимость апгрейда: ${upgradeCost} MC\n`;
           
           if (userWithMining.magnumCoins >= upgradeCost) {
