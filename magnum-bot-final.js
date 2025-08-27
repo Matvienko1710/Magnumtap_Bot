@@ -111,8 +111,7 @@ const config = {
   // Игровые настройки
   INITIAL_STARS: 0,
   INITIAL_MAGNUM_COINS: 1000,
-  FARM_COOLDOWN: 10, // секунды
-  FARM_BASE_REWARD: 0.01,
+
   DAILY_BONUS_BASE: 3,
   REFERRAL_BONUS: 50,
   REFERRAL_REWARD: 5, // Награда за каждого реферала
@@ -3391,54 +3390,6 @@ function getRarityEmoji(rarity) {
   }
 }
 
-// ==================== ФАРМ ====================
-async function showFarmMenu(ctx, user) {
-  const farm = user.farm;
-  const now = Date.now();
-  const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-  const timeSince = Math.floor((now - lastFarm) / 1000);
-  const cooldown = config.FARM_COOLDOWN;
-  
-  const canFarm = timeSince >= cooldown;
-  const remainingTime = canFarm ? 0 : cooldown - timeSince;
-  
-  const baseReward = config.FARM_BASE_REWARD;
-  const bonus = Math.min(user.level * 0.1, 2); // Бонус за уровень
-  const totalReward = baseReward + bonus;
-  
-  const keyboard = Markup.inlineKeyboard([
-    [
-      Markup.button.callback(
-        canFarm ? '🌾 Фармить' : `⏳ ${formatTime(remainingTime)}`,
-        canFarm ? 'do_farm' : 'farm_cooldown'
-      )
-    ],
-    [
-      Markup.button.callback('📊 Статистика', 'farm_stats'),
-      Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
-    ],
-    [
-      Markup.button.callback('⛏️ Майнер', 'miner')
-    ],
-    [Markup.button.callback('🔙 Назад', 'main_menu')]
-  ]);
-  
-  const message = 
-    `🌾 *Фарм*\n\n` +
-    `⏰ *Статус:* ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
-    `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Magnum Coins\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
-    `📊 *Всего фармов:* ${farm.farmCount}\n` +
-    `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Magnum Coins\n\n` +
-    `🎯 Выберите действие:`;
-  
-  await ctx.editMessageText(message, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard.reply_markup
-  });
-}
-
 // ==================== ВЫВОД СРЕДСТВ ====================
 async function showWithdrawalMenu(ctx, user) {
   const withdrawal = user.withdrawal || { withdrawalCount: 0, totalWithdrawn: 0 };
@@ -3476,203 +3427,9 @@ async function showWithdrawalMenu(ctx, user) {
   });
 }
 
-async function doFarm(ctx, user) {
-  try {
-    log(`🌾 Попытка фарма для пользователя ${user.id}`);
-    
-    const farm = user.farm;
-    const now = Date.now();
-    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-    const timeSince = Math.floor((now - lastFarm) / 1000);
-    const cooldown = config.FARM_COOLDOWN;
-    
-    log(`⏰ Время с последнего фарма: ${timeSince}с, кулдаун: ${cooldown}с`);
-    
-    if (timeSince < cooldown) {
-      const remaining = cooldown - timeSince;
-      log(`⏳ Кулдаун фарма для пользователя ${user.id}, осталось: ${remaining}с`);
-      await ctx.answerCbQuery(`⏳ Подождите ${formatTime(remaining)} перед следующим фармом!`);
-      
-      // Запускаем периодическое обновление меню с обратным отсчетом
-      startFarmCountdown(ctx, user, remaining);
-      
-      return;
-    }
-    
-    const baseReward = config.FARM_BASE_REWARD;
-    const bonus = Math.min(user.level * 0.1, 2);
-    const totalReward = baseReward + bonus;
-    
-    log(`💰 Расчет награды: базовая ${baseReward}, бонус ${bonus}, итого ${totalReward} Magnum Coins`);
-    
-    // Обновляем пользователя
-    log(`💾 Обновление базы данных для пользователя ${user.id}`);
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { 
-        $inc: { 
-          magnumCoins: totalReward,
-          totalEarnedMagnumCoins: totalReward,
-          experience: Math.floor(totalReward * 10),
-          'farm.farmCount': 1,
-          'farm.totalFarmEarnings': totalReward,
-          'statistics.totalActions': 1
-        },
-        $set: { 
-          'farm.lastFarm': new Date(),
-          updatedAt: new Date()
-        }
-      }
-    );
-    
-    log(`🗑️ Очистка кеша для пользователя ${user.id}`);
-    userCache.delete(user.id);
-    
-    // Проверяем и обновляем уровень пользователя
-    const updatedUser = await getUser(user.id);
-    if (updatedUser) {
-      const levelResult = await checkAndUpdateLevel(updatedUser);
-      if (levelResult.levelUp) {
-        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
-      }
-      
-      // Проверяем и обновляем достижения
-      const achievementsResult = await checkAndUpdateAchievements(updatedUser);
-      if (achievementsResult.newAchievements.length > 0) {
-        log(`🏆 Пользователь ${user.id} получил ${achievementsResult.newAchievements.length} новых достижений!`);
-      }
-    }
-    
-    // Обновляем прогресс ежедневного задания "Фармер дня"
-    await updateDailyTaskProgress(user, 'daily_farm', 1);
-    
-    log(`✅ Фарм успешно завершен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins`);
-    await ctx.answerCbQuery(
-      `🌾 Фарм завершен! Заработано: ${formatNumber(totalReward)} Magnum Coins`
-    );
-    
-    log(`🔄 Обновление меню фарма для пользователя ${user.id}`);
-    // Обновляем меню фарма
-    await updateFarmMenu(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } });
-    
-    // Запускаем обратный отсчет сразу после фарма
-    log(`⏰ Запуск обратного отсчета фарма для пользователя ${user.id}`);
-    startFarmCountdown(ctx, { ...user, farm: { ...farm, lastFarm: new Date() } }, cooldown);
-  } catch (error) {
-    logError(error, 'Фарм');
-    await ctx.answerCbQuery('❌ Ошибка фарма');
-  }
-}
-// ==================== СТАТИСТИКА ФАРМА ====================
-async function showFarmStats(ctx, user) {
-  try {
-    log(`📊 Показ статистики фарма для пользователя ${user.id}`);
-    
-    const farm = user.farm;
-    const now = Date.now();
-    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-    const timeSince = Math.floor((now - lastFarm) / 1000);
-    const cooldown = config.FARM_COOLDOWN;
-    
-    const canFarm = timeSince >= cooldown;
-    const remainingTime = canFarm ? 0 : cooldown - timeSince;
-    
-    const baseReward = config.FARM_BASE_REWARD;
-    const bonus = Math.min(user.level * 0.1, 2);
-    const totalReward = baseReward + bonus;
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback(
-          canFarm ? '🌾 Фармить' : `⏳ ${formatTime(remainingTime)}`,
-          canFarm ? 'do_farm' : 'farm_cooldown'
-        )
-      ],
-      [
-        Markup.button.callback('📊 Статистика', 'farm_stats'),
-        Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
-      ],
-      [Markup.button.callback('🔙 Назад', 'farm')]
-    ]);
-    
-    const message = 
-      `🌾 *Статистика фарма*\n\n` +
-      `📊 *Общая статистика:*\n` +
-      `├ Всего фармов: \`${farm.farmCount || 0}\`\n` +
-      `├ Всего заработано: \`${formatNumber(farm.totalFarmEarnings || 0)}\` Magnum Coins\n` +
-      `└ Средняя награда: \`${farm.farmCount > 0 ? formatNumber((farm.totalFarmEarnings || 0) / farm.farmCount) : '0.00'}\` Magnum Coins\n\n` +
-      `⏰ *Текущий статус:*\n` +
-      `├ Статус: ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-      `├ Базовая награда: \`${formatNumber(baseReward)}\` Magnum Coins\n` +
-      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Magnum Coins\n` +
-      `└ Итого награда: \`${formatNumber(totalReward)}\` Magnum Coins\n\n` +
-      `🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'Показ статистики фарма');
-    await ctx.answerCbQuery('❌ Ошибка загрузки статистики');
-  }
-}
-// ==================== БОНУСЫ ФАРМА ====================
-async function showFarmBonuses(ctx, user) {
-  try {
-    log(`🎯 Показ бонусов фарма для пользователя ${user.id}`);
-    
-    const farm = user.farm;
-    const now = Date.now();
-    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-    const timeSince = Math.floor((now - lastFarm) / 1000);
-    const cooldown = config.FARM_COOLDOWN;
-    
-    const canFarm = timeSince >= cooldown;
-    const remainingTime = canFarm ? 0 : cooldown - timeSince;
-    
-    const baseReward = config.FARM_BASE_REWARD;
-    const bonus = Math.min(user.level * 0.1, 2);
-    const totalReward = baseReward + bonus;
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback(
-          canFarm ? '🌾 Фармить' : `⏳ ${formatTime(remainingTime)}`,
-          canFarm ? 'do_farm' : 'farm_cooldown'
-        )
-      ],
-      [
-        Markup.button.callback('📊 Статистика', 'farm_stats'),
-        Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
-      ],
-      [Markup.button.callback('🔙 Назад', 'farm')]
-    ]);
-    
-    const message = 
-      `🎯 *Бонусы фарма*\n\n` +
-      `💰 *Система бонусов:*\n` +
-      `├ Базовая награда: \`${formatNumber(baseReward)}\` Magnum Coins\n` +
-      `├ Бонус за уровень: \`+${formatNumber(bonus)}\` Magnum Coins\n` +
-      `└ Итого награда: \`${formatNumber(totalReward)}\` Magnum Coins\n\n` +
-      `📈 *Как увеличить бонусы:*\n` +
-      `├ Повышайте уровень для увеличения бонуса\n` +
-      `├ Максимальный бонус: \`+2.00\` Magnum Coins\n` +
-      `└ Текущий уровень: \`${user.level || 1}\`\n\n` +
-      `⏰ *Текущий статус:*\n` +
-      `├ Статус: ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-      `└ ${canFarm ? 'Можете фармить!' : `Осталось: ${formatTime(remainingTime)}`}\n\n` +
-      `🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'Показ бонусов фарма');
-    await ctx.answerCbQuery('❌ Ошибка загрузки бонусов');
-  }
-}
+
+
+
 // ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
 async function updateMinerMenu(ctx, user) {
   try {
@@ -3765,161 +3522,10 @@ async function updateMinerMenu(ctx, user) {
     await showMinerMenu(ctx, user);
   }
 }
-async function updateFarmMenu(ctx, user) {
-  try {
-    log(`🔄 Обновление меню фарма для пользователя ${user.id}`);
-    
-    const farm = user.farm;
-    const now = Date.now();
-    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-    const timeSince = Math.floor((now - lastFarm) / 1000);
-    const cooldown = config.FARM_COOLDOWN;
+
   
-  const canFarm = timeSince >= cooldown;
-  const remainingTime = canFarm ? 0 : cooldown - timeSince;
   
-  const baseReward = config.FARM_BASE_REWARD;
-  const bonus = Math.min(user.level * 0.1, 2);
-  const totalReward = baseReward + bonus;
-  
-  const keyboard = Markup.inlineKeyboard([
-    [
-      Markup.button.callback(
-        canFarm ? '🌾 Фармить' : `⏳ ${formatTime(remainingTime)}`,
-        canFarm ? 'do_farm' : 'farm_cooldown'
-      )
-    ],
-    [
-      Markup.button.callback('📊 Статистика', 'farm_stats'),
-      Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
-    ],
-    [
-      Markup.button.callback('⛏️ Майнер', 'miner')
-    ],
-    [Markup.button.callback('🔙 Назад', 'main_menu')]
-  ]);
-  
-  const message = 
-    `🌾 *Фарм*\n\n` +
-    `⏰ *Статус:* ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
-    `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Magnum Coins\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
-    `📊 *Всего фармов:* ${farm.farmCount}\n` +
-    `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Magnum Coins\n\n` +
-    `🎯 Выберите действие:`;
-  
-    log(`📝 Отправка обновленного меню фарма для пользователя ${user.id}`);
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-    log(`✅ Меню фарма успешно обновлено для пользователя ${user.id}`);
-  } catch (error) {
-    logError(error, `Обновление меню фарма для пользователя ${user.id}`);
-    // Если не удалось обновить, показываем новое меню
-    log(`🔄 Fallback: показ нового меню фарма для пользователя ${user.id}`);
-    await showFarmMenu(ctx, user);
-  }
-}
-// Функция для запуска обратного отсчета фарма
-function startFarmCountdown(ctx, user, remainingSeconds) {
-  const countdownKey = `farm_countdown_${user.id}`;
-  
-  // Очищаем предыдущий таймер, если он существует
-  if (global[countdownKey]) {
-    clearInterval(global[countdownKey]);
-  }
-  
-  let secondsLeft = remainingSeconds;
-  
-  const updateCountdown = async () => {
-    try {
-      if (secondsLeft <= 0) {
-        // Кулдаун истек, обновляем меню и останавливаем таймер
-        clearInterval(global[countdownKey]);
-        delete global[countdownKey];
-        
-        const updatedUser = await getUser(ctx.from.id);
-        if (updatedUser) {
-          await updateFarmMenu(ctx, updatedUser);
-          log(`🔄 Обратный отсчет фарма завершен для пользователя ${user.id}`);
-        }
-        return;
-      }
-      
-      // Обновляем меню с текущим временем
-      const updatedUser = await getUser(ctx.from.id);
-      if (updatedUser) {
-        const farm = updatedUser.farm;
-        const now = Date.now();
-        const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-        const timeSince = Math.floor((now - lastFarm) / 1000);
-        const cooldown = config.FARM_COOLDOWN;
-        const canFarm = timeSince >= cooldown;
-        
-        // Если кулдаун истек, останавливаем таймер
-        if (canFarm) {
-          clearInterval(global[countdownKey]);
-          delete global[countdownKey];
-          await updateFarmMenu(ctx, updatedUser);
-          log(`🔄 Обратный отсчет фарма завершен для пользователя ${user.id}`);
-          return;
-        }
-        
-        const baseReward = config.FARM_BASE_REWARD;
-        const bonus = Math.min(updatedUser.level * 0.1, 2);
-        const totalReward = baseReward + bonus;
-        
-        const keyboard = Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              canFarm ? '🌾 Фармить' : `⏳ ${formatTime(secondsLeft)}`,
-              canFarm ? 'do_farm' : 'farm_cooldown'
-            )
-          ],
-          [
-            Markup.button.callback('📊 Статистика', 'farm_stats'),
-            Markup.button.callback('🎯 Бонусы', 'farm_bonuses')
-          ],
-          [
-            Markup.button.callback('⛏️ Майнер', 'miner')
-          ],
-          [Markup.button.callback('🔙 Назад', 'main_menu')]
-        ]);
-        
-        const message = 
-          `🌾 *Фарм*\n\n` +
-          `⏰ *Статус:* ${canFarm ? '🟢 Готов' : '🔴 Кулдаун'}\n` +
-          `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
-          `🎯 *Бонус за уровень:* +${formatNumber(bonus)} Magnum Coins\n` +
-          `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
-          `📊 *Всего фармов:* ${farm.farmCount}\n` +
-          `💎 *Всего заработано:* ${formatNumber(farm.totalFarmEarnings)} Magnum Coins\n\n` +
-          `🎯 Выберите действие:`;
-        
-        await ctx.editMessageText(message, {
-          parse_mode: 'Markdown',
-          reply_markup: keyboard.reply_markup
-        });
-      }
-      
-      secondsLeft--;
-    } catch (error) {
-      logError(error, 'Обратный отсчет фарма');
-      clearInterval(global[countdownKey]);
-      delete global[countdownKey];
-    }
-  };
-  
-  // Запускаем обновление каждые 5 секунд для снижения нагрузки
-  global[countdownKey] = setInterval(updateCountdown, 5000);
-  
-  // Сразу запускаем первое обновление
-  updateCountdown();
-  
-  log(`⏰ Запущен обратный отсчет фарма для пользователя ${user.id}, осталось: ${remainingSeconds}с`);
-}
+
 // Функция для запуска обратного отсчета бонуса
 function startBonusCountdown(ctx, user, remainingSeconds) {
   const countdownKey = `bonus_countdown_${user.id}`;
@@ -5781,7 +5387,7 @@ async function showAdminSettings(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🎯 Награды фарма', 'admin_farm_rewards'),
+
         Markup.button.callback('⏰ Кулдауны', 'admin_cooldowns')
       ],
       [
@@ -5801,8 +5407,7 @@ async function showAdminSettings(ctx, user) {
     const message = 
       `⚙️ *Настройки бота*\n\n` +
       `🔧 *Текущие настройки:*\n` +
-      `├ 🎯 Базовая награда фарма: \`${config.FARM_BASE_REWARD}\` Magnum Coins\n` +
-      `├ ⏰ Кулдаун фарма: \`${config.FARM_COOLDOWN}\` секунд\n` +
+
       `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
       `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins/мин\n` +
       `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Stars\n` +
@@ -5822,45 +5427,7 @@ async function showAdminSettings(ctx, user) {
   }
 }
 
-async function showAdminFarmRewards(ctx, user) {
-  try {
-    log(`🎯 Показ настроек наград фарма для админа ${user.id}`);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('➕ Увеличить награду', 'admin_farm_reward_increase'),
-        Markup.button.callback('➖ Уменьшить награду', 'admin_farm_reward_decrease')
-      ],
-      [
-        Markup.button.callback('🎯 Установить точное значение', 'admin_farm_reward_set'),
-        Markup.button.callback('📊 Статистика наград', 'admin_farm_reward_stats')
-      ],
-      [Markup.button.callback('🔙 Назад', 'admin_settings')]
-    ]);
-    
-    const message = 
-      `🎯 *Награды фарма*\n\n` +
-      `💰 *Текущие настройки:*\n` +
-      `├ Базовая награда: \`${config.FARM_BASE_REWARD}\` Magnum Coins\n` +
-      `├ Бонус за уровень: \`${Math.min(user.level * 0.1, 2)}\` Magnum Coins\n` +
-      `└ Максимальная награда: \`${config.FARM_BASE_REWARD + 2}\` Magnum Coins\n\n` +
-      `📊 *Статистика:*\n` +
-      `├ Всего фармов: \`${user.farm?.farmCount || 0}\`\n` +
-      `├ Заработано фармом: \`${formatNumber(user.farm?.totalFarmEarnings || 0)}\` Magnum Coins\n` +
-      `└ Средняя награда: \`${user.farm?.farmCount > 0 ? formatNumber((user.farm?.totalFarmEarnings || 0) / user.farm?.farmCount) : '0.00'}\` Magnum Coins\n\n` +
-      `🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-    
-    log(`✅ Настройки наград фарма показаны для админа ${user.id}`);
-  } catch (error) {
-    logError(error, `Показ настроек наград фарма для админа ${user.id}`);
-    await ctx.answerCbQuery('❌ Ошибка показа настроек наград');
-  }
-}
+
 // ==================== УПРАВЛЕНИЕ КОМИССИЕЙ ====================
 async function showAdminExchangeCommission(ctx, user) {
   try {
@@ -5911,7 +5478,7 @@ async function showAdminCooldowns(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('⏰ Кулдаун фарма', 'admin_cooldown_farm'),
+
         Markup.button.callback('🎁 Кулдаун бонуса', 'admin_cooldown_bonus')
       ],
       [
@@ -5924,12 +5491,9 @@ async function showAdminCooldowns(ctx, user) {
     const message = 
       `⏰ *Кулдауны*\n\n` +
       `⏳ *Текущие настройки:*\n` +
-      `├ Фарм: \`${config.FARM_COOLDOWN}\` секунд (\`${Math.floor(config.FARM_COOLDOWN / 60)}\` минут)\n` +
       `├ Ежедневный бонус: \`24\` часа\n` +
       `└ Майнер: \`60\` минут\n\n` +
       `📊 *Статистика использования:*\n` +
-      `├ Среднее время между фармами: \`${user.farm?.farmCount > 1 ? Math.floor(config.FARM_COOLDOWN / 60) : 'Н/Д'}\` минут\n` +
-      `├ Последний фарм: ${user.farm?.lastFarm ? user.farm.lastFarm.toLocaleString() : 'Никогда'}\n` +
       `└ Последний бонус: ${user.dailyBonus?.lastBonus ? user.dailyBonus.lastBonus.toLocaleString() : 'Никогда'}\n\n` +
       `🎯 Выберите кулдаун для изменения:`;
     
@@ -9716,75 +9280,7 @@ async function handleAdminUnbanUser(ctx, user, text) {
   }
 }
 
-// Функции для изменения настроек
-async function handleAdminSetFarmReward(ctx, user, text) {
-  try {
-    const newReward = parseFloat(text);
-    if (isNaN(newReward) || newReward < 0) {
-      await ctx.reply('❌ Неверное значение. Введите положительное число');
-      return;
-    }
-    
-    // Обновляем настройку в базе данных
-    await db.collection('config').updateOne(
-      { key: 'FARM_BASE_REWARD' },
-      { $set: { value: newReward, updatedAt: new Date() } },
-      { upsert: true }
-    );
-    
-    // Обновляем конфиг в памяти
-    config.FARM_BASE_REWARD = newReward;
-    
-    await ctx.reply(`✅ Базовая награда фарма изменена на ${newReward} Magnum Coins`);
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-    // Очищаем кеш пользователя
-    userCache.delete(user.id);
-    
-  } catch (error) {
-    logError(error, 'Изменение награды фарма админом');
-    await ctx.reply('❌ Ошибка изменения награды');
-  }
-}
-async function handleAdminSetFarmCooldown(ctx, user, text) {
-  try {
-    const newCooldown = parseInt(text);
-    if (isNaN(newCooldown) || newCooldown < 0) {
-      await ctx.reply('❌ Неверное значение. Введите положительное число в секундах');
-      return;
-    }
-    
-    // Обновляем настройку в базе данных
-    await db.collection('config').updateOne(
-      { key: 'FARM_COOLDOWN' },
-      { $set: { value: newCooldown, updatedAt: new Date() } },
-      { upsert: true }
-    );
-    
-    // Обновляем конфиг в памяти
-    config.FARM_COOLDOWN = newCooldown;
-    
-    await ctx.reply(`✅ Кулдаун фарма изменен на ${newCooldown} секунд (${Math.floor(newCooldown / 60)} минут)`);
-    
-    // Сбрасываем состояние
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
-    );
-    
-    // Очищаем кеш пользователя
-    userCache.delete(user.id);
-    
-  } catch (error) {
-    logError(error, 'Изменение кулдауна фарма админом');
-    await ctx.reply('❌ Ошибка изменения кулдауна');
-  }
-}
+
 
 async function handleAdminSetBonusBase(ctx, user, text) {
   try {
@@ -10889,40 +10385,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
 }
 
 // ==================== FAQ ОБРАБОТЧИКИ ====================
-bot.action('faq_farm', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад', 'support_faq')]
-    ]);
-    
-    const message = 
-      `🌾 *FAQ - Фарм*\n\n` +
-      `*❓ Что такое фарм?*\n` +
-      `Фарм - это основной способ заработка Magnum Coins в боте. Вы нажимаете кнопку "Фарм" и получаете награду.\n\n` +
-      `*❓ Как часто можно фармить?*\n` +
-      `Фарм доступен каждые ${config.FARM_COOLDOWN || 10} секунд. После нажатия кнопки начинается обратный отсчет.\n\n` +
-      `*❓ Сколько Magnum Coins я получаю за фарм?*\n` +
-      `За каждый фарм вы получаете ${config.FARM_REWARD || 1} Magnum Coins. Количество может увеличиваться с уровнем.\n\n` +
-      `*❓ Что такое кулдаун?*\n` +
-      `Кулдаун - это время ожидания между фармами. Во время кулдауна кнопка показывает обратный отсчет.\n\n` +
-      `*❓ Как увеличить награду за фарм?*\n` +
-      `Награда за фарм увеличивается с повышением уровня. Также можно получить бонусы через достижения.\n\n` +
-      `*❓ Что такое статистика фарма?*\n` +
-      `В статистике отображается общее количество фармов, заработанные Magnum Coins и время последнего фарма.\n\n` +
-      `*❓ Что такое бонусы фарма?*\n` +
-      `Бонусы фарма - это дополнительные награды, которые можно получить за выполнение определенных условий.`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'FAQ Фарм');
-  }
-});
+
 
 bot.action('faq_miner', async (ctx) => {
   try {
@@ -12244,37 +11707,7 @@ bot.action('insufficient_funds', async (ctx) => {
   }
 });
 
-// Фарм
-bot.action('farm', async (ctx) => {
-  try {
-    logFunction('bot.action.farm', ctx.from.id);
-    log(`🌾 Запрос меню фарма от пользователя ${ctx.from.id}`);
-    
-    const user = await getUser(ctx.from.id);
-    if (!user) {
-      log(`❌ Не удалось получить пользователя ${ctx.from.id} для меню фарма`);
-      return;
-    }
-    
-    logDebug(`Показ меню фарма для пользователя ${ctx.from.id}`, {
-      level: user.level,
-      magnumCoins: user.magnumCoins,
-      lastFarm: user.farm?.lastFarm,
-      farmCount: user.farm?.farmCount
-    });
-    
-    await showFarmMenu(ctx, user);
-    log(`✅ Меню фарма показано пользователю ${ctx.from.id}`);
-    
-  } catch (error) {
-    logError(error, `Меню фарма для пользователя ${ctx.from.id}`);
-    logDebug(`Ошибка в меню фарма`, {
-      userId: ctx.from.id,
-      error: error.message,
-      stack: error.stack
-    });
-  }
-});
+
 // Обмен
 bot.action('exchange', async (ctx) => {
   try {
@@ -13144,61 +12577,9 @@ bot.action('next_sponsor_task', async (ctx) => {
     logError(error, 'Следующее спонсорское задание');
   }
 });
-bot.action('do_farm', async (ctx) => {
-  try {
-    logFunction('bot.action.do_farm', ctx.from.id);
-    log(`🌾 Запрос действия фарма от пользователя ${ctx.from.id}`);
-    
-    const user = await getUser(ctx.from.id);
-    if (!user) {
-      log(`❌ Не удалось получить пользователя ${ctx.from.id} для действия фарма`);
-      return;
-    }
-    
-    logDebug(`Выполнение фарма для пользователя ${ctx.from.id}`, {
-      level: user.level,
-      magnumCoins: user.magnumCoins,
-      lastFarm: user.farm?.lastFarm,
-      farmCount: user.farm?.farmCount,
-      farmCooldown: config.FARM_COOLDOWN
-    });
-    
-    await doFarm(ctx, user);
-    log(`✅ Действие фарма выполнено для пользователя ${ctx.from.id}`);
-    
-  } catch (error) {
-    logError(error, `Действие фарма для пользователя ${ctx.from.id}`);
-    logDebug(`Ошибка в действии фарма`, {
-      userId: ctx.from.id,
-      error: error.message,
-      stack: error.stack
-    });
-  }
-});
 
-// Статистика фарма
-bot.action('farm_stats', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showFarmStats(ctx, user);
-  } catch (error) {
-    logError(error, 'Статистика фарма (обработчик)');
-  }
-});
 
-// Бонусы фарма
-bot.action('farm_bonuses', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showFarmBonuses(ctx, user);
-  } catch (error) {
-    logError(error, 'Бонусы фарма (обработчик)');
-  }
-});
+
 
 // Бонус
 bot.action('bonus', async (ctx) => {
@@ -13245,32 +12626,7 @@ bot.action('bonus_streak', async (ctx) => {
   }
 });
 
-// Обработка кулдаунов
-bot.action('farm_cooldown', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const farm = user.farm;
-    const now = Date.now();
-    const lastFarm = farm.lastFarm ? farm.lastFarm.getTime() : 0;
-    const timeSince = Math.floor((now - lastFarm) / 1000);
-    const cooldown = config.FARM_COOLDOWN;
-    
-    if (timeSince < cooldown) {
-      const remaining = cooldown - timeSince;
-      await ctx.answerCbQuery(`⏳ Подождите ${formatTime(remaining)} перед следующим фармом!`);
-      
-      // Запускаем периодическое обновление меню с обратным отсчетом
-      startFarmCountdown(ctx, user, remaining);
-    } else {
-      // Если кулдаун уже истек, обновляем меню
-      await updateFarmMenu(ctx, user);
-    }
-  } catch (error) {
-    logError(error, 'Кулдаун фарма');
-  }
-});
+
 
 bot.action('bonus_cooldown', async (ctx) => {
   try {
@@ -15209,45 +14565,7 @@ bot.action('admin_cooldowns', async (ctx) => {
   }
 });
 
-bot.action('admin_farm_rewards', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user || !isAdmin(user.id)) {
-      await ctx.answerCbQuery('❌ Доступ запрещен');
-      return;
-    }
-    
-    // Устанавливаем состояние для ввода новой награды
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_farm_reward', updatedAt: new Date() } }
-    );
-    userCache.delete(user.id);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Отмена', 'admin_settings')]
-    ]);
-    
-    await ctx.editMessageText(
-      `🎯 *Изменение награды фарма*\n\n` +
-      `📝 Введите новое значение базовой награды:\n\n` +
-      `💡 *Примеры:*\n` +
-      `├ 0.01 (1 цент)\n` +
-      `├ 0.1 (10 центов)\n` +
-      `├ 1.0 (1 монета)\n` +
-      `└ 10.0 (10 монет)\n\n` +
-      `⚠️ *Текущая награда:* \`${config.FARM_BASE_REWARD}\` Magnum Coins\n\n` +
-      `🎯 Введите новое значение:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
-  } catch (error) {
-    logError(error, 'Изменение награды фарма');
-    await ctx.answerCbQuery('❌ Ошибка изменения награды');
-  }
-});
+
 
 bot.action('admin_daily_bonus', async (ctx) => {
   try {
@@ -15369,45 +14687,7 @@ bot.action('admin_referral_settings', async (ctx) => {
   }
 });
 
-bot.action('admin_cooldown_farm', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user || !isAdmin(user.id)) {
-      await ctx.answerCbQuery('❌ Доступ запрещен');
-      return;
-    }
-    
-    // Устанавливаем состояние для ввода нового кулдауна
-    await db.collection('users').updateOne(
-      { id: user.id },
-      { $set: { adminState: 'setting_farm_cooldown', updatedAt: new Date() } }
-    );
-    userCache.delete(user.id);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Отмена', 'admin_cooldowns')]
-    ]);
-    
-    await ctx.editMessageText(
-      `⏰ *Изменение кулдауна фарма*\n\n` +
-      `📝 Введите новое значение кулдауна в секундах:\n\n` +
-      `💡 *Примеры:*\n` +
-      `├ 300 (5 минут)\n` +
-      `├ 600 (10 минут)\n` +
-      `├ 1800 (30 минут)\n` +
-      `└ 3600 (1 час)\n\n` +
-      `⚠️ *Текущий кулдаун:* \`${config.FARM_COOLDOWN}\` секунд\n\n` +
-      `🎯 Введите новое значение:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
-  } catch (error) {
-    logError(error, 'Изменение кулдауна фарма');
-    await ctx.answerCbQuery('❌ Ошибка изменения кулдауна');
-  }
-});
+
 
 bot.action('admin_cooldown_bonus', async (ctx) => {
   try {
@@ -15432,7 +14712,7 @@ bot.action('admin_cooldown_stats', async (ctx) => {
     const user = await getUser(ctx.from.id); if (!user) return;
     const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_cooldowns')]]);
     const message = `⏱️ *Статистика кулдаунов*`+"\n\n"+
-      `├ Кулдаун фарма: \`${formatTime(config.FARM_COOLDOWN)}\``+"\n"+
+
       `├ Кулдаун бонуса: \`24ч\``+"\n"+
       `└ Период награды майнера: \`30м\``;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
