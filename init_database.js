@@ -195,3 +195,4 @@ async function initDatabase() {
 
 // Запускаем инициализацию базы данных
 initDatabase();
+

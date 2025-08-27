@@ -34,6 +34,24 @@ app.get('/', (req, res) => {
     });
 });
 
+// Эндпоинт для UptimeRobot - проверка работоспособности
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        message: 'Magnum Stars Bot is alive and running',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        version: '1.0.0',
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
+
+// Эндпоинт для UptimeRobot - простая проверка
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
+
 // Тестовый маршрут для проверки статических файлов
 app.get('/test', (req, res) => {
     // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
@@ -606,6 +624,38 @@ app.get('/api/bot-info', async (req, res) => {
         res.json({ success: true, username });
     } catch (error) {
         res.json({ success: true, username: null });
+    }
+});
+
+// Эндпоинт для детальной проверки состояния бота
+app.get('/api/status', async (req, res) => {
+    try {
+        const botStatus = bot ? 'running' : 'not_initialized';
+        const dbStatus = db ? 'connected' : 'disconnected';
+        
+        res.json({
+            status: 'ok',
+            bot: {
+                status: botStatus,
+                username: process.env.BOT_PUBLIC_USERNAME || (bot?.botInfo?.username) || null
+            },
+            database: {
+                status: dbStatus,
+                name: db ? db.databaseName : null
+            },
+            server: {
+                uptime: process.uptime(),
+                memory: process.memoryUsage(),
+                timestamp: new Date().toISOString()
+            },
+            environment: process.env.NODE_ENV || 'development'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 
