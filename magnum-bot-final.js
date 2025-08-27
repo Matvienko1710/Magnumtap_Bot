@@ -7563,11 +7563,10 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     }
     
     // Если задание не начато или скриншот отклонен
-    const sponsorTasks = getSponsorTasks();
-    const userTasks = user.tasks?.sponsorTasks || {};
+    const allSponsorTasks = getSponsorTasks();
     
     // Проверяем, есть ли следующее задание
-    const hasNextTask = sponsorTasks.some(t => {
+    const hasNextTask = allSponsorTasks.some(t => {
       if (t.id === taskId) return false; // Пропускаем текущее задание
       const userTask = userTasks[t.id] || {};
       return !userTask.completed || !userTask.claimed;
