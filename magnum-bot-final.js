@@ -955,7 +955,6 @@ function clearUserCache(userId) {
 function escapeMarkdown(text) {
   if (!text) return '';
   return text
-    .replace(/_/g, '\\_')
     .replace(/\*/g, '\\*')
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
@@ -966,12 +965,9 @@ function escapeMarkdown(text) {
     .replace(/>/g, '\\>')
     .replace(/#/g, '\\#')
     .replace(/\+/g, '\\+')
-    .replace(/-/g, '\\-')
-    .replace(/=/g, '\\=')
     .replace(/\|/g, '\\|')
     .replace(/\{/g, '\\{')
     .replace(/\}/g, '\\}')
-    .replace(/\./g, '\\.')
     .replace(/!/g, '\\!');
 }
 
@@ -7421,84 +7417,52 @@ async function showSponsorTasks(ctx, user) {
     const userTasks = user.tasks?.sponsorTasks || {};
     log(`🎯 Задания пользователя: ${JSON.stringify(userTasks)}`);
     
-    // Создаем кнопки для каждого задания
-    const taskButtons = [];
-    sponsorTasks.forEach((task, index) => {
-      const isCompleted = userTasks[task.id]?.completed || false;
-      const isClaimed = userTasks[task.id]?.claimed || false;
-      const hasScreenshot = userTasks[task.id]?.screenshot || false;
-      
-      // Если задание выполнено и получена награда - показываем как завершенное
-      if (isCompleted && isClaimed) {
-        taskButtons.push([
-          Markup.button.callback(`✅ ${task.title} (Завершено)`, `sponsor_task_${task.id}`)
-        ]);
-      } else {
-        // Иначе показываем как активное
-        const status = isCompleted ? '🎁' : (hasScreenshot ? '📸' : '🔄');
-        taskButtons.push([
-          Markup.button.callback(`${status} ${task.title}`, `sponsor_task_${task.id}`)
-        ]);
-      }
-    });
-    
-    // Добавляем кнопку "Следующее задание" если есть невыполненные
-    const hasUncompletedTasks = sponsorTasks.some(task => {
+    // Находим первое невыполненное задание
+    const firstUncompletedTask = sponsorTasks.find(task => {
       const userTask = userTasks[task.id] || {};
       return !userTask.completed || !userTask.claimed;
     });
     
-    if (hasUncompletedTasks) {
-      taskButtons.push([
-        Markup.button.callback('⏭️ Следующее задание', 'next_sponsor_task')
-      ]);
-    }
-    
-    // Добавляем кнопку "Назад"
-    taskButtons.push([
-      Markup.button.callback('🔙 Назад', 'tasks')
-    ]);
-    
-    const keyboard = Markup.inlineKeyboard(taskButtons);
-    
-    // Подсчитываем общий статус
-    const completedTasks = Object.values(userTasks).filter(task => task && task.completed).length;
-    const totalTasks = sponsorTasks.length;
-    let overallStatus = '';
-    if (completedTasks === 0) {
-      overallStatus = '🔄';
-    } else if (completedTasks === totalTasks) {
-      overallStatus = '✅';
+    if (firstUncompletedTask) {
+      // Показываем первое невыполненное задание
+      await showSponsorTaskDetails(ctx, user, firstUncompletedTask.id);
     } else {
-      overallStatus = '🎁';
+      // Все задания выполнены - показываем общий список
+      const taskButtons = [];
+      sponsorTasks.forEach((task, index) => {
+        const isCompleted = userTasks[task.id]?.completed || false;
+        const isClaimed = userTasks[task.id]?.claimed || false;
+        
+        if (isCompleted && isClaimed) {
+          taskButtons.push([
+            Markup.button.callback(`✅ ${task.title} (Завершено)`, `sponsor_task_${task.id}`)
+          ]);
+        }
+      });
+      
+      taskButtons.push([
+        Markup.button.callback('🔙 Назад', 'tasks')
+      ]);
+      
+      const keyboard = Markup.inlineKeyboard(taskButtons);
+      
+      let message = `✅ *Все спонсорские задания выполнены!*\n\n`;
+      message += `🎉 Поздравляем! Вы выполнили все доступные спонсорские задания.\n\n`;
+      
+      sponsorTasks.forEach((task, index) => {
+        const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+        message += `✅ *${escapeMarkdown(task.title)}*\n`;
+        message += `├ Награда: \`${escapeMarkdown(rewardText)}\` ✅ Получена\n`;
+        message += `└ Сложность: ${escapeMarkdown(task.difficulty)}\n\n`;
+      });
+      
+      message += `🎯 Выберите действие:`;
+      
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
     }
-    
-    let message = `${overallStatus} *Спонсорские задания*\n\n`;
-    message += `💰 *Выполняйте задания от спонсоров и получайте награды\\!*\n\n`;
-    
-    sponsorTasks.forEach((task, index) => {
-      const isCompleted = userTasks[task.id]?.completed || false;
-      const isClaimed = userTasks[task.id]?.claimed || false;
-      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
-      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
-    
-    message += `${status} *${escapeMarkdown(task.title)}*\n`;
-    message += `├ ${escapeMarkdown(task.description)}\n`;
-    message += `├ Награда: \`${escapeMarkdown(rewardText)}\`\n`;
-      message += `└ Сложность: ${escapeMarkdown(task.difficulty)}\n\n`;
-    });
-    
-    message += `💡 *Как выполнить:*\n`;
-    message += `├ Нажмите на задание для подробностей\n`;
-    message += `├ Выполните требуемое действие\n`;
-    message += `├ Отправьте скриншот\n`;
-    message += `└ Получите награду\\!\n\n`;
-    message += `🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
     
     log(`✅ Спонсорские задания успешно показаны пользователю ${user.id}`);
   } catch (error) {
@@ -7599,12 +7563,31 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     }
     
     // Если задание не начато или скриншот отклонен
+    const sponsorTasks = getSponsorTasks();
+    const userTasks = user.tasks?.sponsorTasks || {};
+    
+    // Проверяем, есть ли следующее задание
+    const hasNextTask = sponsorTasks.some(t => {
+      if (t.id === taskId) return false; // Пропускаем текущее задание
+      const userTask = userTasks[t.id] || {};
+      return !userTask.completed || !userTask.claimed;
+    });
+    
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.url('📱 Подписаться', task.url),
         Markup.button.callback('📸 Отправить скриншот', `send_screenshot_${taskId}`)
-      ],
-      [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
+      ]
+    ]);
+    
+    if (hasNextTask) {
+      keyboard.inline_keyboard.push([
+        Markup.button.callback('⏭️ Следующее задание', 'next_sponsor_task')
+      ]);
+    }
+    
+    keyboard.inline_keyboard.push([
+      Markup.button.callback('🔙 Назад', 'tasks_sponsor')
     ]);
     
     const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
