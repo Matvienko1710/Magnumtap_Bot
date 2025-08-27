@@ -1432,6 +1432,12 @@ async function getUser(id, ctx = null) {
   try {
     logFunction('getUser', id, { ctx: ctx ? 'present' : 'null' });
     
+    // Проверяем, что id является числом
+    if (!id || isNaN(parseInt(id))) {
+      console.error(`❌ Неверный ID пользователя: ${id}`);
+      return null;
+    }
+    
     // Проверяем кеш
     const cached = getCachedUser(id);
     if (cached) {
@@ -1861,7 +1867,8 @@ async function showMainMenu(ctx, user) {
 }
 
 async function showMainMenuStart(ctx, user) {
-  const rankProgress = await getRankProgress(user);
+  try {
+    const rankProgress = await getRankProgress(user);
   
   // Создаем базовые кнопки
   const buttons = [
@@ -1902,6 +1909,22 @@ async function showMainMenuStart(ctx, user) {
     parse_mode: 'Markdown',
     reply_markup: keyboard.reply_markup
   });
+  } catch (error) {
+    console.error(`❌ Ошибка показа главного меню для пользователя ${user.id}:`, error);
+    console.log(`Ошибка в showMainMenuStart:`, {
+      userId: user.id,
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Пытаемся отправить простое сообщение
+    try {
+      await ctx.reply('❌ Ошибка загрузки меню. Попробуйте позже.');
+    } catch (replyError) {
+      console.error(`❌ Не удалось отправить сообщение об ошибке пользователю ${user.id}:`, replyError);
+    }
+  }
 }
 
 // ==================== РОАДМАП ====================
@@ -8740,9 +8763,16 @@ bot.start(async (ctx) => {
     console.log(`Ошибка в /start:`, {
       userId: ctx.from.id,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
+      timestamp: new Date().toISOString()
     });
-    await ctx.reply('❌ Произошла ошибка. Попробуйте позже.');
+    
+    // Пытаемся отправить простое сообщение об ошибке
+    try {
+      await ctx.reply('❌ Произошла ошибка при запуске бота. Попробуйте позже или обратитесь к администратору.');
+    } catch (replyError) {
+      console.error(`❌ Не удалось отправить сообщение об ошибке пользователю ${ctx.from.id}:`, replyError);
+    }
   }
 });
 
