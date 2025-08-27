@@ -7612,10 +7612,19 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     log(`🎯 Сообщение для задания ${taskId} (полное): ${message}`);
     
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
+    try {
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    } catch (error) {
+      // Если не удалось отредактировать, отправляем новое сообщение
+      logError(error, 'Редактирование сообщения задания');
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    }
   } catch (error) {
     logError(error, 'Показ деталей спонсорского задания');
     await ctx.answerCbQuery('❌ Ошибка загрузки деталей задания');
@@ -7928,8 +7937,8 @@ async function handleScreenshotUpload(ctx, user, taskId) {
       
       const supportMessage = 
         `📸 *Новая заявка на спонсорское задание*\n\n` +
-        `🎯 *Задание:* ${task.title}\n` +
-        `👤 *Пользователь:* ${getDisplayName(user)}\n` +
+        `🎯 *Задание:* ${escapeMarkdown(task.title)}\n` +
+        `👤 *Пользователь:* ${escapeMarkdown(getDisplayName(user))}\n` +
         `📱 *Username:* ${user.username ? '@' + user.username : 'Не указан'}\n` +
         `🆔 *User ID:* \`${user.id}\`\n` +
         `💰 *Награда:* ${task.reward} ${task.rewardType === 'stars' ? '⭐ Stars' : 'Magnum Coins'}\n` +
@@ -7954,7 +7963,13 @@ async function handleScreenshotUpload(ctx, user, taskId) {
     // Возвращаем пользователя к деталям задания
     const updatedUser = await getUser(user.id);
     if (updatedUser) {
-      await showSponsorTaskDetails(ctx, updatedUser, taskId);
+      try {
+        await showSponsorTaskDetails(ctx, updatedUser, taskId);
+      } catch (error) {
+        logError(error, 'Показ деталей задания после скриншота');
+        // Если не удалось показать детали, просто отправляем новое сообщение
+        await ctx.reply('✅ Скриншот отправлен! Заявка передана на проверку администратору.');
+      }
     }
   } catch (error) {
     logError(error, 'Обработка скриншота');
