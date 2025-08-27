@@ -4519,8 +4519,8 @@ async function claimBonus(ctx, user) {
       { id: user.id },
       { 
         $inc: { 
-          magnumCoins: totalReward,
-          totalEarnedMagnumCoins: totalReward,
+          stars: totalReward,
+          totalEarnedStars: totalReward,
           experience: Math.floor(totalReward * 5),
           'statistics.totalActions': 1
         },
@@ -4548,9 +4548,9 @@ async function claimBonus(ctx, user) {
     // Обновляем прогресс ежедневного задания "Бонус дня"
     await updateDailyTaskProgress(user, 'daily_bonus', 1);
     
-    log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Magnum Coins, серия: ${newStreak} дней`);
+    log(`✅ Бонус успешно получен для пользователя ${user.id}, заработано: ${totalReward} Stars, серия: ${newStreak} дней`);
     await ctx.answerCbQuery(
-      `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Magnum Coins, серия: ${newStreak} дней`
+      `🎁 Бонус получен! Заработано: ${formatNumber(totalReward)} Stars, серия: ${newStreak} дней`
     );
     
     log(`🔄 Обновление меню бонуса для пользователя ${user.id}`);
