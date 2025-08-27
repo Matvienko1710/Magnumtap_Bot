@@ -116,8 +116,62 @@ const config = {
   DAILY_BONUS_BASE: 3,
   REFERRAL_BONUS: 50,
   REFERRAL_REWARD: 5, // Награда за каждого реферала
-  MINER_REWARD_PER_MINUTE: 0.01, // Базовая награда за минуту
+  MINER_REWARD_PER_MINUTE: 0.01, // Базовая награда за минуту (старая система)
   MINER_REWARD_PER_HOUR: 0.1, // Оставляем для обратной совместимости
+  
+  // Новая система майнинга
+  MINING_SEASON_DURATION: 30, // Длительность сезона в днях
+  MINING_REWARD_INTERVAL: 2, // Интервал начисления наград в минутах
+  MINING_ACTIVE_CLICK_BONUS: 0.5, // Бонус за активный клик (дополнительно к пассивному)
+  
+  // Майнеры в магазине
+  MINERS: {
+    basic: {
+      id: 'basic',
+      name: 'Базовый майнер',
+      rarity: 'common',
+      baseSpeed: 0.01,
+      price: 100,
+      currency: 'magnumCoins',
+      description: 'Простой майнер для начинающих'
+    },
+    advanced: {
+      id: 'advanced',
+      name: 'Продвинутый майнер',
+      rarity: 'rare',
+      baseSpeed: 0.05,
+      price: 500,
+      currency: 'magnumCoins',
+      description: 'Более мощный майнер'
+    },
+    premium: {
+      id: 'premium',
+      name: 'Премиум майнер',
+      rarity: 'epic',
+      baseSpeed: 0.15,
+      price: 50,
+      currency: 'stars',
+      description: 'Мощный майнер за Stars'
+    },
+    legendary: {
+      id: 'legendary',
+      name: 'Легендарный майнер',
+      rarity: 'legendary',
+      baseSpeed: 0.5,
+      price: 200,
+      currency: 'stars',
+      description: 'Самый мощный майнер'
+    }
+  },
+  
+  // Награды за сезоны
+  SEASON_REWARDS: {
+    top1: { magnumCoins: 10000, stars: 100, title: '🏆 Чемпион сезона' },
+    top3: { magnumCoins: 5000, stars: 50, title: '🥇 Топ-3 сезона' },
+    top10: { magnumCoins: 2000, stars: 20, title: '🥈 Топ-10 сезона' },
+    top50: { magnumCoins: 500, stars: 5, title: '🥉 Топ-50 сезона' }
+  },
+  
   EXCHANGE_COMMISSION: 2.5,
   MIN_WITHDRAWAL: 100,
   MAX_WITHDRAWAL: 10000,
@@ -2277,22 +2331,10 @@ async function showRoadmapSuggestions(ctx, user) {
     logError(error, 'Показ предложений роадмапа');
   }
 }
-// ==================== МАЙНИНГ ====================
+// ==================== НОВАЯ СИСТЕМА МАЙНИНГА ====================
 async function showMinerMenu(ctx, user) {
-  // Убеждаемся, что все поля майнера инициализированы
-  if (!user.miner) {
-    user.miner = {
-      active: false,
-      level: 1,
-      efficiency: 1,
-      lastReward: null,
-      totalMined: 0
-    };
-  }
-  
-  const miner = user.miner;
-  const isActive = miner.active || false;
-  const efficiency = miner.efficiency || 1;
+  // Инициализируем новую систему майнинга
+  const userWithMining = initializeNewMiningSystem(user);
   
   // Получаем информацию о текущем сезоне
   const currentSeason = getCurrentMiningSeason();
@@ -2302,58 +2344,46 @@ async function showMinerMenu(ctx, user) {
     `⏰ *До следующего сезона:* ${currentSeason.daysUntilNextSeason} дней` :
     `\n📅 *Выходные* - майнинг приостановлен`;
   
-  // Рассчитываем текущую награду с учетом сезона
-  const baseReward = await calculateMinerReward(efficiency, user);
-  const seasonMultiplier = currentSeason ? currentSeason.multiplier : 0;
-  const currentReward = baseReward * seasonMultiplier;
-  const rewardPerMinute = currentReward;
-  const rewardPerHour = currentReward * 60;
+  // Рассчитываем общую скорость майнинга
+  const totalSpeed = calculateTotalMiningSpeed(userWithMining);
+  const rewardPerMinute = totalSpeed * currentSeason.multiplier;
+  const rewardPerHour = rewardPerMinute * 60;
   
-  let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
-  let lastRewardText = '';
-  
-  if (miner.lastReward) {
-    const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
-    if (timeSince < 60) {
-      const remaining = 60 - timeSince;
-      lastRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
-    }
-  }
+  // Подсчитываем общее количество майнеров
+  const totalMiners = userWithMining.miners.reduce((sum, miner) => sum + miner.count, 0);
   
   const keyboard = Markup.inlineKeyboard([
     [
-      Markup.button.callback(
-        isActive ? '⏹️ Остановить майнер' : '▶️ Запустить майнер',
-        isActive ? 'stop_miner' : 'start_miner'
-      )
-    ],
-    [
-      Markup.button.callback('⬆️ Улучшить майнер', 'upgrade_miner'),
+      Markup.button.callback('🛒 Магазин майнеров', 'miner_shop'),
       Markup.button.callback('📊 Статистика', 'miner_stats')
     ],
     [
-      Markup.button.callback('📅 Информация о сезоне', 'miner_season_info')
+      Markup.button.callback('⚡ Активный клик', 'miner_active_click'),
+      Markup.button.callback('📅 Сезон', 'miner_season_info')
+    ],
+    [
+      Markup.button.callback('🏆 Рейтинг', 'miner_leaderboard'),
+      Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
   // Получаем информацию о титуле
-  const titlesList = getTitlesList(user);
-  const mainTitle = user.mainTitle || '🌱 Новичок';
+  const titlesList = getTitlesList(userWithMining);
+  const mainTitle = userWithMining.mainTitle || '🌱 Новичок';
   const currentTitle = titlesList.find(t => t.name === mainTitle);
   const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
   const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
   const message = 
-    `⛏️ *Майнер*${seasonInfo}\n\n` +
-    `📊 *Статус:* ${statusText}\n` +
-    `📈 *Уровень:* ${miner.level || 1}\n` +
-    `⚡ *Эффективность:* ${efficiency}x\n` +
+    `⛏️ *Новая система майнинга*${seasonInfo}\n\n` +
+    `📊 *Ваши майнеры:* ${totalMiners} шт.\n` +
+    `⚡ *Общая скорость:* ${formatNumber(totalSpeed)} MC/мин\n` +
+    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} MC\n` +
+    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} MC\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
-    `💰 *Базовая награда/минуту:* ${formatNumber(baseReward)} Magnum Coins\n` +
-    `💰 *Сезонная награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
-    `💰 *Сезонная награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
-    `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins${lastRewardText}\n\n` +
+    `💎 *Всего добыто:* ${formatNumber(userWithMining.miningStats?.totalMinedMC || 0)} MC\n` +
+    `⭐ *Сезон добыто:* ${formatNumber(userWithMining.miningStats?.seasonMinedMC || 0)} MC\n\n` +
     `🎯 Выберите действие:`;
   
   await ctx.editMessageText(message, {
@@ -2771,6 +2801,477 @@ async function showMinerSeasonInfo(ctx, user) {
   } catch (error) {
     logError(error, `Показ информации о сезоне для пользователя ${user.id}`);
     await ctx.answerCbQuery('❌ Ошибка загрузки информации о сезоне');
+  }
+}
+
+// ==================== НОВАЯ СИСТЕМА МАЙНИНГА ====================
+
+// Функция для получения текущего сезона майнинга
+function getCurrentMiningSeason() {
+  const now = new Date();
+  const seasonStart = new Date('2025-08-28T10:00:00Z'); // 28 августа 12:00 по Берлину (UTC+2)
+  
+  const daysSinceStart = Math.floor((now - seasonStart) / (1000 * 60 * 60 * 24));
+  const currentSeason = Math.floor(daysSinceStart / config.MINING_SEASON_DURATION) + 1;
+  const dayInSeason = (daysSinceStart % config.MINING_SEASON_DURATION) + 1;
+  
+  const seasonStartDate = new Date(seasonStart);
+  seasonStartDate.setDate(seasonStartDate.getDate() + (currentSeason - 1) * config.MINING_SEASON_DURATION);
+  
+  const seasonEndDate = new Date(seasonStartDate);
+  seasonEndDate.setDate(seasonEndDate.getDate() + config.MINING_SEASON_DURATION);
+  
+  const daysUntilNextSeason = config.MINING_SEASON_DURATION - dayInSeason;
+  
+  return {
+    season: currentSeason,
+    dayInSeason: dayInSeason,
+    daysUntilNextSeason: daysUntilNextSeason,
+    startDate: seasonStartDate,
+    endDate: seasonEndDate,
+    multiplier: 1 + (currentSeason - 1) * 0.1, // Увеличиваем множитель на 10% каждый сезон
+    isActive: true
+  };
+}
+
+// Функция для инициализации новой системы майнинга у пользователя
+function initializeNewMiningSystem(user) {
+  if (!user.miners) {
+    user.miners = [];
+  }
+  
+  if (!user.miningStats) {
+    user.miningStats = {
+      totalMinedMC: 0,
+      totalMinedStars: 0,
+      seasonMinedMC: 0,
+      seasonMinedStars: 0,
+      lastReward: null,
+      activeClickCount: 0,
+      passiveRewards: 0
+    };
+  }
+  
+  if (!user.miningSeasonStats) {
+    user.miningSeasonStats = {};
+  }
+  
+  return user;
+}
+
+// Функция для расчета общей скорости майнинга пользователя
+function calculateTotalMiningSpeed(user) {
+  let totalSpeed = 0;
+  
+  if (user.miners && user.miners.length > 0) {
+    for (const miner of user.miners) {
+      const minerConfig = config.MINERS[miner.type];
+      if (minerConfig) {
+        const levelMultiplier = 1 + (miner.level - 1) * 0.2; // +20% за каждый уровень
+        totalSpeed += minerConfig.baseSpeed * levelMultiplier * miner.count;
+      }
+    }
+  }
+  
+  // Бонус от титула
+  const titlesList = getTitlesList(user);
+  const mainTitle = user.mainTitle || '🌱 Новичок';
+  const currentTitle = titlesList.find(t => t.name === mainTitle);
+  const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
+  
+  return totalSpeed * titleBonus;
+}
+
+// Функция для начисления пассивных наград майнинга
+async function processMiningRewards() {
+  try {
+    console.log('⛏️ Обработка пассивных наград майнинга...');
+    
+    const currentSeason = getCurrentMiningSeason();
+    if (!currentSeason.isActive) {
+      console.log('📅 Майнинг приостановлен - выходные');
+      return;
+    }
+    
+    const users = await db.collection('users').find({
+      'miningStats.lastReward': { $exists: true }
+    }).toArray();
+    
+    let processedCount = 0;
+    
+    for (const user of users) {
+      try {
+        const userWithMining = initializeNewMiningSystem(user);
+        const totalSpeed = calculateTotalMiningSpeed(userWithMining);
+        
+        if (totalSpeed > 0) {
+          const now = new Date();
+          const lastReward = userWithMining.miningStats.lastReward || now;
+          const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
+          
+          if (timeDiff >= config.MINING_REWARD_INTERVAL) {
+            const reward = totalSpeed * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            
+            // Обновляем статистику
+            await db.collection('users').updateOne(
+              { id: userWithMining.id },
+              {
+                $inc: {
+                  magnumCoins: reward,
+                  'miningStats.totalMinedMC': reward,
+                  'miningStats.seasonMinedMC': reward,
+                  'miningStats.passiveRewards': reward
+                },
+                $set: {
+                  'miningStats.lastReward': now
+                }
+              }
+            );
+            
+            // Очищаем кеш пользователя
+            userCache.delete(userWithMining.id);
+            
+            processedCount++;
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Ошибка обработки наград для пользователя ${user.id}:`, error);
+      }
+    }
+    
+    console.log(`✅ Обработано ${processedCount} пользователей`);
+  } catch (error) {
+    console.error('❌ Ошибка обработки пассивных наград майнинга:', error);
+  }
+}
+
+// Функция для активного клика майнинга
+async function processActiveMiningClick(user) {
+  try {
+    const currentSeason = getCurrentMiningSeason();
+    if (!currentSeason.isActive) {
+      return { success: false, message: '📅 Майнинг приостановлен - выходные' };
+    }
+    
+    const userWithMining = initializeNewMiningSystem(user);
+    const totalSpeed = calculateTotalMiningSpeed(userWithMining);
+    
+    if (totalSpeed === 0) {
+      return { success: false, message: '❌ У вас нет активных майнеров' };
+    }
+    
+    const bonusReward = totalSpeed * config.MINING_ACTIVE_CLICK_BONUS * currentSeason.multiplier;
+    
+    // Обновляем статистику
+    await db.collection('users').updateOne(
+      { id: userWithMining.id },
+      {
+        $inc: {
+          magnumCoins: bonusReward,
+          'miningStats.totalMinedMC': bonusReward,
+          'miningStats.seasonMinedMC': bonusReward,
+          'miningStats.activeClickCount': 1
+        }
+      }
+    );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(userWithMining.id);
+    
+    return { 
+      success: true, 
+      reward: bonusReward,
+      message: `✅ +${formatNumber(bonusReward)} Magnum Coins за активный клик!`
+    };
+  } catch (error) {
+    console.error('❌ Ошибка активного клика майнинга:', error);
+    return { success: false, message: '❌ Ошибка обработки клика' };
+  }
+}
+
+// Функция для покупки майнера
+async function buyMiner(user, minerType) {
+  try {
+    const minerConfig = config.MINERS[minerType];
+    if (!minerConfig) {
+      return { success: false, message: '❌ Майнер не найден' };
+    }
+    
+    const userWithMining = initializeNewMiningSystem(user);
+    
+    // Проверяем баланс
+    const userBalance = userWithMining[minerConfig.currency];
+    if (userBalance < minerConfig.price) {
+      return { 
+        success: false, 
+        message: `❌ Недостаточно ${minerConfig.currency === 'magnumCoins' ? 'Magnum Coins' : 'Stars'}` 
+      };
+    }
+    
+    // Ищем существующий майнер этого типа
+    const existingMiner = userWithMining.miners.find(m => m.type === minerType);
+    
+    if (existingMiner) {
+      // Увеличиваем количество
+      existingMiner.count++;
+    } else {
+      // Добавляем новый майнер
+      userWithMining.miners.push({
+        type: minerType,
+        level: 1,
+        count: 1
+      });
+    }
+    
+    // Списываем средства
+    await db.collection('users').updateOne(
+      { id: userWithMining.id },
+      {
+        $inc: {
+          [minerConfig.currency]: -minerConfig.price
+        },
+        $set: {
+          miners: userWithMining.miners
+        }
+      }
+    );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(userWithMining.id);
+    
+    return { 
+      success: true, 
+      message: `✅ Куплен ${minerConfig.name} за ${minerConfig.price} ${minerConfig.currency === 'magnumCoins' ? 'MC' : 'Stars'}!` 
+    };
+  } catch (error) {
+    console.error('❌ Ошибка покупки майнера:', error);
+    return { success: false, message: '❌ Ошибка покупки майнера' };
+  }
+}
+
+// Функция для апгрейда майнера
+async function upgradeMiner(user, minerType) {
+  try {
+    const userWithMining = initializeNewMiningSystem(user);
+    const miner = userWithMining.miners.find(m => m.type === minerType);
+    
+    if (!miner) {
+      return { success: false, message: '❌ Майнер не найден' };
+    }
+    
+    const upgradeCost = miner.level * 50; // Стоимость апгрейда растет с уровнем
+    
+    if (userWithMining.magnumCoins < upgradeCost) {
+      return { success: false, message: '❌ Недостаточно Magnum Coins для апгрейда' };
+    }
+    
+    // Апгрейдим майнер
+    await db.collection('users').updateOne(
+      { id: userWithMining.id },
+      {
+        $inc: {
+          magnumCoins: -upgradeCost,
+          'miners.$.level': 1
+        }
+      },
+      { arrayFilters: [{ 'miners.type': minerType }] }
+    );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(userWithMining.id);
+    
+    return { 
+      success: true, 
+      message: `✅ Майнер ${config.MINERS[minerType].name} улучшен до уровня ${miner.level + 1}!` 
+    };
+  } catch (error) {
+    console.error('❌ Ошибка апгрейда майнера:', error);
+    return { success: false, message: '❌ Ошибка апгрейда майнера' };
+  }
+}
+
+// Функции отображения новых меню майнинга
+async function showMinerShop(ctx, user) {
+  try {
+    const userWithMining = initializeNewMiningSystem(user);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🛒 Базовый майнер (100 MC)', 'buy_miner_basic'),
+        Markup.button.callback('🛒 Продвинутый (500 MC)', 'buy_miner_advanced')
+      ],
+      [
+        Markup.button.callback('🛒 Премиум (50 ⭐)', 'buy_miner_premium'),
+        Markup.button.callback('🛒 Легендарный (200 ⭐)', 'buy_miner_legendary')
+      ],
+      [Markup.button.callback('🔙 Назад', 'miner')]
+    ]);
+    
+    let message = `🛒 *Магазин майнеров*\n\n`;
+    message += `💰 Ваш баланс:\n`;
+    message += `├ Magnum Coins: ${formatNumber(userWithMining.magnumCoins)}\n`;
+    message += `└ Stars: ${formatNumber(userWithMining.stars)}\n\n`;
+    
+    message += `📦 *Доступные майнеры:*\n\n`;
+    
+    for (const [type, minerConfig] of Object.entries(config.MINERS)) {
+      const userMiner = userWithMining.miners.find(m => m.type === type);
+      const userCount = userMiner ? userMiner.count : 0;
+      
+      message += `🔸 *${minerConfig.name}*\n`;
+      message += `├ Скорость: ${formatNumber(minerConfig.baseSpeed)} MC/мин\n`;
+      message += `├ Редкость: ${getRarityEmoji(minerConfig.rarity)} ${minerConfig.rarity}\n`;
+      message += `├ Цена: ${minerConfig.price} ${minerConfig.currency === 'magnumCoins' ? 'MC' : '⭐'}\n`;
+      message += `├ У вас: ${userCount} шт.\n`;
+      message += `└ ${minerConfig.description}\n\n`;
+    }
+    
+    message += `💡 *Как это работает:*\n`;
+    message += `├ Каждый майнер добывает ресурсы автоматически\n`;
+    message += `├ Скорость зависит от уровня майнера\n`;
+    message += `├ Можно покупать несколько майнеров одного типа\n`;
+    message += `└ Апгрейды увеличивают скорость добычи\n\n`;
+    
+    message += `🎯 Выберите майнера для покупки:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ магазина майнеров');
+    await ctx.answerCbQuery('❌ Ошибка загрузки магазина');
+  }
+}
+
+async function showMinerUpgrades(ctx, user) {
+  try {
+    const userWithMining = initializeNewMiningSystem(user);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'miner')]
+    ]);
+    
+    let message = `⬆️ *Апгрейды майнеров*\n\n`;
+    message += `💰 Ваш баланс: ${formatNumber(userWithMining.magnumCoins)} MC\n\n`;
+    
+    if (userWithMining.miners.length === 0) {
+      message += `❌ У вас нет майнеров для апгрейда\n\n`;
+      message += `🛒 Купите майнеров в магазине!`;
+    } else {
+      message += `📦 *Ваши майнеры:*\n\n`;
+      
+      for (const miner of userWithMining.miners) {
+        const minerConfig = config.MINERS[miner.type];
+        if (minerConfig) {
+          const currentSpeed = minerConfig.baseSpeed * (1 + (miner.level - 1) * 0.2);
+          const nextLevelSpeed = minerConfig.baseSpeed * (1 + miner.level * 0.2);
+          const upgradeCost = miner.level * 50;
+          
+          message += `🔸 *${minerConfig.name}*\n`;
+          message += `├ Уровень: ${miner.level}\n`;
+          message += `├ Количество: ${miner.count} шт.\n`;
+          message += `├ Текущая скорость: ${formatNumber(currentSpeed)} MC/мин\n`;
+          message += `├ Скорость после апгрейда: ${formatNumber(nextLevelSpeed)} MC/мин\n`;
+          message += `├ Стоимость апгрейда: ${upgradeCost} MC\n`;
+          
+          if (userWithMining.magnumCoins >= upgradeCost) {
+            message += `└ [Улучшить](buy_miner_${miner.type})\n\n`;
+            keyboard.inline_keyboard.unshift([
+              Markup.button.callback(`⬆️ ${minerConfig.name} (${upgradeCost} MC)`, `upgrade_miner_${miner.type}`)
+            ]);
+          } else {
+            message += `└ ❌ Недостаточно средств\n\n`;
+          }
+        }
+      }
+    }
+    
+    message += `💡 *Информация об апгрейдах:*\n`;
+    message += `├ Каждый уровень +20% к скорости\n`;
+    message += `├ Стоимость растет с уровнем\n`;
+    message += `└ Апгрейд применяется ко всем майнерам этого типа`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ апгрейдов майнеров');
+    await ctx.answerCbQuery('❌ Ошибка загрузки апгрейдов');
+  }
+}
+
+async function showMinerLeaderboard(ctx, user) {
+  try {
+    const currentSeason = getCurrentMiningSeason();
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🏆 Общий рейтинг', 'miner_leaderboard_total'),
+        Markup.button.callback('📅 Сезонный рейтинг', 'miner_leaderboard_season')
+      ],
+      [Markup.button.callback('🔙 Назад', 'miner')]
+    ]);
+    
+    let message = `🏆 *Рейтинг майнинга*\n\n`;
+    message += `📅 Текущий сезон: ${currentSeason.season}\n`;
+    message += `📊 День сезона: ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\n\n`;
+    
+    // Получаем топ-10 игроков по общему майнингу
+    const topTotal = await db.collection('users')
+      .find({ 'miningStats.totalMinedMC': { $exists: true } })
+      .sort({ 'miningStats.totalMinedMC': -1 })
+      .limit(10)
+      .toArray();
+    
+    // Получаем топ-10 игроков по сезонному майнингу
+    const topSeason = await db.collection('users')
+      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .limit(10)
+      .toArray();
+    
+    message += `🥇 *Топ-5 общего рейтинга:*\n`;
+    for (let i = 0; i < Math.min(5, topTotal.length); i++) {
+      const player = topTotal[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.totalMinedMC || 0)} MC\n`;
+    }
+    
+    message += `\n📅 *Топ-5 сезона ${currentSeason.season}:*\n`;
+    for (let i = 0; i < Math.min(5, topSeason.length); i++) {
+      const player = topSeason[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedMC || 0)} MC\n`;
+    }
+    
+    message += `\n💡 *Награды за сезон:*\n`;
+    message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnumCoins)} MC + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
+    message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnumCoins)} MC + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
+    message += `├ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐\n`;
+    message += `└ 🏅 11-50 место: ${formatNumber(config.SEASON_REWARDS.top50.magnumCoins)} MC + ${config.SEASON_REWARDS.top50.stars} ⭐`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ рейтинга майнинга');
+    await ctx.answerCbQuery('❌ Ошибка загрузки рейтинга');
+  }
+}
+
+// Вспомогательная функция для получения эмодзи редкости
+function getRarityEmoji(rarity) {
+  switch (rarity) {
+    case 'common': return '⚪';
+    case 'rare': return '🔵';
+    case 'epic': return '🟣';
+    case 'legendary': return '🟡';
+    default: return '⚪';
   }
 }
 
@@ -5694,78 +6195,63 @@ async function calculateMinerReward(userEfficiency = 1, user = null) {
 
 async function processMinerRewards() {
   try {
-    const now = new Date();
-    const minuteAgo = new Date(now.getTime() - 60 * 1000); // 1 минута назад
+    console.log('⛏️ Обработка пассивных наград майнинга...');
     
-    const activeMiners = await db.collection('users').find({
-      'miner.active': true,
-      'miner.lastReward': { $lt: minuteAgo }
+    const currentSeason = getCurrentMiningSeason();
+    if (!currentSeason.isActive) {
+      console.log('📅 Майнинг приостановлен - выходные');
+      return;
+    }
+    
+    const users = await db.collection('users').find({
+      'miningStats.lastReward': { $exists: true }
     }).toArray();
     
-
+    let processedCount = 0;
     
-    for (const user of activeMiners) {
+    for (const user of users) {
       try {
-        // Получаем текущий сезон
-        const currentSeason = getCurrentMiningSeason();
+        const userWithMining = initializeNewMiningSystem(user);
+        const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
-        // Если выходные - пропускаем награды
-        if (!currentSeason) {
-          log(`📅 Выходные - майнинг приостановлен для пользователя ${user.id}`);
-          continue;
-        }
-        
-        // Рассчитываем базовую награду
-        const baseReward = await calculateMinerReward(user.miner.efficiency, user);
-        
-        // Применяем сезонный множитель
-        const seasonReward = baseReward * currentSeason.multiplier;
-        
-        // Проверяем лимиты сезона
-        const limits = await checkSeasonLimits(currentSeason.season, seasonReward, 0);
-        
-        if (!limits.canMineMC) {
-          log(`⚠️ Лимит сезона ${currentSeason.season} исчерпан для пользователя ${user.id}`);
-          continue;
-        }
-        
-        // Обновляем статистику сезона
-        await updateSeasonStats(currentSeason.season, seasonReward, 0);
-        
-        await db.collection('users').updateOne(
-          { id: user.id },
-          { 
-            $inc: { 
-              magnumCoins: seasonReward,
-              totalEarnedMagnumCoins: seasonReward,
-              experience: Math.floor(seasonReward * 5),
-              'miner.totalMined': seasonReward
-            },
-            $set: { 
-              'miner.lastReward': now,
-              updatedAt: new Date()
-            }
-          }
-        );
-        
-        userCache.delete(user.id);
-        
-        // Проверяем и обновляем уровень пользователя
-        const updatedUser = await getUser(user.id);
-        if (updatedUser) {
-          const levelResult = await checkAndUpdateLevel(updatedUser);
-          if (levelResult.levelUp) {
-            log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+        if (totalSpeed > 0) {
+          const now = new Date();
+          const lastReward = userWithMining.miningStats.lastReward || now;
+          const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
+          
+          if (timeDiff >= config.MINING_REWARD_INTERVAL) {
+            const reward = totalSpeed * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            
+            // Обновляем статистику
+            await db.collection('users').updateOne(
+              { id: userWithMining.id },
+              {
+                $inc: {
+                  magnumCoins: reward,
+                  'miningStats.totalMinedMC': reward,
+                  'miningStats.seasonMinedMC': reward,
+                  'miningStats.passiveRewards': reward
+                },
+                $set: {
+                  'miningStats.lastReward': now
+                }
+              }
+            );
+            
+            // Очищаем кеш пользователя
+            userCache.delete(userWithMining.id);
+            
+            processedCount++;
           }
         }
-        
-
       } catch (error) {
-        logError(error, `Обработка награды майнера для пользователя ${user.id}`);
+        console.error(`❌ Ошибка обработки наград для пользователя ${user.id}:`, error);
       }
     }
+    
+    console.log(`✅ Обработано ${processedCount} пользователей`);
   } catch (error) {
-    logError(error, 'Обработка наград майнера');
+    console.error('❌ Ошибка обработки пассивных наград майнинга:', error);
   }
 }
 
@@ -11466,6 +11952,100 @@ bot.action('confirm_miner_upgrade', async (ctx) => {
     await upgradeMiner(ctx, user);
   } catch (error) {
     logError(error, 'Улучшение майнера (обработчик)');
+  }
+});
+
+// Новые обработчики для системы майнинга
+bot.action('miner_shop', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerShop(ctx, user);
+  } catch (error) {
+    logError(error, 'Магазин майнеров');
+  }
+});
+
+bot.action('miner_active_click', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const result = await processActiveMiningClick(user);
+    await ctx.answerCbQuery(result.message);
+    
+    if (result.success) {
+      // Обновляем меню майнинга
+      await showMinerMenu(ctx, user);
+    }
+  } catch (error) {
+    logError(error, 'Активный клик майнинга');
+    await ctx.answerCbQuery('❌ Ошибка активного клика');
+  }
+});
+
+bot.action('miner_leaderboard', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerLeaderboard(ctx, user);
+  } catch (error) {
+    logError(error, 'Рейтинг майнинга');
+  }
+});
+
+bot.action('miner_upgrades', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    await showMinerUpgrades(ctx, user);
+  } catch (error) {
+    logError(error, 'Апгрейды майнеров');
+  }
+});
+
+// Обработчики покупки майнеров
+bot.action(/^buy_miner_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const minerType = ctx.match[1];
+    const result = await buyMiner(user, minerType);
+    
+    await ctx.answerCbQuery(result.message);
+    
+    if (result.success) {
+      // Обновляем магазин
+      await showMinerShop(ctx, user);
+    }
+  } catch (error) {
+    logError(error, 'Покупка майнера');
+    await ctx.answerCbQuery('❌ Ошибка покупки майнера');
+  }
+});
+
+// Обработчики апгрейда майнеров
+bot.action(/^upgrade_miner_(.+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const minerType = ctx.match[1];
+    const result = await upgradeMiner(user, minerType);
+    
+    await ctx.answerCbQuery(result.message);
+    
+    if (result.success) {
+      // Обновляем меню апгрейдов
+      await showMinerUpgrades(ctx, user);
+    }
+  } catch (error) {
+    logError(error, 'Апгрейд майнера');
+    await ctx.answerCbQuery('❌ Ошибка апгрейда майнера');
   }
 });
 
