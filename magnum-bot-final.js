@@ -7393,7 +7393,10 @@ async function showSponsorTasks(ctx, user) {
     log(`🎯 Показ спонсорских заданий для пользователя ${user.id}`);
     
     const sponsorTasks = getSponsorTasks();
+    log(`🎯 Получены спонсорские задания: ${sponsorTasks.length} заданий`);
+    
     const userTasks = user.tasks?.sponsorTasks || {};
+    log(`🎯 Задания пользователя: ${JSON.stringify(userTasks)}`);
     
     // Создаем кнопки для каждого задания
     const taskButtons = [];
@@ -7473,8 +7476,11 @@ async function showSponsorTasks(ctx, user) {
       parse_mode: 'Markdown',
       reply_markup: keyboard.reply_markup
     });
+    
+    log(`✅ Спонсорские задания успешно показаны пользователю ${user.id}`);
   } catch (error) {
     logError(error, 'Показ спонсорских заданий');
+    log(`❌ Ошибка в showSponsorTasks для пользователя ${user.id}: ${error.message}`);
     await ctx.answerCbQuery('❌ Ошибка загрузки спонсорских заданий');
   }
 }
@@ -8143,6 +8149,8 @@ function getSponsorTasks() {
     log(`❌ Ошибка: переменные окружения не установлены. Канал: ${sponsorChannel}, Бот: ${sponsorBot}`);
     return [];
   }
+  
+  log(`📋 Переменные окружения проверены: канал=${sponsorChannel}, бот=${sponsorBot}`);
   
   const tasks = [
     {
@@ -12087,12 +12095,20 @@ bot.action('tasks', async (ctx) => {
 
 bot.action('tasks_sponsor', async (ctx) => {
   try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
+    log(`🎯 Запрос спонсорских заданий от пользователя ${ctx.from.id}`);
     
+    const user = await getUser(ctx.from.id);
+    if (!user) {
+      log(`❌ Не удалось получить пользователя ${ctx.from.id} для спонсорских заданий`);
+      return;
+    }
+    
+    log(`🎯 Показ спонсорских заданий для пользователя ${ctx.from.id}`);
     await showSponsorTasks(ctx, user);
+    log(`✅ Спонсорские задания показаны пользователю ${ctx.from.id}`);
   } catch (error) {
     logError(error, 'Спонсорские задания');
+    log(`❌ Ошибка в tasks_sponsor для пользователя ${ctx.from.id}: ${error.message}`);
   }
 });
 
