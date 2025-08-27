@@ -5,6 +5,15 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 
+// RichAds интеграция
+const { 
+  getRichAdsOffers, 
+  verifyRichAdsOffer, 
+  sendRichAdsConversion, 
+  getRichAdsUserStats,
+  isRichAdsAvailable 
+} = require('./richads-integration');
+
 // Создаем Express приложение для WebApp
 const app = express();
 const PORT = process.env.PORT || 3000; // Railway использует свой порт
@@ -116,6 +125,11 @@ const config = {
   SUPPORT_CHANNEL: process.env.SUPPORT_CHANNEL ? `@${process.env.SUPPORT_CHANNEL}` : null,
   WITHDRAWAL_CHANNEL: process.env.WITHDRAWAL_CHANNEL ? `@${process.env.WITHDRAWAL_CHANNEL}` : null,
   REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL ? `@${process.env.REQUIRED_CHANNEL}` : null,
+  // RichAds конфигурация (заменяет спонсорские задания)
+  RICHADS_API_KEY: process.env.RICHADS_API_KEY,
+  RICHADS_ENABLED: process.env.RICHADS_ENABLED === 'true',
+  
+  // Обратная совместимость со старыми спонсорскими заданиями
   SPONSOR_TASK_CHANNEL: process.env.SPONSOR_TASK_CHANNEL || '@musice46',
   SPONSOR_TASK_BOT: process.env.SPONSOR_TASK_BOT || 'https://t.me/farmikstars_bot?start=6587897295',
   REQUIRED_BOT_LINK: process.env.REQUIRED_BOT_LINK || 'https://t.me/ReferalStarsRobot?start=6587897295',
@@ -7721,15 +7735,15 @@ async function showTasksMenu(ctx, user) {
     const completedTasks = tasks.completedTasks || 0;
     const totalEarnings = tasks.totalTaskEarnings || 0;
     
-    // Подсчитываем статус спонсорских заданий
-    const sponsorTasks = getSponsorTasks();
-    log(`📋 Получены спонсорские задания: ${sponsorTasks.length} заданий`);
+    // Подсчитываем статус RichAds офферов
+    const sponsorTasks = await getRichAdsTasks();
+    log(`📋 Получены RichAds офферы: ${sponsorTasks.length} офферов`);
     
     const userSponsorTasks = tasks.sponsorTasks || {};
     const completedSponsorTasks = Object.values(userSponsorTasks).filter(task => task && task.completed).length;
     const totalSponsorTasks = sponsorTasks.length;
     
-    log(`📋 Статистика заданий: ${completedSponsorTasks}/${totalSponsorTasks} выполнено`);
+    log(`📋 Статистика RichAds офферов: ${completedSponsorTasks}/${totalSponsorTasks} выполнено`);
     
     let sponsorStatus = '';
     if (completedSponsorTasks === 0) {
@@ -7742,7 +7756,7 @@ async function showTasksMenu(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback(`${sponsorStatus} Спонсорские задания`, 'tasks_sponsor'),
+        Markup.button.callback(`${sponsorStatus} RichAds офферы`, 'tasks_sponsor'),
         Markup.button.callback('📅 Ежедневные задания', 'tasks_daily')
       ],
       [
@@ -7759,7 +7773,7 @@ async function showTasksMenu(ctx, user) {
       `├ Заработано: \`${formatNumber(totalEarnings)}\` Stars\n` +
       `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Stars\n\n` +
       `🎯 *Типы заданий:*\n` +
-      `├ 🎯 Спонсорские задания (подписки, запуски ботов)\n` +
+      `├ 🎯 RichAds офферы (подписки, установки, регистрации)\n` +
       `├ 📅 Ежедневные задания (фарм, майнинг, бонусы)\n` +
       `└ 🏆 Достижения (долгосрочные цели)\n\n` +
       `💡 *Выберите тип заданий:*\n\n` +
@@ -7780,30 +7794,30 @@ async function showTasksMenu(ctx, user) {
 
 async function showSponsorTasks(ctx, user) {
   try {
-    log(`🎯 Показ спонсорских заданий для пользователя ${user.id}`);
+    log(`🎯 Показ RichAds офферов для пользователя ${user.id}`);
     
-    const sponsorTasks = getSponsorTasks();
-    log(`🎯 Получены спонсорские задания: ${sponsorTasks.length} заданий`);
+    const sponsorTasks = await getRichAdsTasks();
+    log(`🎯 Получены RichAds офферы: ${sponsorTasks.length} офферов`);
     
     const userTasks = user.tasks?.sponsorTasks || {};
-    log(`🎯 Задания пользователя: ${JSON.stringify(userTasks)}`);
+    log(`🎯 Офферы пользователя: ${JSON.stringify(userTasks)}`);
     
-    // Находим первое невыполненное задание (не удаленное и не завершенное)
+    // Находим первый невыполненный оффер
     const firstUncompletedTask = sponsorTasks.find(task => {
       const userTask = userTasks[task.id];
-      // Если задание не существует в userTasks или не завершено/не получена награда
+      // Если оффер не существует в userTasks или не завершен/не получена награда
       return !userTask || !userTask.completed || !userTask.claimed;
     });
     
     if (firstUncompletedTask) {
-      // Показываем первое невыполненное задание
+      // Показываем первый невыполненный оффер
       await showSponsorTaskDetails(ctx, user, firstUncompletedTask.id);
     } else {
-      // Все задания выполнены - показываем общий список
+      // Все офферы выполнены - показываем общий список
       const taskButtons = [];
       sponsorTasks.forEach((task, index) => {
         const userTask = userTasks[task.id];
-        // Показываем только те задания, которые существуют в userTasks и завершены
+        // Показываем только те офферы, которые существуют в userTasks и завершены
         if (userTask && userTask.completed && userTask.claimed) {
           taskButtons.push([
             Markup.button.callback(`✅ ${task.title} (Завершено)`, `sponsor_task_${task.id}`)
@@ -7817,12 +7831,12 @@ async function showSponsorTasks(ctx, user) {
       
       const keyboard = Markup.inlineKeyboard(taskButtons);
       
-      let message = `✅ *Все спонсорские задания выполнены!*\n\n`;
-      message += `🎉 Поздравляем! Вы выполнили все доступные спонсорские задания.\n\n`;
+      let message = `✅ *Все RichAds офферы выполнены!*\n\n`;
+      message += `🎉 Поздравляем! Вы выполнили все доступные RichAds офферы.\n\n`;
       
       sponsorTasks.forEach((task, index) => {
         const userTask = userTasks[task.id];
-        // Показываем только те задания, которые существуют в userTasks и завершены
+        // Показываем только те офферы, которые существуют в userTasks и завершены
         if (userTask && userTask.completed && userTask.claimed) {
           const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
           message += `✅ *${escapeMarkdown(task.title)}*\n`;
@@ -7839,11 +7853,11 @@ async function showSponsorTasks(ctx, user) {
       });
     }
     
-    log(`✅ Спонсорские задания успешно показаны пользователю ${user.id}`);
+    log(`✅ RichAds офферы успешно показаны пользователю ${user.id}`);
   } catch (error) {
-    logError(error, 'Показ спонсорских заданий');
+    logError(error, 'Показ RichAds офферов');
     log(`❌ Ошибка в showSponsorTasks для пользователя ${user.id}: ${error.message}`);
-    await ctx.answerCbQuery('❌ Ошибка загрузки спонсорских заданий');
+    await ctx.answerCbQuery('❌ Ошибка загрузки RichAds офферов');
   }
 }
 async function showSponsorTaskDetails(ctx, user, taskId) {
@@ -8015,13 +8029,13 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
 
 async function verifySponsorTask(ctx, user, taskId) {
   try {
-    log(`✅ Проверка выполнения спонсорского задания ${taskId} для пользователя ${user.id}`);
+    log(`✅ Проверка выполнения RichAds оффера ${taskId} для пользователя ${user.id}`);
     
-    const sponsorTasks = getSponsorTasks();
+    const sponsorTasks = await getRichAdsTasks();
     const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
-      await ctx.answerCbQuery('❌ Задание не найдено');
+      await ctx.answerCbQuery('❌ Оффер не найден');
       return;
     }
     
@@ -8029,17 +8043,17 @@ async function verifySponsorTask(ctx, user, taskId) {
     const userTask = userTasks[taskId] || {};
     
     if (userTask.completed && userTask.claimed) {
-      await ctx.answerCbQuery('❌ Задание уже выполнено и награда получена');
+      await ctx.answerCbQuery('❌ Оффер уже выполнен и награда получена');
       return;
     }
     
     if (userTask.completed && !userTask.claimed) {
-      await ctx.answerCbQuery('🎁 Задание выполнено! Получите награду');
+      await ctx.answerCbQuery('🎁 Оффер выполнен! Получите награду');
       return;
     }
     
     if (!userTask.screenshot) {
-      await ctx.answerCbQuery('❌ Сначала отправьте скриншот подписки');
+      await ctx.answerCbQuery('❌ Сначала отправьте скриншот выполнения');
       return;
     }
     
@@ -8052,7 +8066,22 @@ async function verifySponsorTask(ctx, user, taskId) {
       return;
     }
     
-    // Отмечаем задание как выполненное
+    // Верифицируем оффер через RichAds API
+    log(`✅ Верификация RichAds оффера ${taskId} для пользователя ${user.id}`);
+    
+    const verificationResult = await verifyRichAdsOffer(taskId, user.id);
+    
+    if (!verificationResult.success) {
+      await ctx.answerCbQuery('❌ Ошибка проверки оффера');
+      return;
+    }
+    
+    if (!verificationResult.verified) {
+      await ctx.answerCbQuery('❌ Оффер не выполнен корректно');
+      return;
+    }
+    
+    // Отмечаем оффер как выполненный
     await db.collection('users').updateOne(
       { id: user.id },
       { 
@@ -8068,28 +8097,28 @@ async function verifySponsorTask(ctx, user, taskId) {
     userCache.delete(user.id);
     
     const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
-    log(`✅ Спонсорское задание ${taskId} выполнено пользователем ${user.id}`);
-    await ctx.answerCbQuery(`✅ Задание выполнено! Награда: ${rewardText}`);
+    log(`✅ RichAds оффер ${taskId} выполнен пользователем ${user.id}`);
+    await ctx.answerCbQuery(`✅ Оффер выполнен! Награда: ${rewardText}`);
     
-    // Обновляем детали задания
+    // Обновляем детали оффера
     const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showSponsorTaskDetails(ctx, updatedUser, taskId);
     }
   } catch (error) {
-    logError(error, 'Проверка спонсорского задания');
-    await ctx.answerCbQuery('❌ Ошибка проверки задания');
+    logError(error, 'Проверка RichAds оффера');
+    await ctx.answerCbQuery('❌ Ошибка проверки оффера');
   }
 }
 async function claimSponsorTask(ctx, user, taskId) {
   try {
-    log(`🎁 Получение награды спонсорского задания ${taskId} для пользователя ${user.id}`);
+    log(`🎁 Получение награды RichAds оффера ${taskId} для пользователя ${user.id}`);
     
-    const sponsorTasks = getSponsorTasks();
+    const sponsorTasks = await getRichAdsTasks();
     const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
-      await ctx.answerCbQuery('❌ Задание не найдено');
+      await ctx.answerCbQuery('❌ Оффер не найден');
       return;
     }
     
@@ -8097,7 +8126,7 @@ async function claimSponsorTask(ctx, user, taskId) {
     const userTask = userTasks[taskId] || {};
     
     if (!userTask.completed) {
-      await ctx.answerCbQuery('❌ Задание не выполнено');
+      await ctx.answerCbQuery('❌ Оффер не выполнен');
       return;
     }
     
@@ -8106,8 +8135,17 @@ async function claimSponsorTask(ctx, user, taskId) {
       return;
     }
     
+    // Отправляем конверсию в RichAds
+    log(`🔄 Отправка конверсии в RichAds для оффера ${taskId}`);
+    const conversionResult = await sendRichAdsConversion(taskId, user.id, 1);
+    
+    if (!conversionResult.success) {
+      log(`❌ Ошибка отправки конверсии в RichAds: ${conversionResult.message}`);
+      // Продолжаем выдачу награды даже если конверсия не отправлена
+    }
+    
     // Начисляем награду
-    const rewardType = task.rewardType || 'magnumCoins';
+    const rewardType = task.rewardType || 'stars';
     const updateData = { 
       $inc: { 
         'tasks.completedTasks': 1,
@@ -8122,8 +8160,10 @@ async function claimSponsorTask(ctx, user, taskId) {
     
     if (rewardType === 'stars') {
       updateData.$inc.stars = task.reward;
+      updateData.$inc.totalEarnedStars = task.reward;
     } else {
       updateData.$inc.magnumCoins = task.reward;
+      updateData.$inc.totalEarnedMagnumCoins = task.reward;
     }
     
     await db.collection('users').updateOne(
@@ -8131,7 +8171,7 @@ async function claimSponsorTask(ctx, user, taskId) {
       updateData
     );
     
-    // Удаляем задание после получения награды
+    // Удаляем оффер после получения награды
     await db.collection('users').updateOne(
       { id: user.id },
       { 
@@ -8144,16 +8184,16 @@ async function claimSponsorTask(ctx, user, taskId) {
     userCache.delete(user.id);
     
     const rewardText = rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
-    log(`🎁 Награда спонсорского задания ${taskId} получена пользователем ${user.id}: ${rewardText}`);
+    log(`🎁 Награда RichAds оффера ${taskId} получена пользователем ${user.id}: ${rewardText}`);
     await ctx.answerCbQuery(`🎁 Награда получена! +${rewardText}`);
     
-    // Возвращаем пользователя к списку спонсорских заданий
+    // Возвращаем пользователя к списку RichAds офферов
     const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showSponsorTasks(ctx, updatedUser);
     }
   } catch (error) {
-    logError(error, 'Получение награды спонсорского задания');
+    logError(error, 'Получение награды RichAds оффера');
     await ctx.answerCbQuery('❌ Ошибка получения награды');
   }
 }
@@ -8541,55 +8581,30 @@ function isValidObjectId(id) {
   return id && typeof id === 'string' && id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id);
 }
 
-function getSponsorTasks() {
-  const sponsorChannel = config.SPONSOR_TASK_CHANNEL;
-  const channelName = sponsorChannel.replace('@', '');
-  const sponsorBot = config.SPONSOR_TASK_BOT;
-  const botName = sponsorBot.includes('farmikstars_bot') ? 'FarmikBot' : 'SponsorBot';
-  
-  log(`📋 Получение спонсорских заданий: канал=${sponsorChannel}, бот=${sponsorBot}`);
-  
-  // Проверяем, что переменные окружения установлены
-  if (!sponsorChannel || !sponsorBot) {
-    log(`❌ Ошибка: переменные окружения не установлены. Канал: ${sponsorChannel}, Бот: ${sponsorBot}`);
+// Получение RichAds офферов (заменяет спонсорские задания)
+async function getRichAdsTasks() {
+  try {
+    log('📋 Получение RichAds офферов...');
+    
+    const offers = await getRichAdsOffers();
+    
+    if (offers.length === 0) {
+      log('⚠️ RichAds офферы недоступны, возвращаем демо-офферы');
+      return [];
+    }
+    
+    log(`📋 Получено ${offers.length} RichAds офферов`);
+    return offers;
+  } catch (error) {
+    logError(error, 'Получение RichAds офферов');
     return [];
   }
-  
-  log(`📋 Переменные окружения проверены: канал=${sponsorChannel}, бот=${sponsorBot}`);
-  
-  const tasks = [
-    {
-      id: 1,
-      title: `Подписка на канал ${sponsorChannel}`,
-      description: `Подпишитесь на канал ${sponsorChannel} и отправьте скриншот`,
-      reward: 0.3,
-      rewardType: 'stars',
-      difficulty: '⭐ Легкое',
-      estimatedTime: '2 минуты',
-      url: `https://t.me/${channelName}`,
-      requirements: [
-        `Подпишитесь на канал ${sponsorChannel}`,
-        'Отправьте скриншот подписки'
-      ]
-    },
-    {
-      id: 2,
-      title: `Запуск бота ${botName}`,
-      description: `Запустите бота ${botName} и отправьте скриншот`,
-      reward: 0.5,
-      rewardType: 'stars',
-      difficulty: '⭐ Легкое',
-      estimatedTime: '1 минута',
-      url: sponsorBot,
-      requirements: [
-        'Нажмите кнопку /start',
-        'Отправьте скриншот запуска бота'
-      ]
-    }
-  ];
-  
-  log(`📋 Создано ${tasks.length} спонсорских заданий`);
-  return tasks;
+}
+
+// Обратная совместимость - возвращаем RichAds офферы как спонсорские задания
+function getSponsorTasks() {
+  log('📋 Вызов getSponsorTasks() - возвращаем RichAds офферы');
+  return getRichAdsTasks().catch(() => []);
 }
 
 function getDailyTasks() {
