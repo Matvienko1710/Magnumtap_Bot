@@ -7417,10 +7417,11 @@ async function showSponsorTasks(ctx, user) {
     const userTasks = user.tasks?.sponsorTasks || {};
     log(`🎯 Задания пользователя: ${JSON.stringify(userTasks)}`);
     
-    // Находим первое невыполненное задание
+    // Находим первое невыполненное задание (не удаленное и не завершенное)
     const firstUncompletedTask = sponsorTasks.find(task => {
-      const userTask = userTasks[task.id] || {};
-      return !userTask.completed || !userTask.claimed;
+      const userTask = userTasks[task.id];
+      // Если задание не существует в userTasks или не завершено/не получена награда
+      return !userTask || !userTask.completed || !userTask.claimed;
     });
     
     if (firstUncompletedTask) {
@@ -7430,10 +7431,9 @@ async function showSponsorTasks(ctx, user) {
       // Все задания выполнены - показываем общий список
       const taskButtons = [];
       sponsorTasks.forEach((task, index) => {
-        const isCompleted = userTasks[task.id]?.completed || false;
-        const isClaimed = userTasks[task.id]?.claimed || false;
-        
-        if (isCompleted && isClaimed) {
+        const userTask = userTasks[task.id];
+        // Показываем только те задания, которые существуют в userTasks и завершены
+        if (userTask && userTask.completed && userTask.claimed) {
           taskButtons.push([
             Markup.button.callback(`✅ ${task.title} (Завершено)`, `sponsor_task_${task.id}`)
           ]);
@@ -7450,10 +7450,14 @@ async function showSponsorTasks(ctx, user) {
       message += `🎉 Поздравляем! Вы выполнили все доступные спонсорские задания.\n\n`;
       
       sponsorTasks.forEach((task, index) => {
-        const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
-        message += `✅ *${escapeMarkdown(task.title)}*\n`;
-        message += `├ Награда: \`${escapeMarkdown(rewardText)}\` ✅ Получена\n`;
-        message += `└ Сложность: ${escapeMarkdown(task.difficulty)}\n\n`;
+        const userTask = userTasks[task.id];
+        // Показываем только те задания, которые существуют в userTasks и завершены
+        if (userTask && userTask.completed && userTask.claimed) {
+          const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+          message += `✅ *${escapeMarkdown(task.title)}*\n`;
+          message += `├ Награда: \`${escapeMarkdown(rewardText)}\` ✅ Получена\n`;
+          message += `└ Сложность: ${escapeMarkdown(task.difficulty)}\n\n`;
+        }
       });
       
       message += `🎯 Выберите действие:`;
@@ -7756,6 +7760,15 @@ async function claimSponsorTask(ctx, user, taskId) {
       updateData
     );
     
+    // Удаляем задание после получения награды
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { 
+        $unset: { [`tasks.sponsorTasks.${taskId}`]: "" },
+        $set: { updatedAt: new Date() }
+      }
+    );
+    
     // Очищаем кеш
     userCache.delete(user.id);
     
@@ -7763,10 +7776,10 @@ async function claimSponsorTask(ctx, user, taskId) {
     log(`🎁 Награда спонсорского задания ${taskId} получена пользователем ${user.id}: ${rewardText}`);
     await ctx.answerCbQuery(`🎁 Награда получена! +${rewardText}`);
     
-    // Обновляем детали задания
+    // Возвращаем пользователя к списку спонсорских заданий
     const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
-      await showSponsorTaskDetails(ctx, updatedUser, taskId);
+      await showSponsorTasks(ctx, updatedUser);
     }
   } catch (error) {
     logError(error, 'Получение награды спонсорского задания');
