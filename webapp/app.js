@@ -298,10 +298,10 @@ class MagnumWebApp {
         const commission = 2.5;
         this.tg.showPopup({
             title: '💱 Обмен валют',
-            message: `Текущий курс: 1 MC = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс:\n💰 ${this.userData.magnuCoins.toFixed(2)} MC\n⭐ ${this.userData.stars.toFixed(2)} Stars\n\nПримеры:\n• 100 MC → ${(100 * currentRate * (1 - commission/100)).toFixed(4)} Stars\n• 100 Stars → ${((100 / currentRate) * (1 - commission/100)).toFixed(2)} MC`,
+            message: `Текущий курс: 1 Magnum Coins = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс:\n💰 ${this.userData.magnuCoins.toFixed(2)} Magnum Coins\n⭐ ${this.userData.stars.toFixed(2)} Stars\n\nПримеры:\n• 100 MC → ${(100 * currentRate * (1 - commission/100)).toFixed(4)} Stars\n• 100 Stars → ${((100 / currentRate) * (1 - commission/100)).toFixed(2)} MC`,
             buttons: [
-                { text: '💰 MC → Stars', callback_data: 'exchange_mc_to_stars' },
-                { text: '⭐ Stars → MC', callback_data: 'exchange_stars_to_mc' },
+                { text: '💰 Magnum Coins → Stars', callback_data: 'exchange_mc_to_stars' },
+                { text: '⭐ Stars → Magnum Coins', callback_data: 'exchange_stars_to_mc' },
                 { text: '📊 История', callback_data: 'exchange_history' },
                 { text: '❌ Отмена', callback_data: 'cancel' }
             ]
@@ -330,7 +330,7 @@ class MagnumWebApp {
             if (data.success && data.history && data.history.length > 0) {
                 const historyText = data.history.slice(0, 10).map(item => {
                     const date = new Date(item.timestamp).toLocaleDateString('ru-RU');
-                    const type = item.direction === 'Stars' ? 'MC → Stars' : 'Stars → MC';
+                    const type = item.direction === 'Stars' ? 'Magnum Coins → Stars' : 'Stars → Magnum Coins';
                     return `${date}: ${type} ${item.amount} → ${item.received.toFixed(4)}`;
                 }).join('\n');
 
@@ -358,20 +358,22 @@ class MagnumWebApp {
         const currentRate = await this.calculateExchangeRate();
         const commission = 2.5; // 2.5% комиссия
 
-        let title, message, maxAmount, fromCurrency, toCurrency;
+        let title, message, maxAmount, fromCurrency, toCurrency, fromParam;
 
         if (exchangeType === 'mc_to_stars') {
-            title = '💰 MC → Stars';
-            fromCurrency = 'MC';
+            title = '💰 Magnum Coins → Stars';
+            fromCurrency = 'Magnum Coins';
             toCurrency = 'Stars';
+            fromParam = 'Stars'; // Для API
             maxAmount = this.userData.magnuCoins;
-            message = `Обмен MC на Stars\nКурс: 1 MC = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.magnuCoins} MC\n\nВведите сумму MC для обмена:`;
+            message = `Обмен Magnum Coins на Stars\nКурс: 1 MC = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.magnuCoins} MC\n\nВведите сумму Magnum Coins для обмена:`;
         } else {
-            title = '⭐ Stars → MC';
+            title = '⭐ Stars → Magnum Coins';
             fromCurrency = 'Stars';
-            toCurrency = 'MC';
+            toCurrency = 'Magnum Coins';
+            fromParam = 'stars'; // Для API
             maxAmount = this.userData.stars;
-            message = `Обмен Stars на MC\nКурс: 1 Stars = ${(1/currentRate).toFixed(2)} MC\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.stars} Stars\n\nВведите сумму Stars для обмена:`;
+            message = `Обмен Stars на Magnum Coins\nКурс: 1 Stars = ${(1/currentRate).toFixed(2)} MC\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.stars} Stars\n\nВведите сумму Stars для обмена:`;
         }
 
         const amount = prompt(message);
@@ -379,21 +381,21 @@ class MagnumWebApp {
         if (amount && !isNaN(amount) && amount > 0) {
             const numAmount = parseFloat(amount);
             if (numAmount <= maxAmount) {
-                this.performExchange(exchangeType, numAmount, currentRate, commission);
+                this.performExchange(fromParam, numAmount, currentRate, commission);
             } else {
                 this.showNotification(`Недостаточно ${fromCurrency} на балансе`, 'error');
             }
         }
     }
 
-    async performExchange(exchangeType, amount, rate, commission) {
+    async performExchange(fromParam, amount, rate, commission) {
         try {
             this.setLoading(true);
             this.showNotification('Выполняем обмен...', 'info');
 
             const exchangeData = {
                 userId: this.userId,
-                from: exchangeType === 'mc_to_stars' ? 'Stars' : 'stars',
+                from: fromParam, // 'Stars' или 'stars'
                 amount: amount
             };
 
@@ -413,10 +415,19 @@ class MagnumWebApp {
                 this.userData.stars = result.stars;
                 this.updateUI();
 
-                const receivedAmount = result.stars || result.magnuStarsoins;
+                // Определяем, что было получено
+                let receivedAmount, receivedCurrency;
+                if (fromParam === 'Stars') {
+                    receivedAmount = result.stars;
+                    receivedCurrency = 'Stars';
+                } else {
+                    receivedAmount = result.magnuStarsoins;
+                    receivedCurrency = 'MC';
+                }
+
                 const commissionAmount = amount * (commission / 100);
 
-                this.showNotification(`✅ Обмен выполнен!\nПолучено: ${receivedAmount.toFixed(4)} ${exchangeType === 'mc_to_stars' ? 'Stars' : 'MC'}\nКомиссия: ${commissionAmount.toFixed(4)}`, 'success');
+                this.showNotification(`✅ Обмен выполнен!\nПолучено: ${receivedAmount.toFixed(4)} ${receivedCurrency}\nКомиссия: ${commissionAmount.toFixed(4)}`, 'success');
             } else {
                 this.showNotification(result.error || 'Ошибка обмена', 'error');
             }

@@ -46,7 +46,7 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
     res.json({ 
         status: 'ok', 
-        message: 'Magnum Stars Bot is running',
+        message: 'Magnum Stars Bot with MC & Stars currencies is running',
         timestamp: new Date().toISOString(),
         webappUrl: '/webapp',
         apiUrl: '/api/webapp/check-access'
@@ -57,7 +57,7 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'healthy',
-        message: 'Magnum Stars Bot is alive and running',
+        message: 'Magnum Stars Bot is alive and running with dual currency system',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         memory: process.memoryUsage(),
@@ -284,51 +284,76 @@ if (process.env.WEBAPP_ENABLED === 'true') {
     }
   });
 
+  // API для обмена валют (Magnum Coins ↔ Stars)
   app.post('/api/webapp/exchange', async (req, res) => {
     try {
-      const { userId, froStarsurrency, toCurrency, amount } = req.body;
-      if (!userId || !froStarsurrency || !toCurrency || !amount) {
-        return res.status(400).json({ success: false, message: 'Missing required parameters' });
+      const { userId, from, amount } = req.body;
+      if (!userId || !from || typeof amount !== 'number' || amount <= 0) {
+        return res.status(400).json({ error: 'Bad request' });
       }
 
-      const user = await db.collection('users').findOne({ id: parseInt(userId) });
-      if (!user) {
-        return res.status(404).json({ success: false, message: 'User not found' });
+      // Используем webappUsers коллекцию для обмена
+      const user = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const rate = await calculateExchangeRate();
+      const commission = (config.EXCHANGE_COMMISSION || 2.5) / 100;
+
+      let inc = { magnuStarsoins: 0, stars: 0 };
+      let reserveInc = { magnuStarsoins: 0, stars: 0 };
+
+      let received = 0;
+      if (from === 'Stars') {
+        // Обмен Magnum Coins → Stars
+        if (user.magnuStarsoins < amount) return res.status(400).json({ error: 'Недостаточно Magnum Coins' });
+        const starsOut = amount * rate * (1 - commission);
+        inc.magnuStarsoins -= amount;
+        inc.stars += starsOut;
+        reserveInc.magnuStarsoins += amount * commission;
+        received = starsOut;
+      } else if (from === 'stars') {
+        // Обмен Stars → Magnum Coins
+        if ((user.stars || 0) < amount) return res.status(400).json({ error: 'Недостаточно Stars' });
+        const StarsOut = (amount / rate) * (1 - commission);
+        inc.stars -= amount;
+        inc.magnuStarsoins += StarsOut;
+        reserveInc.stars += amount * commission;
+        received = StarsOut;
+      } else {
+        return res.status(400).json({ error: 'Неверная валюта для обмена' });
       }
 
-      // Проверяем баланс
-      const userBalance = froStarsurrency === 'magnuStarsoins' ? user.magnuStarsoins : user.stars;
-      if (userBalance < amount) {
-        return res.json({ success: false, message: 'Недостаточно средств' });
-      }
-
-      // Рассчитываем курс обмена
-      const baseRate = 0.001; // 1 Stars = 0.001 Stars
-      const exchangeRate = froStarsurrency === 'magnuStarsoins' ? baseRate : 1 / baseRate;
-      const convertedAmount = amount * exchangeRate;
-
-      // Обновляем баланс
-      const updateData = {};
-      updateData[froStarsurrency] = -amount;
-      updateData[toCurrency] = convertedAmount;
-
-      await db.collection('users').updateOne(
-        { id: parseInt(userId) },
-        { 
-          $inc: updateData,
-          $set: { lastActivity: new Date() }
-        }
+      await db.collection('webappUsers').updateOne(
+        { userId: parseInt(userId) },
+        { $inc: inc, $set: { updatedAt: new Date() } }
       );
 
-      res.json({ 
-        success: true, 
-        convertedAmount: convertedAmount.toFixed(4),
-        message: `Обмен выполнен: ${amount} ${froStarsurrency} → ${convertedAmount.toFixed(4)} ${toCurrency}`
+      await db.collection('reserve').updateOne(
+        { currency: 'main' },
+        { $inc: reserveInc },
+        { upsert: true }
+      );
+
+      await db.collection('exchangeHistory').insertOne({
+        userId: parseInt(userId),
+        direction: from,
+        amount,
+        rate,
+        received,
+        commission: commission * 100,
+        timestamp: new Date()
       });
 
+      const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
+      res.json({
+        success: true,
+        rate,
+        magnuStarsoins: updated.magnuStarsoins,
+        stars: updated.stars
+      });
     } catch (error) {
-      console.error('Exchange error:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      console.error('WebApp exchange error:', error);
+      res.status(500).json({ error: 'Server error' });
     }
   });
 }
@@ -423,7 +448,7 @@ const config = {
       baseSpeed: 0.0017, // ~21 день окупаемости
       price: 50,
       currency: 'stars',
-      miningCurrency: 'stars', // Добывает Stars
+      miningCurrency: 'stars', // Добывает Stars (вторая валюта)
       description: 'Мощный майнер за Stars, добывает Stars (окупаемость ~21 день)'
     },
     legendary: {
@@ -433,7 +458,7 @@ const config = {
       baseSpeed: 0.0045, // ~31 день окупаемости
       price: 200,
       currency: 'stars',
-      miningCurrency: 'stars', // Добывает Stars
+      miningCurrency: 'stars', // Добывает Stars (вторая валюта)
       description: 'Самый мощный майнер, добывает Stars (окупаемость ~31 день)'
     }
   },
