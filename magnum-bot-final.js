@@ -11027,6 +11027,104 @@ async function handleAdminCreatePromoTitle(ctx, user, text) {
   }
 }
 
+// Создание промокода с сундуком
+async function handleAdminCreatePromoChest(ctx, user, text, chestType) {
+  try {
+    const chestEmojis = {
+      'common': '🟢',
+      'rare': '🔵', 
+      'epic': '🟣',
+      'legendary': '🟡'
+    };
+    
+    const chestNames = {
+      'common': 'обычным сундуком',
+      'rare': 'редким сундуком',
+      'epic': 'эпическим сундуком', 
+      'legendary': 'легендарным сундуком'
+    };
+    
+    log(`${chestEmojis[chestType]} Админ ${user.id} создает промокод с ${chestNames[chestType]}: "${text}"`);
+    
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    // Парсим данные промокода
+    const parts = text.trim().split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply(`❌ Неверный формат! Используйте: КОД АКТИВАЦИИ\n\n💡 Пример: ${chestType.toUpperCase()} 100`);
+      return;
+    }
+    
+    const code = parts[0].toUpperCase();
+    const maxActivations = parseInt(parts[1]);
+    
+    // Валидация данных
+    if (!code || code.length < 3) {
+      await ctx.reply('❌ Код промокода должен содержать минимум 3 символа!');
+      return;
+    }
+    
+    if (!maxActivations || maxActivations <= 0 || maxActivations > 10000) {
+      await ctx.reply('❌ Количество активаций должно быть от 1 до 10000!');
+      return;
+    }
+    
+    // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
+    if (existingPromocode) {
+      await ctx.reply(`❌ Промокод "${code}" уже существует!`);
+      return;
+    }
+    
+    // Создаем промокод с сундуком
+    const promocode = {
+      code: code,
+      rewardType: 'chest',
+      chestType: chestType,
+      maxActivations: maxActivations,
+      activations: 0,
+      totalActivations: 0,
+      totalRewards: 0,
+      isActive: true,
+      createdAt: new Date(),
+      createdBy: user.id,
+      activationsHistory: []
+    };
+    
+    // Сохраняем в базу данных
+    await db.collection('promocodes').insertOne(promocode);
+    
+    // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Промокод с ${chestNames[chestType]} создан успешно!*\n\n` +
+      `🎫 Код: \`${code}\`\n` +
+      `${chestEmojis[chestType]} Тип сундука: ${chestType.charAt(0).toUpperCase() + chestType.slice(1)}\n` +
+      `📊 Максимум активаций: \`${maxActivations}\`\n` +
+      `📅 Создан: ${new Date().toLocaleString('ru-RU')}\n\n` +
+      `🎯 Промокод готов к использованию!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    log(`✅ Промокод с ${chestNames[chestType]} ${code} успешно создан админом ${user.id}, активаций: ${maxActivations}`);
+    
+  } catch (error) {
+    logError(error, `Создание промокода с сундуком админом ${user.id}`);
+    await ctx.reply('❌ Ошибка создания промокода. Попробуйте позже.');
+  }
+}
+
 // ==================== СИСТЕМА СУНДУКОВ ====================
 // Генерация награды из сундука
 function generateChestReward() {
@@ -11052,8 +11150,8 @@ function generateChestReward() {
       minerBonus: Math.floor(Math.random() * 2) + 1, // 1-3 майнера
       description: 'Редкие награды с майнерами'
     };
-  } else if (random < 0.95) {
-    // 🟣 Эпический сундук (10%)
+  } else if (random < 0.96) {
+    // 🟣 Эпический сундук (4% - уменьшено с 10%)
     return {
       level: 'Эпический',
       emoji: '🟣',
@@ -11064,7 +11162,7 @@ function generateChestReward() {
       description: 'Эпические награды с титулом'
     };
   } else {
-    // 🟡 Легендарный сундук (5%)
+    // 🟡 Легендарный сундук (2% - уменьшено с 5%)
     return {
       level: 'Легендарный',
       emoji: '🟡',
@@ -11195,54 +11293,90 @@ async function handleUserEnterPromocode(ctx, user, text) {
       return;
     }
     
-    // Генерируем награду из сундука
-    const chestReward = generateChestReward();
+    // Определяем тип награды
+    let reward = 0;
+    let rewardType = 'mc';
+    let chestReward = null;
+    
+    if (promocode.rewardType === 'chest') {
+      // Новый тип - промокод с сундуком
+      chestReward = generateChestReward();
+      rewardType = 'chest';
+    } else {
+      // Старый тип - обычный промокод
+      reward = promocode.reward || 0;
+      rewardType = promocode.rewardType || 'mc';
+    }
     
     let updateData = {
       $push: { 
-        usedPromocodes: code,
-        dailyPromocodes: {
-          code: code,
-          date: new Date(),
-          reward: chestReward,
-          chestLevel: chestReward.level
-        }
+        usedPromocodes: code
       },
       $unset: { adminState: "" },
       $set: { updatedAt: new Date() }
     };
     
-    // Начисляем базовые награды
-    if (chestReward.magnumCoins > 0) {
-      updateData.$inc = {
-        ...updateData.$inc,
-        magnumCoins: chestReward.magnumCoins,
-        totalEarnedMagnumCoins: chestReward.magnumCoins,
-        experience: Math.floor(chestReward.magnumCoins * 5)
+    if (rewardType === 'chest') {
+      // Добавляем информацию о сундуке
+      updateData.$push.dailyPromocodes = {
+        code: code,
+        date: new Date(),
+        reward: chestReward,
+        chestLevel: chestReward.level
       };
-    }
-    
-    if (chestReward.stars > 0) {
-      updateData.$inc = {
-        ...updateData.$inc,
-        stars: chestReward.stars,
-        totalEarnedStars: chestReward.stars,
-        experience: Math.floor(chestReward.stars * 10)
-      };
-    }
-    
-    // Добавляем титул если есть
-    if (chestReward.title) {
-      updateData.$set.title = chestReward.title;
-    }
-    
-    // Добавляем майнеры если есть
-    if (chestReward.minerBonus > 0) {
-      // Здесь можно добавить логику для выдачи майнеров
-      updateData.$inc = {
-        ...updateData.$inc,
-        experience: chestReward.minerBonus * 25
-      };
+      
+      // Начисляем награды из сундука
+      if (chestReward.magnumCoins > 0) {
+        updateData.$inc = {
+          ...updateData.$inc,
+          magnumCoins: chestReward.magnumCoins,
+          totalEarnedMagnumCoins: chestReward.magnumCoins,
+          experience: Math.floor(chestReward.magnumCoins * 5)
+        };
+      }
+      
+      if (chestReward.stars > 0) {
+        updateData.$inc = {
+          ...updateData.$inc,
+          stars: chestReward.stars,
+          totalEarnedStars: chestReward.stars,
+          experience: Math.floor(chestReward.stars * 10)
+        };
+      }
+      
+      // Добавляем титул если есть
+      if (chestReward.title) {
+        updateData.$set.title = chestReward.title;
+      }
+      
+      // Добавляем майнеры если есть
+      if (chestReward.minerBonus > 0) {
+        // Здесь можно добавить логику для выдачи майнеров
+        updateData.$inc = {
+          ...updateData.$inc,
+          experience: chestReward.minerBonus * 25
+        };
+      }
+    } else {
+      // Старая логика для обычных промокодов
+      if (rewardType === 'mc') {
+        updateData.$inc = {
+          magnumCoins: reward,
+          totalEarnedMagnumCoins: reward,
+          experience: Math.floor(reward * 5)
+        };
+      } else if (rewardType === 'stars') {
+        updateData.$inc = {
+          stars: reward,
+          totalEarnedStars: reward,
+          experience: Math.floor(reward * 10)
+        };
+      } else if (rewardType === 'title') {
+        updateData.$set.title = reward;
+        updateData.$inc = {
+          experience: 50
+        };
+      }
     }
     
     await db.collection('users').updateOne(
@@ -11315,23 +11449,34 @@ async function handleUserEnterPromocode(ctx, user, text) {
       [Markup.button.callback('🔙 Назад к промокодам', 'promocode')]
     ]);
     
-    const rewardText = formatChestReward(chestReward);
+    let message = `🎉 *Промокод активирован!*\n\n🎫 Код: \`${code}\`\n\n`;
     
-    await ctx.reply(
-      `🎉 *Промокод активирован!*\n\n` +
-      `🎫 Код: \`${code}\`\n\n` +
-      `${chestReward.emoji} *${chestReward.level} сундук*\n` +
-      `${rewardText}\n\n` +
-      `📅 Активирован: ${new Date().toLocaleString('ru-RU')}\n\n` +
-      `🎉 Поздравляем с получением награды!`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
+    if (rewardType === 'chest') {
+      const rewardText = formatChestReward(chestReward);
+      message += `${chestReward.emoji} *${chestReward.level} сундук*\n${rewardText}\n\n`;
+    } else {
+      let rewardText = '';
+      if (rewardType === 'mc') {
+        rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
+      } else if (rewardType === 'stars') {
+        rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
+      } else if (rewardType === 'title') {
+        rewardText = `👑 Награда: \`${reward}\``;
       }
-    );
+      message += `${rewardText}\n\n`;
+    }
+    
+    message += `📅 Активирован: ${new Date().toLocaleString('ru-RU')}\n\n🎉 Поздравляем с получением награды!`;
+    
+    await ctx.reply(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
     
     let logReward = '';
-    if (rewardType === 'mc') {
+    if (rewardType === 'chest') {
+      logReward = `${chestReward.level} сундук`;
+    } else if (rewardType === 'mc') {
       logReward = `${reward} MC`;
     } else if (rewardType === 'stars') {
       logReward = `${reward} Stars`;
@@ -15058,6 +15203,14 @@ bot.action('admin_create_promocode', async (ctx) => {
     
     const keyboard = Markup.inlineKeyboard([
       [
+        Markup.button.callback('🟢 Обычный сундук', 'create_promo_common'),
+        Markup.button.callback('🔵 Редкий сундук', 'create_promo_rare')
+      ],
+      [
+        Markup.button.callback('🟣 Эпический сундук', 'create_promo_epic'),
+        Markup.button.callback('🟡 Легендарный сундук', 'create_promo_legendary')
+      ],
+      [
         Markup.button.callback('💰 Magnum Coins', 'create_promo_mc'),
         Markup.button.callback('⭐ Stars', 'create_promo_stars')
       ],
@@ -15071,6 +15224,11 @@ bot.action('admin_create_promocode', async (ctx) => {
     await ctx.editMessageText(
       `🎫 *Создание промокода*\n\n` +
       `Выберите тип награды для промокода:\n\n` +
+      `🎁 *Новая система сундуков:*\n` +
+      `🟢 **Обычный сундук** - базовые награды\n` +
+      `🔵 **Редкий сундук** - награды + майнеры\n` +
+      `🟣 **Эпический сундук** - награды + титул + множитель\n` +
+      `🟡 **Легендарный сундук** - максимальные награды\n\n` +
       `💰 **Magnum Coins** - награда в монетах\n` +
       `⭐ **Stars** - награда в звездах\n` +
       `👑 **Титул** - выдача титула\n` +
@@ -15205,6 +15363,158 @@ bot.action('create_promo_custom', async (ctx) => {
       }
     );
   } catch (error) { logError(error, 'Создание пользовательского промокода (обработчик)'); }
+});
+
+// ==================== ОБРАБОТЧИКИ СОЗДАНИЯ ПРОМОКОДОВ С СУНДУКАМИ ====================
+
+// Обычный сундук
+bot.action('create_promo_common', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promo_common', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🟢 *Создание промокода с обычным сундуком*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД АКТИВАЦИИ**\n\n` +
+      `💡 Пример: COMMON 100\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода (3+ символов)\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎁 *Награды обычного сундука:*\n` +
+      `├ 10-60 Magnum Coins\n` +
+      `└ 5-25 Stars\n\n` +
+      `🎯 Введите данные:`,
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) { logError(error, 'Создание промокода обычного сундука (обработчик)'); }
+});
+
+// Редкий сундук
+bot.action('create_promo_rare', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promo_rare', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🔵 *Создание промокода с редким сундуком*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД АКТИВАЦИИ**\n\n` +
+      `💡 Пример: RARE 50\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода (3+ символов)\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎁 *Награды редкого сундука:*\n` +
+      `├ 50-150 Magnum Coins\n` +
+      `├ 25-75 Stars\n` +
+      `└ 1-3 майнера\n\n` +
+      `🎯 Введите данные:`,
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) { logError(error, 'Создание промокода редкого сундука (обработчик)'); }
+});
+
+// Эпический сундук
+bot.action('create_promo_epic', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promo_epic', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🟣 *Создание промокода с эпическим сундуком*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД АКТИВАЦИИ**\n\n` +
+      `💡 Пример: EPIC 25\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода (3+ символов)\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎁 *Награды эпического сундука:*\n` +
+      `├ 100-300 Magnum Coins\n` +
+      `├ 50-150 Stars\n` +
+      `├ Уникальный титул\n` +
+      `└ Множитель x1.5\n\n` +
+      `🎯 Введите данные:`,
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) { logError(error, 'Создание промокода эпического сундука (обработчик)'); }
+});
+
+// Легендарный сундук
+bot.action('create_promo_legendary', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id); 
+    if (!user || !isAdmin(user.id)) return;
+    
+    await db.collection('users').updateOne(
+      { id: user.id }, 
+      { $set: { adminState: 'creating_promo_legendary', updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🟡 *Создание промокода с легендарным сундуком*\n\n` +
+      `Введите данные промокода в формате:\n\n` +
+      `**КОД АКТИВАЦИИ**\n\n` +
+      `💡 Пример: LEGEND 10\n\n` +
+      `📋 Где:\n` +
+      `├ КОД - название промокода (3+ символов)\n` +
+      `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
+      `🎁 *Награды легендарного сундука:*\n` +
+      `├ 300-800 Magnum Coins\n` +
+      `├ 100-300 Stars\n` +
+      `├ 2-5 майнеров\n` +
+      `├ Легендарный титул\n` +
+      `└ Множитель x2.0\n\n` +
+      `🎯 Введите данные:`,
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) { logError(error, 'Создание промокода легендарного сундука (обработчик)'); }
 });
 
 bot.action('admin_mass_give', async (ctx) => {
@@ -16232,6 +16542,18 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'creating_promo_title') {
           console.log(`👑 Админ ${ctx.from.id} создает промокод с титулом: "${text}"`);
           await handleAdminCreatePromoTitle(ctx, user, text);
+        } else if (user.adminState === 'creating_promo_common') {
+          console.log(`🟢 Админ ${ctx.from.id} создает промокод с обычным сундуком: "${text}"`);
+          await handleAdminCreatePromoChest(ctx, user, text, 'common');
+        } else if (user.adminState === 'creating_promo_rare') {
+          console.log(`🔵 Админ ${ctx.from.id} создает промокод с редким сундуком: "${text}"`);
+          await handleAdminCreatePromoChest(ctx, user, text, 'rare');
+        } else if (user.adminState === 'creating_promo_epic') {
+          console.log(`🟣 Админ ${ctx.from.id} создает промокод с эпическим сундуком: "${text}"`);
+          await handleAdminCreatePromoChest(ctx, user, text, 'epic');
+        } else if (user.adminState === 'creating_promo_legendary') {
+          console.log(`🟡 Админ ${ctx.from.id} создает промокод с легендарным сундуком: "${text}"`);
+          await handleAdminCreatePromoChest(ctx, user, text, 'legendary');
         } else if (user.adminState === 'reporting_bug') {
           console.log(`🐛 Пользователь ${ctx.from.id} сообщает об ошибке: "${text}"`);
           await handleBugReport(ctx, user, text);
