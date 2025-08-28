@@ -11472,14 +11472,8 @@ async function handleUserEnterPromocode(ctx, user, text) {
       }
     }
     
-    // Проверяем тип контекста и отправляем соответствующее уведомление
-    if (ctx.callbackQuery) {
-      // Если это callback (кнопка), используем answerCbQuery
-      await ctx.answerCbQuery(notificationText, { show_alert: true });
-    } else {
-      // Если это текстовое сообщение, отправляем обычное сообщение
-      await ctx.reply(notificationText);
-    }
+    // Отправляем всплывающее уведомление по центру экрана
+    await ctx.answerCbQuery(notificationText, { show_alert: true });
     
     let logReward = '';
     if (rewardType === 'chest') {
@@ -11495,6 +11489,255 @@ async function handleUserEnterPromocode(ctx, user, text) {
     
   } catch (error) {
     logError(error, `Активация промокода пользователем ${user.id}`);
+    await ctx.reply('❌ Ошибка активации промокода. Попробуйте позже.');
+  }
+}
+
+// Обработка текстовых промокодов (для всплывающих уведомлений)
+async function handleUserEnterPromocodeText(ctx, user, text) {
+  try {
+    log(`🎫 Пользователь ${user.id} активирует промокод текстом: "${text}"`);
+    
+    const code = text.trim().toUpperCase();
+    
+    // Валидация кода
+    if (!code || code.length < 3) {
+      await ctx.reply('❌ Неверный код промокода! Код должен содержать минимум 3 символа.');
+      return;
+    }
+    
+    // Проверяем дневной лимит промокодов
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dailyPromocodes = user.dailyPromocodes || [];
+    const todayPromocodes = dailyPromocodes.filter(p => {
+      const promoDate = new Date(p.date);
+      return promoDate >= today && promoDate < tomorrow;
+    });
+    
+    if (todayPromocodes.length >= 10) {
+      await ctx.reply('❌ Вы достигли дневного лимита промокодов (10/10). Попробуйте завтра!');
+      return;
+    }
+    
+    // Проверяем, не использовал ли пользователь уже этот промокод
+    const usedPromocodes = user.usedPromocodes || [];
+    if (usedPromocodes.includes(code)) {
+      await ctx.reply('❌ Вы уже использовали этот промокод!');
+      return;
+    }
+    
+    // Ищем промокод в базе данных
+    const promocode = await db.collection('promocodes').findOne({ 
+      code: code, 
+      isActive: true 
+    });
+    
+    if (!promocode) {
+      await ctx.reply('❌ Промокод не найден или неактивен!');
+      return;
+    }
+    
+    // Проверяем срок действия
+    if (promocode.expiresAt && new Date(promocode.expiresAt) < new Date()) {
+      await ctx.reply('❌ Промокод истек!');
+      return;
+    }
+    
+    // Проверяем лимит активаций
+    if (promocode.maxActivations && promocode.activations >= promocode.maxActivations) {
+      await ctx.reply('❌ Лимит активаций промокода исчерпан!');
+      return;
+    }
+    
+    // Определяем тип награды
+    let reward = 0;
+    let rewardType = 'mc';
+    let chestReward = null;
+    
+    if (promocode.rewardType === 'chest') {
+      // Новый тип - промокод с сундуком
+      chestReward = generateChestReward();
+      rewardType = 'chest';
+    } else {
+      // Старый тип - обычный промокод
+      reward = promocode.reward || 0;
+      rewardType = promocode.rewardType || 'mc';
+    }
+    
+    let updateData = {
+      $push: { 
+        usedPromocodes: code
+      },
+      $unset: { adminState: "" },
+      $set: { updatedAt: new Date() }
+    };
+    
+    if (rewardType === 'chest') {
+      // Добавляем информацию о сундуке
+      updateData.$push.dailyPromocodes = {
+        code: code,
+        date: new Date(),
+        reward: chestReward,
+        chestLevel: chestReward.level
+      };
+      
+      // Начисляем награды из сундука
+      if (chestReward.magnumCoins > 0) {
+        updateData.$inc = {
+          ...updateData.$inc,
+          magnumCoins: chestReward.magnumCoins,
+          totalEarnedMagnumCoins: chestReward.magnumCoins,
+          experience: Math.floor(chestReward.magnumCoins * 5)
+        };
+      }
+      
+      if (chestReward.stars > 0) {
+        updateData.$inc = {
+          ...updateData.$inc,
+          stars: chestReward.stars,
+          totalEarnedStars: chestReward.stars,
+          experience: Math.floor(chestReward.stars * 10)
+        };
+      }
+      
+      // Добавляем титул если есть
+      if (chestReward.title) {
+        updateData.$set.title = chestReward.title;
+      }
+      
+      // Добавляем майнеры если есть
+      if (chestReward.minerBonus > 0) {
+        updateData.$inc = {
+          ...updateData.$inc,
+          experience: chestReward.minerBonus * 25
+        };
+      }
+    } else {
+      // Старая логика для обычных промокодов
+      if (rewardType === 'mc') {
+        updateData.$inc = {
+          magnumCoins: reward,
+          totalEarnedMagnumCoins: reward,
+          experience: Math.floor(reward * 5)
+        };
+      } else if (rewardType === 'stars') {
+        updateData.$inc = {
+          stars: reward,
+          totalEarnedStars: reward,
+          experience: Math.floor(reward * 10)
+        };
+      } else if (rewardType === 'title') {
+        updateData.$set.title = reward;
+        updateData.$inc = {
+          experience: 50
+        };
+      }
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      updateData
+    );
+    
+    // Обновляем статистику промокода
+    await db.collection('promocodes').updateOne(
+      { _id: promocode._id },
+      { 
+        $inc: { 
+          activations: 1,
+          totalActivations: 1,
+          totalRewards: rewardType === 'chest' ? (chestReward.magnumCoins || 0) + (chestReward.stars || 0) : reward
+        },
+        $push: { 
+          activationsHistory: {
+            userId: user.id,
+            username: user.username || 'Неизвестно',
+            activatedAt: new Date(),
+            reward: rewardType === 'chest' ? chestReward : reward
+          }
+        }
+      }
+    );
+    
+    // Очищаем кеш
+    userCache.delete(user.id);
+    
+    // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
+      if (levelResult.levelUp) {
+        log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
+      }
+    }
+    
+    // Отправляем уведомление в канал (если настроен)
+    if (config.PROMO_NOTIFICATIONS_CHAT) {
+      try {
+        let rewardText = '';
+        if (rewardType === 'chest') {
+          rewardText = `🎁 ${chestReward.level} сундук`;
+        } else if (rewardType === 'mc') {
+          rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
+        } else if (rewardType === 'stars') {
+          rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
+        } else if (rewardType === 'title') {
+          rewardText = `👑 Награда: \`${reward}\``;
+        }
+        
+        const notificationMessage = 
+          `🎫 *Активация промокода!*\n\n` +
+          `👤 Пользователь: ${user.firstName || 'Неизвестно'}\n` +
+          `🆔 ID: \`${user.id}\`\n` +
+          `🎫 Промокод: \`${code}\`\n` +
+          `${rewardText}\n` +
+          `📅 Время: ${new Date().toLocaleString('ru-RU')}`;
+        
+        await bot.telegram.sendMessage(config.PROMO_NOTIFICATIONS_CHAT, notificationMessage, {
+          parse_mode: 'Markdown'
+        });
+      } catch (notifyError) {
+        logError(notifyError, 'Отправка уведомления об активации промокода');
+      }
+    }
+    
+    // Отправляем всплывающее уведомление по центру экрана
+    let notificationText = '';
+    
+    if (rewardType === 'chest') {
+      const rewardText = formatChestReward(chestReward);
+      notificationText = `🎉 ${chestReward.emoji} ${chestReward.level} сундук!\n${rewardText}`;
+    } else {
+      if (rewardType === 'mc') {
+        notificationText = `💰 Получено ${formatNumber(reward)} Magnum Coins!`;
+      } else if (rewardType === 'stars') {
+        notificationText = `⭐ Получено ${formatNumber(reward)} Stars!`;
+      } else if (rewardType === 'title') {
+        notificationText = `👑 Получен титул "${reward}"!`;
+      }
+    }
+    
+    // Отправляем всплывающее уведомление
+    await ctx.reply(notificationText);
+    
+    let logReward = '';
+    if (rewardType === 'chest') {
+      logReward = `${chestReward.level} сундук`;
+    } else if (rewardType === 'mc') {
+      logReward = `${reward} MC`;
+    } else if (rewardType === 'stars') {
+      logReward = `${reward} Stars`;
+    } else if (rewardType === 'title') {
+      logReward = `титул "${reward}"`;
+    }
+    log(`✅ Промокод ${code} успешно активирован пользователем ${user.id}, награда: ${logReward}`);
+    
+  } catch (error) {
+    logError(error, `Активация промокода текстом пользователем ${user.id}`);
     await ctx.reply('❌ Ошибка активации промокода. Попробуйте позже.');
   }
 }
@@ -16463,7 +16706,7 @@ bot.on('text', async (ctx) => {
         return;
       } else if (user.adminState === 'entering_promocode') {
         console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
-        await handleUserEnterPromocode(ctx, user, text);
+        await handleUserEnterPromocodeText(ctx, user, text);
         return;
       } else if (user.adminState === 'exchange_custom_mc') {
         console.log(`🪙 Пользователь ${ctx.from.id} вводит сумму MC для обмена: "${text}"`);
