@@ -6288,7 +6288,43 @@ async function processMinerRewards() {
             requiredInterval: config.MINING_REWARD_INTERVAL
           });
           
-          if (timeDiff >= config.MINING_REWARD_INTERVAL) {
+          // Если у пользователя нет lastReward, устанавливаем его и начисляем награду
+          if (!userWithMining.miningStats.lastReward) {
+            console.log(`🆕 Первая награда для пользователя ${userWithMining.id}`);
+            const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            
+            console.log(`💰 Первые награды для пользователя ${userWithMining.id}:`, {
+              rewardMC,
+              rewardStars,
+              multiplier: currentSeason.multiplier
+            });
+            
+            // Обновляем статистику
+            await db.collection('users').updateOne(
+              { id: userWithMining.id },
+              {
+                $inc: {
+                  magnumCoins: rewardMC,
+                  stars: rewardStars,
+                  'miningStats.totalMinedMC': rewardMC,
+                  'miningStats.totalMinedStars': rewardStars,
+                  'miningStats.seasonMinedMC': rewardMC,
+                  'miningStats.seasonMinedStars': rewardStars,
+                  'miningStats.passiveRewards': rewardMC + rewardStars
+                },
+                $set: {
+                  'miningStats.lastReward': now
+                }
+              }
+            );
+            
+            // Очищаем кеш пользователя
+            userCache.delete(userWithMining.id);
+            
+            processedCount++;
+            console.log(`✅ Первые награды начислены пользователю ${userWithMining.id}`);
+          } else if (timeDiff >= config.MINING_REWARD_INTERVAL) {
             const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
@@ -9450,6 +9486,24 @@ app.get('/test-mining', async (req, res) => {
                 totalUsers: 0
             });
         }
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
+});
+
+// Маршрут для принудительного запуска обработки майнинга
+app.get('/force-mining', async (req, res) => {
+    try {
+        console.log('🔧 Принудительный запуск обработки майнинга...');
+        await processMinerRewards();
+        res.json({
+            status: 'success',
+            message: 'Mining processing completed',
+            timestamp: new Date().toISOString()
+        });
     } catch (error) {
         res.status(500).json({
             status: 'error',
@@ -15461,8 +15515,13 @@ async function startBot() {
     
     // Запускаем обработку майнера каждые 2 минуты для снижения нагрузки
     setInterval(() => {
+      console.log('🔄 Запуск обработки майнинга...');
       processMinerRewards();
     }, 2 * 60 * 1000); // 2 минуты
+    
+    // Запускаем обработку майнинга сразу при старте
+    console.log('🚀 Первоначальный запуск обработки майнинга...');
+    processMinerRewards();
     
     // Очистка кеша каждые 10 минут для снижения нагрузки
     setInterval(() => {
