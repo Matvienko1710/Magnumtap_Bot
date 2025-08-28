@@ -3236,13 +3236,13 @@ async function showMinerSeasonInfo(ctx, user) {
       `📈 *Множитель сезона:* ${currentSeason.multiplier.toFixed(2)}x\n` +
       `📊 *Прогресс сезона:* ${((currentSeason.dayInSeason / config.MINING_SEASON_DURATION) * 100).toFixed(1)}%\n\n` +
       `💰 *Лимиты сезона:*\n` +
-      `├ Stars: ${formatNumber(limits.magnuStarsoins)}\n` +
-      `└ Stars: ${formatNumber(limits.stars)}\n\n` +
+      `├ 🪙 Magnum Coins: ${formatNumber(limits.magnuStarsoins)}\n` +
+      `└ ⭐ Stars: ${formatNumber(limits.stars)}\n\n` +
       `📊 *Статистика сезона:*\n` +
-      `├ Добыто Stars: ${formatNumber(stats.totalMinedStars)} / ${formatNumber(limits.magnuStarsoins)}\n` +
-      `├ Добыто Stars: ${formatNumber(stats.totalMinedStars)} / ${formatNumber(limits.stars)}\n` +
-      `├ Осталось Stars: ${formatNumber(limitsCheck.remainingStars)}\n` +
-      `└ Осталось Stars: ${formatNumber(limitsCheck.remainingStars)}\n\n` +
+      `├ Добыто 🪙 Magnum Coins: ${formatNumber(stats.totalMinedMagnumCoins)} / ${formatNumber(limits.magnuStarsoins)}\n` +
+      `├ Добыто ⭐ Stars: ${formatNumber(stats.totalMinedStars)} / ${formatNumber(limits.stars)}\n` +
+      `├ Осталось 🪙 Magnum Coins: ${formatNumber(limitsCheck.remainingMagnumCoins)}\n` +
+      `└ Осталось ⭐ Stars: ${formatNumber(limitsCheck.remainingStars)}\n\n` +
       `📅 *Даты сезона:*\n` +
       `├ Начало: ${currentSeason.startDate.toLocaleDateString('ru-RU')}\n` +
       `└ Конец: ${currentSeason.endDate.toLocaleDateString('ru-RU')}\n\n` +
@@ -6362,7 +6362,7 @@ async function showAdminTopUsers(ctx, user) {
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('⭐ По уровню', 'admin_top_level'),
-        Markup.button.callback('🪙 По Stars', 'admin_top_magnum')
+        Markup.button.callback('🪙 По Magnum Coins', 'admin_top_magnum')
       ],
       [
         Markup.button.callback('💎 По Stars', 'admin_top_stars'),
@@ -8211,13 +8211,12 @@ async function showProfileMenu(ctx, user) {
       `├ Опыт: ${formatNumber(user.experience || 0)}/${formatNumber(getRequiredExperience(user.level || 1))}\n` +
       `└ Дата регистрации: ${user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : 'Неизвестно'}\n\n` +
       `💰 *Балансы:*\n` +
-      `├ Stars: ${formatNumber(user.magnuStarsoins || 0)}\n` +
-      `├ Stars: ${formatNumber(user.stars || 0)}\n` +
+      `├ 🪙 Magnum Coins: ${formatNumber(user.magnuStarsoins || 0)}\n` +
+      `├ ⭐ Stars: ${formatNumber(user.stars || 0)}\n` +
       `└ Всего заработано: ${formatNumber((user.totalEarnedMagnuStarsoins || 0) + (user.totalEarnedStars || 0))}\n\n` +
       `🎯 *Статистика:*\n` +
       `├ Рефералов: ${user.referralsCount || 0}\n` +
-      `├ Достижений: ${user.achievementsCompleted || 0}\n` +
-      `└ Ранг: ${rankProgress.currentRank}\n\n` +
+      `└ Ранг: ${rankProgress.current.name}\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
