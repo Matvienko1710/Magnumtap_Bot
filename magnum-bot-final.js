@@ -428,12 +428,11 @@ const config = {
     }
   },
   
-  // Награды за сезоны
+  // Награды за сезоны (только топ-10)
   SEASON_REWARDS: {
     top1: { magnumCoins: 10000, stars: 100, title: '🏆 Чемпион сезона' },
     top3: { magnumCoins: 5000, stars: 50, title: '🥇 Топ-3 сезона' },
-    top10: { magnumCoins: 2000, stars: 20, title: '🥈 Топ-10 сезона' },
-    top50: { magnumCoins: 500, stars: 5, title: '🥉 Топ-50 сезона' }
+    top10: { magnumCoins: 2000, stars: 20, title: '🥈 Топ-10 сезона' }
   },
   
   EXCHANGE_COMMISSION: 2.5,
@@ -442,7 +441,7 @@ const config = {
   MAX_WITHDRAWAL: 10000,
   
   // Система сезонов майнинга
-  MINING_SEASON_DURATION: 5, // дней
+  MINING_SEASON_DURATION: 7, // дней
   MINING_SEASON_START_DATE: new Date('2025-11-22'), // Дата начала первого сезона
   MINING_TOTAL_MAGNUM_COINS: 1000000, // Общее количество MC для всех пользователей
   MINING_TOTAL_STARS: 100, // Общее количество Stars для всех пользователей
@@ -2667,13 +2666,10 @@ async function showMinerMenu(ctx, user) {
   const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('🛒 Магазин майнеров', 'miner_shop'),
-      Markup.button.callback('⚡ Клик', 'miner_active_click')
+      Markup.button.callback('📅 Сезон', 'miner_season_info')
     ],
     [
-      Markup.button.callback('📅 Сезон', 'miner_season_info'),
-      Markup.button.callback('🏆 Рейтинг', 'miner_leaderboard')
-    ],
-    [
+      Markup.button.callback('🏆 Рейтинг', 'miner_leaderboard'),
       Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
@@ -3294,66 +3290,7 @@ async function processMiningRewards() {
   }
 }
 
-// Функция для активного клика майнинга
-async function processActiveMiningClick(user) {
-  try {
-    const currentSeason = getCurrentMiningSeason();
-    if (!currentSeason.isActive) {
-      return { success: false, message: '📅 Майнинг приостановлен - выходные' };
-    }
-    
-    const userWithMining = initializeNewMiningSystem(user);
-    const totalSpeed = calculateTotalMiningSpeed(userWithMining);
-    
-    const totalSpeedSum = totalSpeed.magnumCoins + totalSpeed.stars;
-    
-    if (totalSpeedSum === 0) {
-      return { success: false, message: '❌ У вас нет активных майнеров' };
-    }
-    
-    const bonusRewardMC = totalSpeed.magnumCoins * config.MINING_ACTIVE_CLICK_BONUS * currentSeason.multiplier;
-    const bonusRewardStars = totalSpeed.stars * config.MINING_ACTIVE_CLICK_BONUS * currentSeason.multiplier;
-    
-    // Обновляем статистику
-    await db.collection('users').updateOne(
-      { id: userWithMining.id },
-      {
-        $inc: {
-          magnumCoins: bonusRewardMC,
-          stars: bonusRewardStars,
-          'miningStats.totalMinedMC': bonusRewardMC,
-          'miningStats.totalMinedStars': bonusRewardStars,
-          'miningStats.seasonMinedMC': bonusRewardMC,
-          'miningStats.seasonMinedStars': bonusRewardStars,
-          'miningStats.activeClickCount': 1
-        }
-      }
-    );
-    
-    // Принудительно сохраняем пользователя
-    const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
-    if (updatedUser) {
-      await forceSaveUser(updatedUser);
-    }
-    
-    // Очищаем кеш пользователя
-    userCache.delete(userWithMining.id);
-    
-    const totalBonus = bonusRewardMC + bonusRewardStars;
-    let message = `✅ Клик!`;
-    if (bonusRewardMC > 0) message += `\n+${formatNumber(bonusRewardMC)} MC`;
-    if (bonusRewardStars > 0) message += `\n+${formatNumber(bonusRewardStars)} ⭐`;
-    
-    return { 
-      success: true, 
-      reward: totalBonus,
-      message: message
-    };
-  } catch (error) {
-    console.error('❌ Ошибка клика майнинга:', error);
-    return { success: false, message: '❌ Ошибка обработки клика' };
-  }
-}
+// Функция активного клика удалена
 
 // Функция для покупки майнера
 async function buyMiner(user, minerType) {
@@ -3682,8 +3619,7 @@ async function showMinerLeaderboard(ctx, user) {
     message += `\n💡 *Награды за сезон:*\n`;
     message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnumCoins)} MC + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
     message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnumCoins)} MC + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
-    message += `├ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐\n`;
-    message += `└ 🏅 11-50 место: ${formatNumber(config.SEASON_REWARDS.top50.magnumCoins)} MC + ${config.SEASON_REWARDS.top50.stars} ⭐`;
+    message += `└ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -3762,8 +3698,7 @@ async function showMinerLeaderboardSeason(ctx, user) {
     message += `\n💡 *Награды за сезон:*\n`;
     message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnumCoins)} MC + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
     message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnumCoins)} MC + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
-    message += `├ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐\n`;
-    message += `└ 🏅 11-50 место: ${formatNumber(config.SEASON_REWARDS.top50.magnumCoins)} MC + ${config.SEASON_REWARDS.top50.stars} ⭐`;
+    message += `└ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -13132,29 +13067,7 @@ bot.action('miner_shop_limit', async (ctx) => {
   }
 });
 
-bot.action('miner_active_click', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем, является ли пользователь админом
-    if (!config.ADMIN_IDS.includes(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    const result = await processActiveMiningClick(user);
-    await ctx.answerCbQuery(result.message);
-    
-    if (result.success) {
-      // Обновляем меню майнинга
-      await showMinerMenu(ctx, user);
-    }
-  } catch (error) {
-    logError(error, 'Клик майнинга');
-    await ctx.answerCbQuery('❌ Ошибка клика');
-  }
-});
+// Обработчик активного клика удален
 
 bot.action('miner_leaderboard', async (ctx) => {
   try {
@@ -15945,9 +15858,6 @@ bot.action('admin_season_rewards', async (ctx) => {
       } else if (position <= 10) {
         rewardMC = config.SEASON_REWARDS.top10.magnumCoins;
         rewardStars = config.SEASON_REWARDS.top10.stars;
-      } else if (position <= 50) {
-        rewardMC = config.SEASON_REWARDS.top50.magnumCoins;
-        rewardStars = config.SEASON_REWARDS.top50.stars;
       }
       
       totalRewardsMC += rewardMC;
