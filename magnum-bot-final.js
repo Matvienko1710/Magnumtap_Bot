@@ -133,6 +133,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
         return res.status(400).json({ error: 'Missing userId' });
       }
 
+      const user = await db.collection('users').findOne({ id: parseInt(userId) });
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -152,6 +153,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
         return res.status(400).json({ success: false, message: 'Missing userId' });
       }
 
+      const user = await db.collection('users').findOne({ id: parseInt(userId) });
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
@@ -193,12 +195,15 @@ if (process.env.WEBAPP_ENABLED === 'true') {
         return res.status(400).json({ success: false, message: 'Missing userId' });
       }
 
+      const user = await db.collection('users').findOne({ id: parseInt(userId) });
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
 
       // Рассчитываем награду за фарм
+      const baseReward = 10;
       const levelBonus = Math.min(user.level * 0.1, 2);
+      const reward = baseReward + levelBonus;
 
       // Обновляем баланс пользователя
       await db.collection('users').updateOne(
@@ -231,6 +236,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
         return res.status(400).json({ success: false, message: 'Missing userId' });
       }
 
+      const user = await db.collection('users').findOne({ id: parseInt(userId) });
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
@@ -285,6 +291,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
         return res.status(400).json({ success: false, message: 'Missing required parameters' });
       }
 
+      const user = await db.collection('users').findOne({ id: parseInt(userId) });
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
@@ -477,6 +484,7 @@ app.get('/api/webapp/check-access', async (req, res) => {
 
         // Проверяем, является ли пользователь админом
         const isAdmin = config.ADMIN_IDS.includes(parseInt(userId));
+        const webappEnabled = process.env.WEBAPP_ENABLED === 'true';
         const adminOnly = process.env.WEBAPP_ADMIN_ONLY === 'true';
 
         if (!webappEnabled) {
@@ -497,6 +505,7 @@ app.get('/api/webapp/check-access', async (req, res) => {
 // API маршрут для получения данных пользователя
 app.get('/api/webapp/user-data', async (req, res) => {
     try {
+        const userId = req.query.user_id;
         if (!userId) {
             return res.status(400).json({ error: 'User ID required' });
         }
@@ -631,6 +640,7 @@ app.post('/api/webapp/update-data', async (req, res) => {
         }
 
         // Белый список полей и валидация
+        const updateData = { updatedAt: new Date() };
         if (typeof magnuStarsoins === 'number' && isFinite(magnuStarsoins) && magnuStarsoins >= 0) updateData.magnuStarsoins = magnuStarsoins;
         if (typeof stars === 'number' && isFinite(stars) && stars >= 0) updateData.stars = stars;
         if (typeof level === 'number' && isFinite(level) && level >= 1) updateData.level = Math.floor(level);
@@ -668,6 +678,8 @@ app.post('/api/webapp/farm', async (req, res) => {
             return res.status(400).json({ error: 'User ID required' });
         }
 
+        const farStarsooldownMs = (parseInt(process.env.WEBAPP_FARM_COOLDOWN_SEC || '5') || 5) * 1000;
+        const now = Date.now();
 
         let webappUser = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
         if (!webappUser) {
@@ -686,6 +698,7 @@ app.post('/api/webapp/farm', async (req, res) => {
             });
         }
 
+        const reward = Math.max(1, webappUser.cps || 1);
         const updates = {
             $inc: { magnuStarsoins: reward, clickCount: 1, experience: 1 },
             $set: { lastFarmAt: new Date(now), updatedAt: new Date(now) }
@@ -732,6 +745,7 @@ app.post('/api/webapp/exchange', async (req, res) => {
         if (!userId || !from || typeof amount !== 'number' || amount <= 0) {
             return res.status(400).json({ error: 'Bad request' });
         }
+        const user = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const rate = await calculateExchangeRate();
@@ -750,6 +764,7 @@ app.post('/api/webapp/exchange', async (req, res) => {
             received = starsOut;
         } else if (from === 'stars') {
             if ((user.stars || 0) < amount) return res.status(400).json({ error: 'Insufficient Stars' });
+            const StarsOut = (amount / rate) * (1 - commission);
             inc.stars -= amount;
             inc.magnuStarsoins += StarsOut;
             reserveInc.stars += amount * commission;
@@ -786,18 +801,22 @@ app.post('/api/webapp/bonus', async (req, res) => {
     try {
         const { userId } = req.body;
         if (!userId) return res.status(400).json({ error: 'Bad request' });
+        const user = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
         if (!user) return res.status(404).json({ error: 'User not found' });
         const base = config.DAILY_BONUS_BASE || 10;
+        const now = Date.now();
         const last = user.lastBonusAt ? new Date(user.lastBonusAt).getTime() : 0;
         const oneDay = 24 * 60 * 60 * 1000;
         if (now - last < oneDay) {
             return res.status(429).json({ error: 'Already claimed' });
         }
         const streak = (user.bonusStreak || 0) + (now - last < 2 * oneDay && last > 0 ? 1 : 1);
+        const reward = base * (1 + Math.min(streak, 40) * 0.1);
         await db.collection('webappUsers').updateOne(
             { userId: parseInt(userId) },
             { $inc: { magnuStarsoins: Math.floor(reward) }, $set: { lastBonusAt: new Date(now), bonusStreak: streak, updatedAt: new Date(now) } }
         );
+        const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
         res.json({ success: true, reward: Math.floor(reward), magnuStarsoins: updated.magnuStarsoins, bonusStreak: streak });
     } catch (error) {
         console.error('WebApp bonus error:', error);
@@ -823,6 +842,7 @@ app.post('/api/webapp/promocode', async (req, res) => {
             { _id: promo._id },
             { $inc: { activations: 1 } }
         );
+        const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
         res.json({ success: true, reward: promo.reward || 0, magnuStarsoins: updated.magnuStarsoins });
     } catch (error) {
         console.error('WebApp promocode error:', error);
@@ -833,6 +853,7 @@ app.post('/api/webapp/promocode', async (req, res) => {
 // API текущего курса обмена
 app.get('/api/webapp/exchange-rate', async (req, res) => {
     try {
+        const rate = await calculateExchangeRate();
         res.json({ success: true, rate });
     } catch (error) {
         res.status(500).json({ success: false });
@@ -842,6 +863,7 @@ app.get('/api/webapp/exchange-rate', async (req, res) => {
 // История обменов пользователя
 app.get('/api/webapp/exchange-history', async (req, res) => {
     try {
+        const userId = parseInt(String(req.query.user_id||'0'));
         if (!userId) return res.status(400).json({ success:false });
         const items = await db.collection('exchangeHistory').find({ userId }).sort({ timestamp:-1 }).limit(50).toArray();
         res.json({ success:true, items });
@@ -926,6 +948,7 @@ async function calculateExchangeRate() {
     const dynamicRate = config.BASE_EXCHANGE_RATE * multiplier;
     
     // Обновляем курс за 24 часа только раз в день
+    const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     
     if (!lastRateUpdate || lastRateUpdate < oneDayAgo) {
@@ -1238,6 +1261,7 @@ function setCachedUser(id, user) {
 }
 
 function getCachedStats(key) {
+  const cached = statsCache.get(key);
   if (cached && (Date.now() - cached.timestamp) < config.STATS_CACHE_TTL) {
     return cached.data;
   }
@@ -1250,6 +1274,7 @@ function setCachedStats(key, data) {
 
 // Функция для очистки невалидных данных из кеша
 function cleanupInvalidCache() {
+  const now = Date.now();
   let cleanedCount = 0;
   
   for (const [id, cached] of userCache.entries()) {
@@ -1398,6 +1423,7 @@ function getRankRequirements() {
 async function getRankProgress(user) {
   // Получаем актуальные данные пользователя из базы
   const freshUser = await getUser(user.id);
+  const level = freshUser ? (freshUser.level || 1) : (user.level || 1);
   const ranks = getRankRequirements();
   
   console.log(`🔍 getRankProgress вызвана для пользователя ${user.id}`);
@@ -1423,6 +1449,7 @@ async function getRankProgress(user) {
   console.log(`🔍 Следующий ранг: ${nextRank ? nextRank.name + ' (' + nextRank.level + ')' : 'Нет'}`);
   // Если достигнут максимальный ранг
   if (!nextRank) {
+    const result = {
       current: currentRank,
       next: null,
       progress: 100,
@@ -1480,6 +1507,7 @@ async function getRankProgress(user) {
   const progress = Math.min(100, Math.max(0, Math.round((totalUserProgress / levelDifference) * 100)));
   const remaining = Math.max(0, nextRank.level - level);
   
+  const result = {
     current: currentRank,
     next: nextRank,
     progress: progress,
@@ -1568,6 +1596,8 @@ function getRequiredExperience(level) {
 
 // Функция для отладки прогресса ранга
 async function debugRankProgress(user) {
+  const level = user.level || 1;
+  const ranks = getRankRequirements();
   
   console.log(`🔍 Отладка прогресса ранга для пользователя ${user.id}:`);
   console.log(`├ Уровень пользователя: ${level}`);
@@ -1591,6 +1621,9 @@ async function debugRankProgress(user) {
   console.log(`├ Следующий ранг: ${nextRank ? nextRank.name + ' (' + nextRank.level + ')' : 'Нет (максимальный)'}`);
   
   if (nextRank) {
+    const levelDifference = nextRank.level - currentRank.level;
+    const userProgress = level - currentRank.level;
+    const progress = Math.min(100, Math.max(0, Math.round((userProgress / levelDifference) * 100)));
     
     console.log(`├ Разница уровней: ${levelDifference}`);
     console.log(`├ Прогресс пользователя: ${userProgress}`);
@@ -1777,6 +1810,7 @@ async function getUser(id, ctx = null) {
     }
     
     // Проверяем кеш
+    const cached = getCachedUser(id);
     if (cached) {
       
       // Проверяем, не заблокирован ли пользователь
@@ -1891,6 +1925,7 @@ async function getUser(id, ctx = null) {
       user.statistics.totalSessions = oldSessions + 1;
       
       // Обновляем данные пользователя из контекста, если они доступны
+      const updateData = { 
         'statistics.lastSeen': user.statistics.lastSeen,
         'statistics.totalSessions': user.statistics.totalSessions,
         updatedAt: new Date()
@@ -2044,6 +2079,7 @@ async function showSubscriptionMessage(ctx) {
     if (!config.REQUIRED_CHANNEL || (!config.REQUIRED_CHANNEL.startsWith('@') && !config.REQUIRED_CHANNEL.startsWith('https://t.me/'))) {
       console.log('⚠️ Канал не настроен или неверный формат:', config.REQUIRED_CHANNEL);
       // Если канал не настроен, показываем главное меню
+      const user = await getUser(ctx.from.id);
       if (user) {
         await showMainMenu(ctx, user);
       }
@@ -2080,6 +2116,7 @@ async function showSubscriptionMessage(ctx) {
     
     // Пытаемся показать главное меню в случае ошибки
     try {
+      const user = await getUser(ctx.from.id);
       if (user) {
         await showMainMenu(ctx, user);
       }
@@ -2105,6 +2142,7 @@ async function handleReferral(userId, referrerId) {
       return;
     }
     
+    const user = await getUser(userId);
     console.log(`👤 Пользователь получен:`, {
       id: user.id,
       referrerId: user.referrerId,
@@ -2217,6 +2255,7 @@ async function showMainMenu(ctx, user) {
   try {
     log(`🏠 Показ главного меню для пользователя ${user.id}`);
     
+    const rankProgress = await getRankProgress(user);
     log(`🏠 Получен прогресс ранга для пользователя ${user.id}`);
     
     // Создаем базовые кнопки (рабочие функции)
@@ -2256,6 +2295,7 @@ async function showMainMenu(ctx, user) {
     ]);
   }
   
+  const keyboard = Markup.inlineKeyboard(buttons);
   
   const message = formatProfileMessage(user, rankProgress);
   
@@ -2291,8 +2331,10 @@ async function showMainMenu(ctx, user) {
 
 async function showMainMenuStart(ctx, user) {
   try {
+    const rankProgress = await getRankProgress(user);
   
       // Создаем базовые кнопки (рабочие функции)
+    const buttons = [
       [
         Markup.button.callback('⛏️ Майнер', 'miner'),
         Markup.button.callback('👤 Профиль', 'profile')
@@ -2328,7 +2370,9 @@ async function showMainMenuStart(ctx, user) {
     ]);
   }
   
+  const keyboard = Markup.inlineKeyboard(buttons);
   
+  const message = formatProfileMessage(user, rankProgress);
   
   await ctx.reply(message, {
     parse_mode: 'Markdown',
@@ -2357,6 +2401,7 @@ async function showRoadmap(ctx, user) {
   try {
     log(`🗺️ Показ роадмапа для пользователя ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🚀 Q4 2025 (Бот)', 'roadmap_q4_2025'),
         Markup.button.callback('🎯 Q1 2026 (WebApp)', 'roadmap_q1_2026')
@@ -2371,6 +2416,7 @@ async function showRoadmap(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
+    const message = 
       `🗺️ *Роадмап развития Magnum Stars*\n\n` +
       `🌟 *Добро пожаловать в будущее нашего проекта!*\n\n` +
       `🔬 *Текущий статус: Beta-версия бота*\n` +
@@ -2413,9 +2459,11 @@ async function showRoadmap(ctx, user) {
 // ==================== ДЕТАЛЬНЫЕ РОАДМАПЫ ====================
 async function showRoadmapQ4_2025(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
+    const message = 
       `🚀 *Q4 2025 - Основные функции (Бот)*\n\n` +
       `📅 *Август - Декабрь 2025*\n` +
       `🤖 *Платформа: Telegram Bot*\n\n` +
@@ -2454,9 +2502,11 @@ async function showRoadmapQ4_2025(ctx, user) {
 
 async function showRoadmapQ1_2026(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
+    const message = 
       `🎯 *Q1 2026 - Социальные функции (WebApp)*\n\n` +
       `📅 *Январь - Март 2026*\n` +
       `📱 *Платформа: Telegram WebApp*\n\n` +
@@ -2499,9 +2549,11 @@ async function showRoadmapQ1_2026(ctx, user) {
 
 async function showRoadmapQ2_2026(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
+    const message = 
       `🌟 *Q2 2026 - Игровые механики (WebApp)*\n\n` +
       `📅 *Апрель - Июнь 2026*\n` +
       `📱 *Платформа: Telegram WebApp*\n\n` +
@@ -2539,9 +2591,11 @@ async function showRoadmapQ2_2026(ctx, user) {
 
 async function showRoadmapQ3_2026(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
+    const message = 
       `🔥 *Q3 2026 - Инновации (WebApp)*\n\n` +
       `📅 *Июль - Сентябрь 2026*\n` +
       `📱 *Платформа: Telegram WebApp*\n\n` +
@@ -2581,9 +2635,11 @@ async function showRoadmapQ3_2026(ctx, user) {
 
 async function showRoadmapSuggestions(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к роадмапу', 'roadmap')]
     ]);
     
+    const message = 
       `💡 *Предложения для развития*\n\n` +
       `⚠️ *Временно недоступно*\n\n` +
       `🔧 *Система предложений находится в разработке*\n` +
@@ -2622,14 +2678,15 @@ async function showMinerMenu(ctx, user) {
   
   // Рассчитываем общую скорость майнинга
   const totalSpeed = calculateTotalMiningSpeed(userWithMining);
-  
+  const rewardPerMinuteStars = totalSpeed.stars * currentSeason.multiplier;
   const rewardPerHourStars = rewardPerMinuteStars * 60;
-
-
+  const rewardPerMinuteStars = totalSpeed.stars * currentSeason.multiplier;
+  const rewardPerHourStars = rewardPerMinuteStars * 60;
   
   // Подсчитываем общее количество майнеров
   const totalMiners = userWithMining.miners.reduce((sum, miner) => sum + miner.count, 0);
   
+  const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('🛒 Магазин майнеров', 'miner_shop'),
       Markup.button.callback('📅 Сезон', 'miner_season_info')
@@ -2648,6 +2705,7 @@ async function showMinerMenu(ctx, user) {
   const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
   const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
+  const message = 
     `⛏️ *Новая система майнинга*${seasonInfo}\n\n` +
     `💎 *Ваши майнеры:* ${totalMiners} шт.\n` +
     `⚡ *Скорость добычи Stars:* ${formatNumber(totalSpeed.stars)} Stars/мин\n` +
@@ -2760,6 +2818,7 @@ async function showMinerUpgrade(ctx, user) {
     
     const canUpgrade = user.magnuStarsoins >= upgradeCost;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
           canUpgrade ? `⬆️ Улучшить (${formatNumber(upgradeCost)} Stars)` : `❌ Недостаточно Stars (${formatNumber(upgradeCost)})`,
@@ -2769,6 +2828,7 @@ async function showMinerUpgrade(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'miner')]
     ]);
     
+    const message = 
       `⬆️ *Улучшение майнера*\n\n` +
       `📊 *Текущий уровень:* ${currentLevel}\n` +
       `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
@@ -2796,6 +2856,7 @@ async function showMinerStats(ctx, user) {
   try {
     log(`📊 Показ статистики майнера для пользователя ${user.id}`);
     
+    const miner = user.miner;
     const isActive = miner.active || false;
     const efficiency = miner.efficiency || 1;
     
@@ -2811,17 +2872,25 @@ async function showMinerStats(ctx, user) {
     if (miner.lastReward) {
       const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
       if (timeSince < 60) {
+        const remaining = 60 - timeSince;
         nextRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
       } else {
         nextRewardText = `\n✅ Готов к получению награды!`;
       }
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'miner')]
     ]);
     
     // Получаем информацию о титуле
+    const titlesList = getTitlesList(user);
+    const mainTitle = user.mainTitle || '🌱 Новичок';
+    const currentTitle = titlesList.find(t => t.name === mainTitle);
+    const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
+    const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
+    const message = 
       `📊 *Статистика майнера*\n\n` +
       `📈 *Уровень:* ${miner.level || 1}\n` +
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
@@ -2854,6 +2923,10 @@ async function upgradeMiner(ctx, user) {
   try {
     log(`⬆️ Попытка улучшения майнера для пользователя ${user.id}`);
     
+    const miner = user.miner;
+    const currentLevel = miner.level || 1;
+    const currentEfficiency = miner.efficiency || 1;
+    const upgradeCost = currentLevel * 100;
     
     // Проверяем, достаточно ли средств
     if (user.magnuStarsoins < upgradeCost) {
@@ -2864,6 +2937,7 @@ async function upgradeMiner(ctx, user) {
     
     // Обновляем майнер
     const newLevel = currentLevel + 1;
+    const newEfficiency = currentEfficiency + 0.2;
     
     log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
@@ -2903,6 +2977,7 @@ async function upgradeMiner(ctx, user) {
 
 // Получение текущего сезона
 function getCurrentMiningSeason() {
+  const now = new Date();
   const startDate = config.MINING_SEASON_START_DATE;
   const seasonDuration = config.MINING_SEASON_DURATION;
   
@@ -2913,6 +2988,7 @@ function getCurrentMiningSeason() {
   }
   
   const daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+  const currentSeason = Math.floor(daysSinceStart / seasonDuration) + 1;
   
   return {
     season: currentSeason,
@@ -2927,6 +3003,7 @@ function getCurrentMiningSeason() {
 // Получение лимитов сезона
 function getSeasonLimits(season) {
   const baseStarsLimit = config.MINING_TOTAL_MAGNUM_COINS;
+  const baseStarsLimit = config.MINING_TOTAL_STARS;
   const multiplier = Math.pow(config.MINING_SEASON_MULTIPLIER, season - 1);
   
   return {
@@ -2937,6 +3014,7 @@ function getSeasonLimits(season) {
 
 // Получение статистики сезона
 async function getSeasonStats(season) {
+  const startDate = new Date(config.MINING_SEASON_START_DATE.getTime() + (season - 1) * config.MINING_SEASON_DURATION * 24 * 60 * 60 * 1000);
   const endDate = new Date(startDate.getTime() + config.MINING_SEASON_DURATION * 24 * 60 * 60 * 1000);
   
   const stats = await db.collection('miningSeasonStats').findOne({ season: season });
@@ -2979,8 +3057,10 @@ async function updateSeasonStats(season, minedStars, minedStars) {
 // Проверка лимитов сезона
 async function checkSeasonLimits(season, minedStars, minedStars) {
   const limits = getSeasonLimits(season);
+  const stats = await getSeasonStats(season);
   
   const canMineStars = stats.totalMinedStars + minedStars <= limits.magnuStarsoins;
+  const canMineStars = stats.totalMinedStars + minedStars <= limits.stars;
   
   return {
     canMineStars,
@@ -2995,8 +3075,10 @@ async function showMinerSeasonInfo(ctx, user) {
   try {
     log(`📅 Показ информации о сезоне майнинга для пользователя ${user.id}`);
     
+    const currentSeason = getCurrentMiningSeason();
     
     if (!currentSeason) {
+      const keyboard = Markup.inlineKeyboard([
         [Markup.button.callback('🔙 Назад', 'miner')]
       ]);
       
@@ -3014,11 +3096,15 @@ async function showMinerSeasonInfo(ctx, user) {
       return;
     }
     
+    const limits = getSeasonLimits(currentSeason.season);
+    const stats = await getSeasonStats(currentSeason.season);
     const limitsCheck = await checkSeasonLimits(currentSeason.season, 0, 0);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'miner')]
     ]);
     
+    const message = 
       `📅 *Информация о сезоне майнинга*\n\n` +
       `🎯 *Текущий сезон:* ${currentSeason.season}\n` +
       `📅 *День сезона:* ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\n` +
@@ -3058,8 +3144,11 @@ async function showMinerSeasonInfo(ctx, user) {
 
 // Функция для получения текущего сезона майнинга
 function getCurrentMiningSeason() {
+  const now = new Date();
   const seasonStart = new Date('2025-08-28T00:00:00Z'); // 28 августа 00:00 UTC
   
+  const daysSinceStart = Math.floor((now - seasonStart) / (1000 * 60 * 60 * 24));
+  const currentSeason = Math.floor(daysSinceStart / config.MINING_SEASON_DURATION) + 1;
   const dayInSeason = (daysSinceStart % config.MINING_SEASON_DURATION) + 1;
   
   const seasonStartDate = new Date(seasonStart);
@@ -3127,6 +3216,7 @@ function calculateTotalMiningSpeed(user) {
     for (const miner of user.miners) {
       const minerConfig = config.MINERS[miner.type];
       if (minerConfig) {
+        const levelMultiplier = 1 + (miner.level - 1) * 0.2; // +20% за каждый уровень
         const minerSpeed = minerConfig.baseSpeed * levelMultiplier * miner.count;
         
         // Определяем валюту майнинга
@@ -3141,6 +3231,10 @@ function calculateTotalMiningSpeed(user) {
   }
   
   // Бонус от титула
+  const titlesList = getTitlesList(user);
+  const mainTitle = user.mainTitle || '🌱 Новичок';
+  const currentTitle = titlesList.find(t => t.name === mainTitle);
+  const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
   
   return {
     magnuStarsoins: totalSpeedStars * titleBonus,
@@ -3153,6 +3247,7 @@ async function processMiningRewards() {
   try {
     console.log('⛏️ Обработка пассивных наград майнинга...');
     
+    const currentSeason = getCurrentMiningSeason();
     if (!currentSeason.isActive) {
       console.log('📅 Майнинг приостановлен - выходные');
       return;
@@ -3169,13 +3264,17 @@ async function processMiningRewards() {
     
     for (const user of users) {
       try {
+        const userWithMining = initializeNewMiningSystem(user);
+        const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
         const totalSpeedSum = totalSpeed.stars + totalSpeed.stars;
         if (totalSpeedSum > 0) {
+          const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
           const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
           
           if (timeDiff >= config.MINING_REWARD_INTERVAL) {
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             // Обновляем статистику
@@ -3219,12 +3318,15 @@ async function processMiningRewards() {
 // Функция для покупки майнера
 async function buyMiner(user, minerType) {
   try {
+    const minerConfig = config.MINERS[minerType];
     if (!minerConfig) {
       return { success: false, message: '❌ Майнер не найден' };
     }
     
+    const userWithMining = initializeNewMiningSystem(user);
     
     // Проверяем баланс
+    const userBalance = userWithMining[minerConfig.currency];
     if (userBalance < minerConfig.price) {
       return { 
         success: false, 
@@ -3270,6 +3372,7 @@ async function buyMiner(user, minerType) {
     );
     
     // Принудительно сохраняем пользователя
+    const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
     if (updatedUser) {
       await forceSaveUser(updatedUser);
     }
@@ -3290,11 +3393,14 @@ async function buyMiner(user, minerType) {
 // Функция для апгрейда майнера
 async function upgradeMiner(user, minerType) {
   try {
+    const userWithMining = initializeNewMiningSystem(user);
+    const miner = userWithMining.miners.find(m => m.type === minerType);
     
     if (!miner) {
       return { success: false, message: '❌ Майнер не найден' };
     }
     
+    const upgradeCost = miner.level * 50; // Стоимость апгрейда растет с уровнем
     
     if (userWithMining.magnuStarsoins < upgradeCost) {
       return { success: false, message: '❌ Недостаточно Stars для апгрейда' };
@@ -3313,6 +3419,7 @@ async function upgradeMiner(user, minerType) {
     );
     
     // Принудительно сохраняем пользователя
+    const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
     if (updatedUser) {
       await forceSaveUser(updatedUser);
     }
@@ -3333,10 +3440,12 @@ async function upgradeMiner(user, minerType) {
 // Функции отображения новых меню майнинга
 async function showMinerShop(ctx, user, minerIndex = 0) {
   try {
+    const userWithMining = initializeNewMiningSystem(user);
     
     // Получаем список всех типов майнеров
     const minerTypes = Object.keys(config.MINERS);
     const currentMinerType = minerTypes[minerIndex];
+    const minerConfig = config.MINERS[currentMinerType];
     
     if (!minerConfig) {
       await ctx.answerCbQuery('❌ Майнер не найден');
@@ -3356,6 +3465,7 @@ async function showMinerShop(ctx, user, minerIndex = 0) {
     const remainingSlots = 5 - userCount;
     
     // Создаем клавиатуру с навигацией
+    const keyboard = [];
     
     // Кнопки навигации
     const navRow = [];
@@ -3385,6 +3495,8 @@ async function showMinerShop(ctx, user, minerIndex = 0) {
     keyboard.push([Markup.button.callback('🔙 Назад', 'miner')]);
     
     // Формируем сообщение
+    const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
+    const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'Stars';
     const priceSymbol = minerConfig.currency === 'magnuStarsoins' ? 'Stars' : '⭐';
     
     let message = `🛒 *Магазин майнеров*\n\n`;
@@ -3421,6 +3533,7 @@ async function showMinerShop(ctx, user, minerIndex = 0) {
 
 async function showMinerUpgrades(ctx, user) {
   try {
+    const userWithMining = initializeNewMiningSystem(user);
     
     let keyboardButtons = [
       [Markup.button.callback('🔙 Назад', 'miner')]
@@ -3436,9 +3549,13 @@ async function showMinerUpgrades(ctx, user) {
       message += `📦 *Ваши майнеры:*\n\n`;
       
       for (const miner of userWithMining.miners) {
+        const minerConfig = config.MINERS[miner.type];
         if (minerConfig) {
           const currentSpeed = minerConfig.baseSpeed * (1 + (miner.level - 1) * 0.2);
           const nextLevelSpeed = minerConfig.baseSpeed * (1 + miner.level * 0.2);
+          const upgradeCost = miner.level * 50;
+          const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
+          const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'Stars';
           
           message += `🔸 *${minerConfig.name}*\n`;
           message += `├ Уровень: ${miner.level}\n`;
@@ -3464,6 +3581,7 @@ async function showMinerUpgrades(ctx, user) {
     message += `├ Стоимость растет с уровнем\n`;
     message += `└ Апгрейд применяется ко всем майнерам этого типа`;
     
+    const keyboard = Markup.inlineKeyboard(keyboardButtons);
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -3477,7 +3595,9 @@ async function showMinerUpgrades(ctx, user) {
 
 async function showMinerLeaderboard(ctx, user) {
   try {
+    const currentSeason = getCurrentMiningSeason();
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🏆 Общий рейтинг', 'miner_leaderboard_total'),
         Markup.button.callback('📅 Сезонный рейтинг', 'miner_leaderboard_season')
@@ -3513,6 +3633,9 @@ async function showMinerLeaderboard(ctx, user) {
     
     message += `\n📅 *Топ-5 сезона ${currentSeason.season}:*\n`;
     for (let i = 0; i < Math.min(5, topSeason.length); i++) {
+      const player = topSeason[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
       message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedStars || 0)} Stars\n`;
     }
     
@@ -3534,10 +3657,12 @@ async function showMinerLeaderboard(ctx, user) {
 // Функция для отображения общего рейтинга
 async function showMinerLeaderboardTotal(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к рейтингу', 'miner_leaderboard')]
     ]);
     
     // Получаем топ-20 игроков по общему майнингу
+    const topTotal = await db.collection('users')
       .find({ 'miningStats.totalMinedStars': { $exists: true } })
       .sort({ 'miningStats.totalMinedStars': -1 })
       .limit(20)
@@ -3546,6 +3671,10 @@ async function showMinerLeaderboardTotal(ctx, user) {
     let message = `🏆 *Общий рейтинг майнинга*\n\n`;
     
     for (let i = 0; i < topTotal.length; i++) {
+      const player = topTotal[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      const totalStars = player.miningStats?.totalMinedStars || 0;
       const totalStars = player.miningStats?.totalMinedStars || 0;
       message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
       message += `   💎 ${formatNumber(totalStars)} Stars | ⭐ ${formatNumber(totalStars)} Stars\n`;
@@ -3564,10 +3693,13 @@ async function showMinerLeaderboardTotal(ctx, user) {
 // Функция для отображения сезонного рейтинга
 async function showMinerLeaderboardSeason(ctx, user) {
   try {
+    const currentSeason = getCurrentMiningSeason();
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к рейтингу', 'miner_leaderboard')]
     ]);
     
     // Получаем топ-20 игроков по сезонному майнингу
+    const topSeason = await db.collection('users')
       .find({ 'miningStats.seasonMinedStars': { $exists: true } })
       .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(20)
@@ -3577,6 +3709,10 @@ async function showMinerLeaderboardSeason(ctx, user) {
     message += `📊 День сезона: ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\n\n`;
     
     for (let i = 0; i < topSeason.length; i++) {
+      const player = topSeason[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
+      const seasonStars = player.miningStats?.seasonMinedStars || 0;
       const seasonStars = player.miningStats?.seasonMinedStars || 0;
       message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
       message += `   💎 ${formatNumber(seasonStars)} Stars | ⭐ ${formatNumber(seasonStars)} Stars\n`;
@@ -3612,6 +3748,7 @@ function getRarityEmoji(rarity) {
 async function showWithdrawalMenu(ctx, user) {
   const withdrawal = user.withdrawal || { withdrawalCount: 0, totalWithdrawn: 0 };
   
+  const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('💰 Вывести Stars', 'withdrawal_Stars'),
       Markup.button.callback('⭐ Вывести Stars', 'withdrawal_stars')
@@ -3623,6 +3760,7 @@ async function showWithdrawalMenu(ctx, user) {
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
+  const message = 
     `💰 *Вывод средств*\n\n` +
     `💎 *Доступно для вывода:*\n` +
     `├ Stars: ${formatNumber(user.magnuStarsoins)}\n` +
@@ -3663,25 +3801,37 @@ async function updateMinerMenu(ctx, user) {
       };
     }
   
+  const miner = user.miner;
+  const isActive = miner.active || false;
+  const efficiency = miner.efficiency || 1;
   
   // Получаем информацию о текущем сезоне
+  const currentSeason = getCurrentMiningSeason();
+  const seasonInfo = currentSeason ? 
     `\n📅 *Сезон ${currentSeason.season}* (День ${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION})\n` +
     `📈 *Множитель сезона:* ${currentSeason.multiplier.toFixed(2)}x\n` +
     `⏰ *До следующего сезона:* ${currentSeason.daysUntilNextSeason} дней` :
     `\n📅 *Выходные* - майнинг приостановлен`;
   
   // Рассчитываем текущую награду с учетом сезона
+  const baseReward = await calculateMinerReward(efficiency, user);
   const seasonMultiplier = currentSeason ? currentSeason.multiplier : 0;
+  const currentReward = baseReward * seasonMultiplier;
+  const rewardPerMinute = currentReward;
+  const rewardPerHour = currentReward * 60;
   
   let statusText = isActive ? '🟢 Активен' : '🔴 Неактивен';
   let lastRewardText = '';
   
   if (miner.lastReward) {
+    const timeSince = Math.floor((Date.now() - miner.lastReward.getTime()) / 1000);
     if (timeSince < 60) {
+      const remaining = 60 - timeSince;
       lastRewardText = `\n⏰ Следующая награда через: ${formatTime(remaining)}`;
     }
   }
   
+  const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback(
         isActive ? '⏹️ Остановить майнер' : '▶️ Запустить майнер',
@@ -3695,7 +3845,13 @@ async function updateMinerMenu(ctx, user) {
   ]);
   
   // Получаем информацию о титуле
+  const titlesList = getTitlesList(user);
+  const mainTitle = user.mainTitle || '🌱 Новичок';
+  const currentTitle = titlesList.find(t => t.name === mainTitle);
+  const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
+  const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
+  const message = 
     `⛏️ *Майнер*\n\n` +
     `📊 *Статус:* ${statusText}\n` +
     `📈 *Уровень:* ${miner.level || 1}\n` +
@@ -3741,6 +3897,7 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
         clearInterval(global[countdownKey]);
         delete global[countdownKey];
         
+        const updatedUser = await getUser(ctx.from.id);
         if (updatedUser) {
           await updateBonusMenu(ctx, updatedUser);
           log(`🔄 Обратный отсчет бонуса завершен для пользователя ${user.id}`);
@@ -3748,8 +3905,10 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
         return;
       }
       // Обновляем меню с текущим временем
+      const updatedUser = await getUser(ctx.from.id);
       if (updatedUser) {
         const bonus = updatedUser.dailyBonus;
+        const now = new Date();
         const lastBonus = bonus.lastBonus;
         
         let canClaim = false;
@@ -3758,6 +3917,7 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
         if (!lastBonus) {
           canClaim = true;
         } else {
+          const timeSince = now.getTime() - lastBonus.getTime();
           const dayInMs = 24 * 60 * 60 * 1000;
           
           if (timeSince >= dayInMs) {
@@ -3767,9 +3927,11 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
           }
         }
         
+        const baseReward = config.DAILY_BONUS_BASE;
         const streakBonus = Math.min(bonus.streak * 0.5, 5);
         const totalReward = baseReward + streakBonus;
         
+        const keyboard = Markup.inlineKeyboard([
           [
             Markup.button.callback(
               canClaim ? '🎁 Получить бонус' : `⏳ ${formatTime(Math.floor(secondsLeft / 1000))}`,
@@ -3783,6 +3945,7 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
           [Markup.button.callback('🔙 Назад', 'main_menu')]
         ]);
         
+        const message = 
           `🎁 *Ежедневный бонус*\n\n` +
           `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
           `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
@@ -3821,6 +3984,7 @@ async function showAdminRanksMenu(ctx, user) {
   try {
     log(`⭐ Показ управления рангами для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('⭐ Выдать ранг', 'admin_give_rank')
       ],
@@ -3832,6 +3996,7 @@ async function showAdminRanksMenu(ctx, user) {
       ]
     ]);
     
+    const message = 
       `⭐ *Управление рангами*\n\n` +
       `Здесь вы можете управлять рангами пользователей.\n\n` +
       `📋 *Доступные функции:*\n` +
@@ -3863,6 +4028,7 @@ async function showAdminTitles(ctx, user) {
   try {
     log(`👑 Показ управления титулами для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('➕ Выдать титул', 'admin_give_title'),
         Markup.button.callback('➖ Забрать титул', 'admin_remove_title')
@@ -3874,6 +4040,7 @@ async function showAdminTitles(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const message = 
       `👑 *Управление титулами*\n\n` +
       `Здесь вы можете управлять титулами пользователей\n\n` +
       `🎯 *Доступные действия:*\n` +
@@ -3905,6 +4072,7 @@ async function showAdminPosts(ctx, user) {
   try {
     log(`📝 Показ управления постами для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('📝 Создать пост с кнопкой', 'admin_create_post_with_button'),
         Markup.button.callback('📝 Создать пост без кнопки', 'admin_create_post_no_button')
@@ -3917,6 +4085,7 @@ async function showAdminPosts(ctx, user) {
       ]
     ]);
     
+    const message = 
       `📝 *Управление постами*\n\n` +
       `Здесь вы можете создавать посты в канал @magnumtap\n\n` +
       `🎯 *Доступные действия:*\n` +
@@ -3942,6 +4111,7 @@ async function handleAdminGiveTitle(ctx, user, text) {
       return;
     }
     
+    const userId = parseInt(parts[0]);
     const titleName = parts.slice(1).join(' ');
     
     if (isNaN(userId)) {
@@ -3994,11 +4164,14 @@ async function handleAdminGiveTitle(ctx, user, text) {
 // Функция для забора титула у пользователя
 async function handleAdminRemoveTitle(ctx, user, text) {
   try {
+    const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
       await ctx.reply('❌ Формат: ID_пользователя Название_титула\n\nПример: 123456789 🌱 Новичок');
       return;
     }
     
+    const userId = parseInt(parts[0]);
+    const titleName = parts.slice(1).join(' ');
     
     if (isNaN(userId)) {
       await ctx.reply('❌ Неверный ID пользователя');
@@ -4006,12 +4179,14 @@ async function handleAdminRemoveTitle(ctx, user, text) {
     }
     
     // Получаем пользователя
+    const targetUser = await getUser(userId);
     if (!targetUser) {
       await ctx.reply('❌ Пользователь не найден');
       return;
     }
     
     // Проверяем, есть ли такой титул
+    const userTitles = targetUser.titles || [];
     if (!userTitles.includes(titleName)) {
       await ctx.reply(`❌ У пользователя ${targetUser.firstName || targetUser.username || userId} нет титула ${titleName}`);
       return;
@@ -4067,6 +4242,7 @@ async function showAdminPromocodes(ctx, user) {
     const activePromocodes = promocodes.filter(p => p.activations > 0).length;
     const totalActivations = promocodes.reduce((sum, p) => sum + (p.totalActivations || 0), 0);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🔑 Создать ключ', 'admin_create_promocode')
       ],
@@ -4078,6 +4254,7 @@ async function showAdminPromocodes(ctx, user) {
       ]
     ]);
     
+    const message = 
       `🔑 *Управление ключами*\n\n` +
       `Здесь вы можете создавать и управлять ключами\n\n` +
       `📊 *Статистика:*\n` +
@@ -4117,6 +4294,7 @@ async function showPromocodeMenu(ctx, user) {
     const usedToday = todayPromocodes.length;
     const remainingToday = Math.max(0, 10 - usedToday);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🔑 Активировать ключ', 'enter_promocode')
       ],
@@ -4128,6 +4306,7 @@ async function showPromocodeMenu(ctx, user) {
       ]
     ]);
     
+    const message = 
       `🔑 *Ключи*\n\n` +
       `Введите ключ и получите ценные награды!\n` +
       `Каждый ключ открывает сундук случайного уровня:\n` +
@@ -4154,6 +4333,9 @@ async function showPromocodeMenu(ctx, user) {
 }
 
 async function showBonusMenu(ctx, user) {
+  const bonus = user.dailyBonus;
+  const now = new Date();
+  const lastBonus = bonus.lastBonus;
   
   let canClaim = false;
   let timeUntilNext = 0;
@@ -4161,6 +4343,8 @@ async function showBonusMenu(ctx, user) {
   if (!lastBonus) {
     canClaim = true;
   } else {
+    const timeSince = now.getTime() - lastBonus.getTime();
+    const dayInMs = 24 * 60 * 60 * 1000;
     
     if (timeSince >= dayInMs) {
       canClaim = true;
@@ -4169,7 +4353,11 @@ async function showBonusMenu(ctx, user) {
     }
   }
   
+  const baseReward = config.DAILY_BONUS_BASE;
+  const streakBonus = Math.min(bonus.streak * 0.5, 5);
+  const totalReward = baseReward + streakBonus;
   
+  const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback(
         canClaim ? '🎁 Получить бонус' : `⏳ ${formatTime(Math.floor(timeUntilNext / 1000))}`,
@@ -4183,6 +4371,7 @@ async function showBonusMenu(ctx, user) {
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
+  const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
     `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
@@ -4201,6 +4390,9 @@ async function updateBonusMenu(ctx, user) {
   try {
     log(`🔄 Обновление меню бонуса для пользователя ${user.id}`);
     
+    const bonus = user.dailyBonus;
+    const now = new Date();
+    const lastBonus = bonus.lastBonus;
   
   let canClaim = false;
   let timeUntilNext = 0;
@@ -4208,6 +4400,8 @@ async function updateBonusMenu(ctx, user) {
   if (!lastBonus) {
     canClaim = true;
   } else {
+    const timeSince = now.getTime() - lastBonus.getTime();
+    const dayInMs = 24 * 60 * 60 * 1000;
     
     if (timeSince >= dayInMs) {
       canClaim = true;
@@ -4216,7 +4410,11 @@ async function updateBonusMenu(ctx, user) {
     }
   }
   
+  const baseReward = config.DAILY_BONUS_BASE;
+  const streakBonus = Math.min(bonus.streak * 0.5, 5);
+  const totalReward = baseReward + streakBonus;
   
+  const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback(
         canClaim ? '🎁 Получить бонус' : `⏳ ${formatTime(Math.floor(timeUntilNext / 1000))}`,
@@ -4230,6 +4428,7 @@ async function updateBonusMenu(ctx, user) {
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
   
+  const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
     `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
@@ -4256,12 +4455,18 @@ async function claimBonus(ctx, user) {
   try {
     log(`🎁 Попытка получения бонуса для пользователя ${user.id}`);
     
+    const bonus = user.dailyBonus;
+    const now = new Date();
+    const lastBonus = bonus.lastBonus;
     
     if (lastBonus) {
+      const timeSince = now.getTime() - lastBonus.getTime();
+      const dayInMs = 24 * 60 * 60 * 1000;
       
       log(`⏰ Время с последнего бонуса: ${Math.floor(timeSince / 1000)}с`);
       
           if (timeSince < dayInMs) {
+      const remaining = dayInMs - timeSince;
       log(`⏳ Кулдаун бонуса для пользователя ${user.id}, осталось: ${Math.floor(remaining / 1000)}с`);
       await ctx.answerCbQuery(`⏳ Подождите ${formatTime(Math.floor(remaining / 1000))} до следующего бонуса!`);
       
@@ -4272,12 +4477,16 @@ async function claimBonus(ctx, user) {
     }
     }
     
+    const baseReward = config.DAILY_BONUS_BASE;
+    const streakBonus = Math.min(bonus.streak * 0.5, 5);
+    const totalReward = baseReward + streakBonus;
     
     log(`💰 Расчет бонуса: базовая ${baseReward}, серия ${bonus.streak}, бонус серии ${streakBonus}, итого ${totalReward} Stars`);
     
     // Проверяем, не пропустил ли день
     let newStreak = bonus.streak + 1;
     if (lastBonus) {
+      const timeSince = now.getTime() - lastBonus.getTime();
       const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
       if (timeSince > twoDaysInMs) {
         newStreak = 1; // Сбрасываем серию
@@ -4311,6 +4520,7 @@ async function claimBonus(ctx, user) {
     userCache.delete(user.id);
     
     // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
     if (updatedUser) {
       const levelResult = await checkAndUpdateLevel(updatedUser);
       if (levelResult.levelUp) {
@@ -4339,6 +4549,7 @@ async function showBonusStats(ctx, user) {
   try {
     log(`📊 Показ статистики бонуса для пользователя ${user.id}`);
     
+    const bonus = user.dailyBonus;
     const totalEarned = bonus.totalEarned || 0;
     const claimedCount = bonus.claimedCount || 0;
     const maxStreak = bonus.maxStreak || 0;
@@ -4346,9 +4557,11 @@ async function showBonusStats(ctx, user) {
     
     const averageReward = claimedCount > 0 ? totalEarned / claimedCount : 0;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'bonus')]
     ]);
     
+    const message = 
       `📊 *Статистика бонусов*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Получено бонусов: \`${claimedCount}\`\n` +
@@ -4380,15 +4593,23 @@ async function showBonusStreak(ctx, user) {
   try {
     log(`🔥 Показ серии бонусов для пользователя ${user.id}`);
     
+    const bonus = user.dailyBonus;
+    const currentStreak = bonus.streak || 0;
+    const maxStreak = bonus.maxStreak || 0;
+    const lastBonus = bonus.lastBonus;
     
     // Рассчитываем время до следующего бонуса
     let timeUntilNext = 0;
     if (lastBonus) {
+      const now = new Date();
+      const timeSince = now.getTime() - lastBonus.getTime();
+      const dayInMs = 24 * 60 * 60 * 1000;
       timeUntilNext = Math.max(0, dayInMs - timeSince);
     }
     
     const canClaim = timeUntilNext === 0;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
           canClaim ? '🎁 Получить бонус' : `⏳ ${formatTime(Math.floor(timeUntilNext / 1000))}`,
@@ -4398,6 +4619,7 @@ async function showBonusStreak(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'bonus')]
     ]);
     
+    const message = 
       `🔥 *Серия бонусов*\n\n` +
       `📊 *Ваша серия:*\n` +
       `├ Текущая серия: \`${currentStreak}\` дней\n` +
@@ -4428,6 +4650,7 @@ async function showAdminPanel(ctx, user) {
   try {
     log(`👨‍💼 Показ админ панели для пользователя ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('📊 Статистика бота', 'admin_stats'),
         Markup.button.callback('👥 Управление пользователями', 'admin_users')
@@ -4465,6 +4688,7 @@ async function showAdminPanel(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
+    const message = 
       `👨‍💼 *Админ панель*\n\n` +
       `Добро пожаловать в панель администратора!\n\n` +
       `🔧 *Доступные функции:*\n` +
@@ -4513,15 +4737,18 @@ async function showAdminStats(ctx, user) {
       { $group: { _id: null, total: { $sum: '$magnuStarsoins' } } }
     ]).toArray();
     
+    const totalStars = await db.collection('users').aggregate([
       { $group: { _id: null, total: { $sum: '$stars' } } }
     ]).toArray();
     
     const totalMagnum = totalMagnuStarsoins.length > 0 ? totalMagnuStarsoins[0].total : 0;
     const totalStarsAmount = totalStars.length > 0 ? totalStars[0].total : 0;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const message = 
       `📊 *Статистика бота*\n\n` +
       `👥 *Пользователи:*\n` +
       `├ Всего пользователей: \`${totalUsers}\`\n` +
@@ -4550,6 +4777,7 @@ async function showAdminUsers(ctx, user) {
   try {
     log(`👥 Показ управления пользователями для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🔍 Поиск пользователя', 'admin_search_user'),
         Markup.button.callback('📊 Топ пользователей', 'admin_top_users')
@@ -4561,6 +4789,7 @@ async function showAdminUsers(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const message = 
       `👥 *Управление пользователями*\n\n` +
       `🔧 *Доступные действия:*\n` +
       `├ 🔍 Поиск пользователя - найти по ID\n` +
@@ -4585,6 +4814,7 @@ async function showAdminBalance(ctx, user) {
   try {
     log(`💰 Показ управления балансами для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('➕ Добавить Stars', 'admin_add_magnum'),
         Markup.button.callback('➖ Убрать Stars', 'admin_remove_magnum')
@@ -4600,6 +4830,7 @@ async function showAdminBalance(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const message = 
       `💰 *Управление балансами*\n\n` +
       `🔧 *Доступные действия:*\n` +
       `├ ➕ Добавить Stars - пополнить баланс\n` +
@@ -4628,9 +4859,14 @@ async function showAdminReserve(ctx, user) {
     log(`🏦 Показ управления резервом для админа ${user.id}`);
     
     // Получаем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
     // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('➕ Добавить Stars', 'admin_reserve_add_Stars'),
         Markup.button.callback('➖ Убрать Stars', 'admin_reserve_remove_Stars')
@@ -4646,6 +4882,7 @@ async function showAdminReserve(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const message = 
       `🏦 *Управление резервом биржи*\n\n` +
       `💰 *Текущий резерв:*\n` +
       `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
@@ -4682,6 +4919,7 @@ async function showAdminVoting(ctx, user) {
     const totalVotings = await db.collection('votings').countDocuments();
     const totalVotes = await db.collection('votes').countDocuments();
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('➕ Создать голосование', 'admin_voting_create'),
         Markup.button.callback('📊 Активные голосования', 'admin_voting_active')
@@ -4697,6 +4935,7 @@ async function showAdminVoting(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const message = 
       `🗳️ *Управление голосованием*\n\n` +
       `📊 *Статистика:*\n` +
       `├ Всего голосований: \`${totalVotings}\`\n` +
@@ -4725,9 +4964,11 @@ async function showAdminVoting(ctx, user) {
 // ==================== ДЕТАЛЬНЫЕ ФУНКЦИИ ГОЛОСОВАНИЯ ====================
 async function showAdminVotingCreate(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_voting')]
     ]);
     
+    const message = 
       `➕ *Создание нового голосования*\n\n` +
       `📝 *Формат создания:*\n` +
       `├ Название: "Название голосования"\n` +
@@ -4763,6 +5004,7 @@ async function showAdminVotingCreate(ctx, user) {
 async function showAdminVotingActive(ctx, user) {
   try {
     // Получаем активные голосования
+    const activeVotings = await db.collection('votings').find({ 
       isActive: true 
     }).toArray();
     
@@ -4772,6 +5014,8 @@ async function showAdminVotingActive(ctx, user) {
       message += `❌ Активных голосований нет\n\n`;
     } else {
       activeVotings.forEach((voting, index) => {
+        const endDate = new Date(voting.endDate);
+        const now = new Date();
         const timeLeft = endDate.getTime() - now.getTime();
         const daysLeft = Math.ceil(timeLeft / (1000 * 60 * 60 * 24));
         
@@ -4782,6 +5026,7 @@ async function showAdminVotingActive(ctx, user) {
       });
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('📈 Детали голосования', 'admin_voting_details'),
         Markup.button.callback('⏹️ Остановить голосование', 'admin_voting_stop')
@@ -4802,6 +5047,9 @@ async function showAdminVotingActive(ctx, user) {
 async function showAdminVotingStats(ctx, user) {
   try {
     // Получаем статистику голосований
+    const totalVotings = await db.collection('votings').countDocuments();
+    const activeVotings = await db.collection('votings').countDocuments({ isActive: true });
+    const totalVotes = await db.collection('votes').countDocuments();
     
     // Получаем топ голосований по количеству голосов
     const topVotings = await db.collection('votings')
@@ -4826,6 +5074,7 @@ async function showAdminVotingStats(ctx, user) {
       });
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_voting')]
     ]);
     
@@ -4840,6 +5089,7 @@ async function showAdminVotingStats(ctx, user) {
 
 async function showAdminVotingSettings(ctx, user) {
   try {
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('⏰ Настройка времени', 'admin_voting_time_settings'),
         Markup.button.callback('👥 Настройка доступа', 'admin_voting_access_settings')
@@ -4851,6 +5101,7 @@ async function showAdminVotingSettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_voting')]
     ]);
     
+    const message = 
       `⚙️ *Настройки голосования*\n\n` +
       `🔧 *Доступные настройки:*\n` +
       `├ ⏰ Настройка времени - длительность голосований\n` +
@@ -4887,6 +5138,7 @@ async function showAdminVotingDelete(ctx, user) {
       });
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🗑️ Удалить по ID', 'admin_voting_delete_by_id'),
         Markup.button.callback('🗑️ Удалить все', 'admin_voting_delete_all')
@@ -4921,6 +5173,7 @@ async function showAdminVotingHistory(ctx, user) {
       message += `❌ Завершенных голосований нет\n\n`;
     } else {
       finishedVotings.forEach((voting, index) => {
+        const endDate = new Date(voting.endDate);
         message += `${index + 1}. *${voting.title}*\n`;
         message += `├ 👥 Голосов: ${voting.totalVotes || 0}\n`;
         message += `├ 📅 Завершено: ${endDate.toLocaleDateString()}\n`;
@@ -4928,6 +5181,7 @@ async function showAdminVotingHistory(ctx, user) {
       });
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_voting')]
     ]);
     
@@ -4948,6 +5202,7 @@ async function showAdminDebugRanks(ctx, user) {
     log(`🔍 Показ отладки рангов для админа ${user.id}`);
     
     // Получаем статистику по рангам
+    const ranks = getRankRequirements();
     const rankStats = [];
     
     for (const rank of ranks) {
@@ -4955,6 +5210,7 @@ async function showAdminDebugRanks(ctx, user) {
       rankStats.push({ ...rank, count });
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔍 Проверить пользователя', 'admin_debug_user_rank')],
       [Markup.button.callback('📊 Статистика рангов', 'admin_rank_stats')],
       [Markup.button.callback('🧪 Тест прогресса', 'admin_test_progress')],
@@ -4997,6 +5253,7 @@ async function showAdminTestProgress(ctx, user) {
   try {
     log(`🧪 Показ теста прогресса рангов для админа ${user.id}`);
     
+    const ranks = getRankRequirements();
     let message = `🧪 *Тест расчета прогресса рангов*\n\n`;
     
     // Тестируем разные уровни
@@ -5006,6 +5263,7 @@ async function showAdminTestProgress(ctx, user) {
     
     for (const level of testLevels) {
       const testUser = { id: 'test', level: level };
+      const rankProgress = await getRankProgress(testUser);
       
       if (rankProgress.isMax) {
         message += `├ Уровень ${level}: ${rankProgress.current.name} (Максимальный ранг)\n`;
@@ -5024,6 +5282,7 @@ async function showAdminTestProgress(ctx, user) {
     
     message += `🎯 Выберите действие:`;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
     ]);
     
@@ -5055,6 +5314,7 @@ async function showAdminForceLevelCheck(ctx, user) {
     
     for (const dbUser of allUsers) {
       try {
+        const levelResult = await checkAndUpdateLevel(dbUser);
         if (levelResult.levelUp) {
           levelUpCount++;
           log(`🎉 Пользователь ${dbUser.id} повысил уровень до ${levelResult.newLevel}!`);
@@ -5080,6 +5340,7 @@ async function showAdminForceLevelCheck(ctx, user) {
     message += `🎉 Повысили уровень: ${levelUpCount} пользователей\n\n`;
     message += `🎯 Выберите действие:`;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
     ]);
     
@@ -5119,8 +5380,10 @@ async function showAdminAddExperience(ctx, user) {
     userCache.delete(user.id);
     
     // Получаем обновленного пользователя
+    const updatedUser = await getUser(user.id);
     
     // Проверяем и обновляем уровень
+    const levelResult = await checkAndUpdateLevel(updatedUser);
     
     let message = `🎯 *Добавление опыта*\n\n`;
     message += `✅ Добавлено ${experienceToAdd} опыта\n\n`;
@@ -5136,6 +5399,7 @@ async function showAdminAddExperience(ctx, user) {
     message += `└ Прогресс до следующего уровня: ${Math.round((updatedUser.experience / updatedUser.experienceToNextLevel) * 100)}%\n\n`;
     message += `🎯 Выберите действие:`;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🎯 Добавить еще опыт', 'admin_add_experience')],
       [Markup.button.callback('🔙 Назад', 'admin_debug_ranks')]
     ]);
@@ -5200,6 +5464,7 @@ async function handleAdminAddReserveStars(ctx, user, text) {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
     ]);
     
@@ -5222,6 +5487,7 @@ async function handleAdminAddReserveStars(ctx, user, text) {
 }
 async function handleAdminRemoveReserveStars(ctx, user, text) {
   try {
+    const amount = parseFloat(text);
     
     if (isNaN(amount) || amount <= 0) {
       await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
@@ -5229,6 +5495,7 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     }
     
     // Проверяем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
     const currentReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     
     if (amount > currentReserve) {
@@ -5259,6 +5526,8 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     statsCache.delete('reserve');
     
     // Получаем обновленный резерв для расчета нового курса
+    const updatedReserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
     
     // Сохраняем историю изменения курса
     await db.collection('exchangeHistory').insertOne({
@@ -5281,6 +5550,7 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
     ]);
     
@@ -5304,6 +5574,7 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
 
 async function handleAdminAddReserveStars(ctx, user, text) {
   try {
+    const amount = parseFloat(text);
     
     if (isNaN(amount) || amount <= 0) {
       await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
@@ -5324,6 +5595,8 @@ async function handleAdminAddReserveStars(ctx, user, text) {
     statsCache.delete('reserve');
     
     // Получаем обновленный резерв для расчета нового курса
+    const updatedReserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
     
     // Сохраняем историю изменения курса
     await db.collection('exchangeHistory').insertOne({
@@ -5346,6 +5619,7 @@ async function handleAdminAddReserveStars(ctx, user, text) {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
     ]);
     
@@ -5368,6 +5642,7 @@ async function handleAdminAddReserveStars(ctx, user, text) {
 }
 async function handleAdminRemoveReserveStars(ctx, user, text) {
   try {
+    const amount = parseFloat(text);
     
     if (isNaN(amount) || amount <= 0) {
       await ctx.reply('❌ Некорректная сумма. Введите положительное число.');
@@ -5375,6 +5650,8 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     }
     
     // Проверяем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const currentReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
     if (amount > currentReserve) {
       await ctx.reply(`❌ Недостаточно Stars в резерве. Доступно: ${formatNumber(currentReserve)}`);
@@ -5394,6 +5671,8 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     statsCache.delete('reserve');
     
     // Получаем обновленный резерв для расчета нового курса
+    const updatedReserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
     
     // Сохраняем историю изменения курса
     await db.collection('exchangeHistory').insertOne({
@@ -5416,6 +5695,7 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад в управление резервом', 'admin_reserve')]
     ]);
     
@@ -5440,6 +5720,7 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
 // Функция установки комиссии
 async function handleAdminSetCommission(ctx, user, text) {
   try {
+    const commission = parseFloat(text);
     
     if (isNaN(commission) || commission < 0 || commission > 10) {
       await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 10.');
@@ -5457,6 +5738,7 @@ async function handleAdminSetCommission(ctx, user, text) {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад в управление комиссией', 'admin_exchange_commission')]
     ]);
     
@@ -5484,6 +5766,7 @@ async function handleAdminSetCommission(ctx, user, text) {
 // Функция установки комиссии вывода
 async function handleAdminSetWithdrawalCommission(ctx, user, text) {
   try {
+    const commission = parseFloat(text);
     
     if (isNaN(commission) || commission < 0 || commission > 10) {
       await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 10.');
@@ -5501,6 +5784,7 @@ async function handleAdminSetWithdrawalCommission(ctx, user, text) {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад в управление комиссией', 'admin_withdrawal_commission')]
     ]);
     
@@ -5529,6 +5813,7 @@ async function showAdminSettings(ctx, user) {
   try {
     log(`⚙️ Показ настроек бота для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
 
         Markup.button.callback('⏰ Кулдауны', 'admin_cooldowns')
@@ -5547,6 +5832,7 @@ async function showAdminSettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const message = 
       `⚙️ *Настройки бота*\n\n` +
       `🔧 *Текущие настройки:*\n` +
 
@@ -5575,6 +5861,7 @@ async function showAdminExchangeCommission(ctx, user) {
   try {
     log(`💸 Показ управления комиссией обмена для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('➕ Увеличить комиссию', 'admin_commission_increase'),
         Markup.button.callback('➖ Уменьшить комиссию', 'admin_commission_decrease')
@@ -5586,6 +5873,7 @@ async function showAdminExchangeCommission(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_settings')]
     ]);
     
+    const message = 
       `💸 *Комиссия обмена*\n\n` +
       `💰 *Текущие настройки:*\n` +
       `├ Текущая комиссия: \`${config.EXCHANGE_COMMISSION}%\`\n` +
@@ -5618,6 +5906,7 @@ async function showAdminWithdrawalCommission(ctx, user) {
   try {
     log(`💰 Показ управления комиссией вывода для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('➕ Увеличить комиссию', 'admin_withdrawal_commission_increase'),
         Markup.button.callback('➖ Уменьшить комиссию', 'admin_withdrawal_commission_decrease')
@@ -5629,8 +5918,10 @@ async function showAdminWithdrawalCommission(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const commission = config.WITHDRAWAL_COMMISSION || 5.0;
     const commissionDecimal = commission / 100;
     
+    const message = 
       `💰 *Комиссия вывода*\n\n` +
       `💸 *Текущие настройки:*\n` +
       `├ Текущая комиссия: \`${commission}%\`\n` +
@@ -5672,6 +5963,7 @@ async function showAdminCooldowns(ctx, user) {
   try {
     log(`⏰ Показ настроек кулдаунов для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
 
         Markup.button.callback('🎁 Кулдаун бонуса', 'admin_cooldown_bonus')
@@ -5683,6 +5975,7 @@ async function showAdminCooldowns(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_settings')]
     ]);
     
+    const message = 
       `⏰ *Кулдауны*\n\n` +
       `⏳ *Текущие настройки:*\n` +
       `├ Ежедневный бонус: \`24\` часа\n` +
@@ -5707,6 +6000,7 @@ async function showAdminDailyBonus(ctx, user) {
   try {
     log(`🎁 Показ настроек ежедневного бонуса для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('💰 Базовая награда', 'admin_bonus_base'),
         Markup.button.callback('🔥 Бонус серии', 'admin_bonus_streak')
@@ -5718,6 +6012,7 @@ async function showAdminDailyBonus(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_settings')]
     ]);
     
+    const message = 
       `🎁 *Ежедневный бонус*\n\n` +
       `💰 *Текущие настройки:*\n` +
       `├ Базовая награда: \`${config.DAILY_BONUS_BASE}\` Stars\n` +
@@ -5746,7 +6041,9 @@ async function showAdminMiningSeasons(ctx, user) {
   try {
     log(`📅 Показ управления сезонами майнинга для админа ${user.id}`);
     
+    const currentSeason = getCurrentMiningSeason();
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🚀 Запустить новый сезон', 'admin_season_start'),
         Markup.button.callback('⏹️ Завершить сезон', 'admin_season_end')
@@ -5762,6 +6059,7 @@ async function showAdminMiningSeasons(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_miner_settings')]
     ]);
     
+    const message = 
       `📅 *Управление сезонами майнинга*\n\n` +
       `🎯 *Текущий сезон:*\n` +
       `├ Номер сезона: \`${currentSeason.season}\`\n` +
@@ -5792,6 +6090,7 @@ async function showAdminMinerSettings(ctx, user) {
   try {
     log(`⛏️ Показ настроек майнера для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('💰 Базовая награда', 'admin_miner_reward'),
         Markup.button.callback('⚡ Эффективность', 'admin_miner_efficiency')
@@ -5803,6 +6102,7 @@ async function showAdminMinerSettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_settings')]
     ]);
     
+    const message = 
       `⛏️ *Настройки майнера*\n\n` +
       `💰 *Текущие настройки:*\n` +
       `├ Базовая награда за минуту: \`${config.MINER_REWARD_PER_MINUTE}\` Stars\n` +
@@ -5832,6 +6132,7 @@ async function showAdminReferralSettings(ctx, user) {
   try {
     log(`👥 Показ настроек реферальной системы для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('💰 Награда за реферала', 'admin_referral_reward'),
         Markup.button.callback('🏆 Бонусы за количество', 'admin_referral_bonuses')
@@ -5843,6 +6144,7 @@ async function showAdminReferralSettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_settings')]
     ]);
     
+    const message = 
       `👥 *Реферальная система*\n\n` +
       `💰 *Текущие настройки:*\n` +
       `├ Награда за реферала: \`${config.REFERRAL_REWARD}\` Stars\n` +
@@ -5873,6 +6175,7 @@ async function showAdminSubscriptionChannels(ctx, user) {
   try {
     log(`📢 Показ настроек каналов подписки для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('➕ Добавить канал', 'admin_subscription_add'),
         Markup.button.callback('➖ Удалить канал', 'admin_subscription_remove')
@@ -5884,6 +6187,7 @@ async function showAdminSubscriptionChannels(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin_settings')]
     ]);
     
+    const message = 
       `📢 *Каналы подписки*\n\n` +
       `📺 *Текущие настройки:*\n` +
       `├ Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n` +
@@ -5917,6 +6221,7 @@ async function showAdminTopUsers(ctx, user) {
     const topByStars = await db.collection('users').find().sort({ stars: -1 }).limit(10).toArray();
     const topByReferrals = await db.collection('users').find().sort({ referralsCount: -1 }).limit(10).toArray();
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('⭐ По уровню', 'admin_top_level'),
         Markup.button.callback('🪙 По Stars', 'admin_top_magnum')
@@ -5958,9 +6263,11 @@ async function showAdminSearchUser(ctx, user) {
   try {
     log(`🔍 Показ поиска пользователя для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_users')]
     ]);
     
+    const message = 
       `🔍 *Поиск пользователя*\n\n` +
       `📝 *Инструкция:*\n` +
       `├ Отправьте ID пользователя в чат\n` +
@@ -5991,9 +6298,11 @@ async function showAdminBanUser(ctx, user) {
   try {
     log(`🚫 Показ блокировки пользователя для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_users')]
     ]);
     
+    const message = 
       `🚫 *Блокировка пользователя*\n\n` +
       `📝 *Инструкция:*\n` +
       `├ Отправьте ID пользователя для блокировки\n` +
@@ -6024,9 +6333,11 @@ async function showAdminUnbanUser(ctx, user) {
   try {
     log(`✅ Показ разблокировки пользователя для админа ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_users')]
     ]);
     
+    const message = 
       `✅ *Разблокировка пользователя*\n\n` +
       `📝 *Инструкция:*\n` +
       `├ Отправьте ID пользователя для разблокировки\n` +
@@ -6063,6 +6374,7 @@ async function calculateMinerReward(userEfficiency = 1, user = null) {
     });
     
     // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     
     // Базовая награда за минуту
     let baseReward = config.MINER_REWARD_PER_MINUTE;
@@ -6080,6 +6392,8 @@ async function calculateMinerReward(userEfficiency = 1, user = null) {
     // Множитель на основе титула пользователя
     let titleMultiplier = 1.0;
     if (user && user.mainTitle) {
+      const titlesList = getTitlesList(user);
+      const currentTitle = titlesList.find(t => t.name === user.mainTitle);
       if (currentTitle) {
         titleMultiplier = currentTitle.minerBonus || 1.0;
       }
@@ -6099,11 +6413,13 @@ async function processMinerRewards() {
   try {
     console.log('⛏️ Обработка пассивных наград майнинга...');
     
+    const currentSeason = getCurrentMiningSeason();
     if (!currentSeason.isActive) {
       console.log('📅 Майнинг приостановлен - выходные');
       return;
     }
     
+    const users = await db.collection('users').find({
       $or: [
         { 'miningStats.lastReward': { $exists: true } },
         { 'miners': { $exists: true, $ne: [] } }
@@ -6116,6 +6432,8 @@ async function processMinerRewards() {
     
     for (const user of users) {
       try {
+        const userWithMining = initializeNewMiningSystem(user);
+        const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
         console.log(`👤 Пользователь ${userWithMining.id}:`, {
           miners: userWithMining.miners?.length || 0,
@@ -6124,7 +6442,11 @@ async function processMinerRewards() {
           lastReward: userWithMining.miningStats?.lastReward
         });
         
+        const totalSpeedSum = totalSpeed.stars + totalSpeed.stars;
         if (totalSpeedSum > 0) {
+          const now = new Date();
+          const lastReward = userWithMining.miningStats.lastReward || now;
+          const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
           
           console.log(`⏰ Время для пользователя ${userWithMining.id}:`, {
             now: now.toISOString(),
@@ -6136,6 +6458,8 @@ async function processMinerRewards() {
           // Если у пользователя нет lastReward, устанавливаем его и начисляем награду
           if (!userWithMining.miningStats.lastReward) {
             console.log(`🆕 Первая награда для пользователя ${userWithMining.id}`);
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             console.log(`💰 Первые награды для пользователя ${userWithMining.id}:`, {
               rewardStars,
@@ -6163,6 +6487,7 @@ async function processMinerRewards() {
             );
             
             // Принудительно сохраняем пользователя
+            const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
             if (updatedUser) {
               await forceSaveUser(updatedUser);
             }
@@ -6173,6 +6498,8 @@ async function processMinerRewards() {
             processedCount++;
             console.log(`✅ Первые награды начислены пользователю ${userWithMining.id}`);
           } else if (timeDiff >= config.MINING_REWARD_INTERVAL) {
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             console.log(`💰 Награды для пользователя ${userWithMining.id}:`, {
               rewardStars,
@@ -6200,6 +6527,7 @@ async function processMinerRewards() {
             );
             
             // Принудительно сохраняем пользователя
+            const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
             if (updatedUser) {
               await forceSaveUser(updatedUser);
             }
@@ -6246,6 +6574,7 @@ async function saveUserToDatabase(userId, updateData, options = {}) {
       };
     }
     
+    const result = await db.collection('users').updateOne(
       { id: userId },
       updateOperation,
       { upsert }
@@ -6270,8 +6599,11 @@ async function saveUserToDatabase(userId, updateData, options = {}) {
 // Функция для получения статистики майнеров по серверу
 async function getServerMinerStats() {
   try {
+    const stats = {};
+    const minerTypes = Object.keys(config.MINERS);
     
     for (const minerType of minerTypes) {
+      const result = await db.collection('users').aggregate([
         {
           $match: {
             [`miners`]: { $exists: true, $ne: [] }
@@ -6306,6 +6638,7 @@ async function getServerMinerStats() {
 // Функция для принудительного сохранения всех изменений пользователя
 async function forceSaveUser(user) {
   try {
+    const updateData = {
       magnuStarsoins: user.magnuStarsoins,
       stars: user.stars,
       level: user.level,
@@ -6350,8 +6683,10 @@ function log(message, type = 'INFO') {
   }
 }
 function logError(error, context = '') {
+  const timestamp = new Date().toISOString();
   const errorMessage = error.message || error;
   const stack = error.stack || '';
+  const logMessage = `[${timestamp}] [ERROR] ${context}: ${errorMessage}`;
   console.error(logMessage);
   
   let stackMessage = '';
@@ -6371,6 +6706,7 @@ function logError(error, context = '') {
 
 // Функция для детального логирования ошибок с контекстом
 function logErrorWithContext(error, context, userId = null) {
+  const timestamp = new Date().toISOString();
   const errorLog = {
     timestamp,
     userId,
@@ -6388,6 +6724,7 @@ function logErrorWithContext(error, context, userId = null) {
   console.error('Stack:', error.stack);
   
   // Сохраняем в файл
+  const fs = require('fs');
   const logFile = 'error_log.log';
   const logLine = JSON.stringify(errorLog) + '\n';
   
@@ -6399,6 +6736,7 @@ function logErrorWithContext(error, context, userId = null) {
 }
 
 function logDebug(message, data = null) {
+  const timestamp = new Date().toISOString();
   let logMessage = `[${timestamp}] [DEBUG] ${message}`;
   
   if (data) {
@@ -6409,6 +6747,8 @@ function logDebug(message, data = null) {
 }
 
 function logAction(userId, action, details = '') {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [ACTION] User ${userId} | Action: ${action} | Details: ${details}`;
   console.log(logMessage);
   
   // Расширенное логирование для отладки
@@ -6422,6 +6762,9 @@ function logAction(userId, action, details = '') {
   };
   
   // Сохраняем в файл для анализа
+  const fs = require('fs');
+  const logFile = 'user_actions.log';
+  const logLine = JSON.stringify(logEntry) + '\n';
   
   try {
     fs.appendFileSync(logFile, logLine);
@@ -6431,6 +6774,7 @@ function logAction(userId, action, details = '') {
 }
 
 function logFunction(functionName, userId = null, params = null) {
+  const timestamp = new Date().toISOString();
   let logMessage = `[${timestamp}] [FUNCTION] ${functionName}`;
   
   if (userId) {
@@ -6451,9 +6795,13 @@ async function showExchangeMenu(ctx, user) {
     log(`📈 Показ биржи для пользователя ${user.id}`);
     
     // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     const maxExchange = Math.floor(user.magnuStarsoins);
     
     // Получаем информацию о резерве
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
 
     
@@ -6486,6 +6834,7 @@ async function showExchangeMenu(ctx, user) {
     
 
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🪙 Ввести сумму Stars → Stars', 'exchange_custom_Stars'),
         Markup.button.callback('⭐ Ввести сумму Stars → Stars', 'exchange_custom_stars')
@@ -6508,6 +6857,7 @@ async function showExchangeMenu(ctx, user) {
       ]);
     }
     
+    const message = 
       `📈 *Magnum Exchange*\n\n` +
       `💰 *Ваши балансы:*\n` +
       `├ 🪙 Stars: \`${formatNumber(user.magnuStarsoins)}\`\n` +
@@ -6564,6 +6914,7 @@ async function showExchangeChart(ctx, user) {
       .sort({ timestamp: 1 })
       .toArray();
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('📊 24 часа', 'chart_24h'),
         Markup.button.callback('📈 7 дней', 'chart_7d')
@@ -6596,12 +6947,15 @@ async function showExchangeChart(ctx, user) {
       
       for (let i = 0; i < points; i++) {
         const index = i * step;
+        const rate = exchangeHistory[index]?.rate || 0.001;
+        const timestamp = exchangeHistory[index]?.timestamp || new Date();
         const time = new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         const bar = '█'.repeat(Math.floor((rate / maxRate) * 10));
         message += `├ ${time}: ${rate.toFixed(6)} ${bar}\n`;
       }
     } else {
       // Создаем резервные данные, если истории нет
+      const currentRate = await calculateExchangeRate();
       message += `📊 *Статистика:*\n`;
       message += `├ 📈 Текущий курс: \`${currentRate.toFixed(6)}\` Stars\n`;
       message += `├ 📉 Минимум: \`${currentRate.toFixed(6)}\` Stars\n`;
@@ -6639,6 +6993,7 @@ async function showExchangeHistory(ctx, user) {
       .limit(10)
       .toArray();
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('📊 Все обмены', 'history_all'),
         Markup.button.callback('📈 Прибыльные', 'history_profit')
@@ -6659,6 +7014,7 @@ async function showExchangeHistory(ctx, user) {
         const date = new Date(exchange.timestamp || new Date()).toLocaleString('ru-RU');
         const magnuStarsoinsAmount = exchange.magnuStarsoinsAmount || 0;
         const starsReceived = exchange.starsReceived || 0;
+        const commission = exchange.commission || 0;
         const profit = starsReceived - (magnuStarsoinsAmount * 0.001); // Примерная прибыль
         const profitIcon = profit >= 0 ? '📈' : '📉';
         
@@ -6670,6 +7026,7 @@ async function showExchangeHistory(ctx, user) {
       
       // Общая статистика
       const totalExchanged = userHistory.reduce((sum, h) => sum + (h.magnuStarsoinsAmount || 0), 0);
+      const totalStars = userHistory.reduce((sum, h) => sum + (h.starsReceived || 0), 0);
       const totalCommission = userHistory.reduce((sum, h) => sum + (h.commission || 0), 0);
       
       message += `📊 *Общая статистика:*\n`;
@@ -6696,6 +7053,7 @@ async function showExchangeSettings(ctx, user) {
   try {
     log(`⚙️ Показ настроек биржи для пользователя ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🔔 Уведомления', 'exchange_notifications'),
         Markup.button.callback('📊 Автообмен', 'exchange_auto')
@@ -6707,6 +7065,7 @@ async function showExchangeSettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'exchange')]
     ]);
     
+    const message = 
       `⚙️ *Настройки биржи*\n\n` +
       `🔔 *Уведомления:*\n` +
       `├ Изменение курса: ${user.exchangeSettings?.priceAlerts ? '✅' : '❌'}\n` +
@@ -6741,6 +7100,7 @@ async function showExchangeNews(ctx, user) {
   try {
     log(`📰 Показ новостей биржи для пользователя ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('📈 Аналитика', 'news_analytics'),
         Markup.button.callback('📊 Отчеты', 'news_reports')
@@ -6752,7 +7112,11 @@ async function showExchangeNews(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'exchange')]
     ]);
     
+    const currentRate = await calculateExchangeRate();
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     
+    const message = 
       `📰 *Новости Magnum Exchange*\n\n` +
       `📅 *${new Date().toLocaleDateString('ru-RU')}*\n\n` +
       `📈 *Рыночные новости:*\n` +
@@ -6799,12 +7163,15 @@ async function performExchange(ctx, user, amount) {
 
     
     // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     
     // Рассчитываем комиссию
+    const commission = (amount * config.EXCHANGE_COMMISSION) / 100;
     const amountAfterCommission = amount - commission;
     const starsToReceive = amountAfterCommission * exchangeRate;
     
     // Проверяем резерв Stars
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
     const availableStars = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
     if (starsToReceive > availableStars) {
@@ -6880,6 +7247,7 @@ async function performExchange(ctx, user, amount) {
     );
     
     // Автоматически обновляем меню биржи после успешного обмена
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showExchangeMenu(ctx, updatedUser);
     }
@@ -6906,11 +7274,16 @@ async function performStarsToStarsExchange(ctx, user, starsAmount) {
     }
     
     // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     
     // Рассчитываем комиссию в Stars
+    const commission = (starsAmount * config.EXCHANGE_COMMISSION) / 100;
     const starsAfterCommission = starsAmount - commission;
+    const StarsToReceive = starsAfterCommission / exchangeRate;
     
     // Проверяем резерв Stars
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const availableStars = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     
     if (StarsToReceive > availableStars) {
       log(`❌ Недостаточно Stars в резерве для пользователя ${user.id}`);
@@ -6986,6 +7359,7 @@ async function performStarsToStarsExchange(ctx, user, starsAmount) {
     );
     
     // Автоматически обновляем меню биржи после успешного обмена
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showExchangeMenu(ctx, updatedUser);
     }
@@ -7000,6 +7374,7 @@ async function handleExchangeCustomStars(ctx, user, text) {
   try {
     log(`🪙 Пользователь ${user.id} вводит сумму Stars для обмена: "${text}"`);
     
+    const amount = parseFloat(text);
     
     // Валидация суммы
     if (isNaN(amount) || amount <= 0) {
@@ -7033,6 +7408,7 @@ async function handleExchangeCustomStars(ctx, user, text) {
   try {
     log(`⭐ Пользователь ${user.id} вводит сумму Stars для обмена: "${text}"`);
     
+    const amount = parseFloat(text);
     
     // Валидация суммы
     if (isNaN(amount) || amount <= 0) {
@@ -7067,6 +7443,7 @@ function getAchievementsList(user) {
   // Убеждаемся, что все необходимые поля существуют
   const farStarsount = user.farm?.farStarsount || 0;
   const magnuStarsoins = user.magnuStarsoins || 0;
+  const level = user.level || 1;
   const referralsCount = user.referralsCount || 0;
   const dailyStreak = user.dailyBonus?.streak || 0;
   const totalExchanges = user.exchange?.totalExchanges || 0;
@@ -7233,10 +7610,12 @@ async function showAchievementsProgress(ctx, user) {
   try {
     log(`📊 Показ прогресса достижений для пользователя ${user.id}`);
     
+    const achievements = getAchievementsList(user);
     const completedAchievements = achievements.filter(a => a.condition);
     const totalAchievements = achievements.length;
     const completionRate = Math.round((completedAchievements.length / totalAchievements) * 100);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к достижениям', 'achievements')]
     ]);
     
@@ -7273,10 +7652,14 @@ async function showAchievementsRewards(ctx, user) {
   try {
     log(`🎁 Показ наград достижений для пользователя ${user.id}`);
     
+    const achievements = getAchievementsList(user);
+    const completedAchievements = achievements.filter(a => a.condition);
     const totalRewards = completedAchievements.reduce((sum, a) => {
+      const rewardAmount = parseInt(a.reward.split(' ')[0]);
       return sum + rewardAmount;
     }, 0);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к достижениям', 'achievements')]
     ]);
     
@@ -7301,6 +7684,8 @@ async function showAchievementsRewards(ctx, user) {
     Object.entries(categories).forEach(([category, categoryAchievements]) => {
       if (categoryAchievements.length > 0) {
         const completed = categoryAchievements.filter(a => a.condition);
+        const totalReward = completed.reduce((sum, a) => {
+          const rewardAmount = parseInt(a.reward.split(' ')[0]);
           return sum + rewardAmount;
         }, 0);
         
@@ -7323,6 +7708,7 @@ async function showAchievementsRewards(ctx, user) {
     if (valuableAchievements.length > 0) {
       message += `💎 *Самые ценные недостигнутые:*\n`;
       valuableAchievements.forEach((achievement, index) => {
+        const rewardAmount = parseInt(achievement.reward.split(' ')[0]);
         message += `${index + 1}. ${achievement.title} - \`${achievement.reward}\`\n`;
       });
       message += `\n`;
@@ -7349,6 +7735,7 @@ async function showReferralsMenu(ctx, user) {
   try {
     log(`👥 Показ меню рефералов для пользователя ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🔗 Реферальная ссылка', 'referral_link'),
         Markup.button.callback('📊 Статистика', 'referral_stats')
@@ -7360,6 +7747,7 @@ async function showReferralsMenu(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
+    const message = 
       `👥 *Реферальная система*\n\n` +
       `📊 *Ваша статистика:*\n` +
       `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
@@ -7388,6 +7776,7 @@ async function showReferralLink(ctx, user) {
     const botUsername = (await ctx.telegram.getMe()).username;
     const referralLink = `https://t.me/${botUsername}?start=${user.id}`;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.url('🔗 Открыть ссылку', referralLink),
         Markup.button.callback('📋 Скопировать', 'copy_referral_link')
@@ -7395,6 +7784,7 @@ async function showReferralLink(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'referrals')]
     ]);
     
+    const message = 
       `🔗 *Ваша реферальная ссылка*\n\n` +
       `📝 *Ссылка:*\n` +
       `\`${referralLink}\`\n\n` +
@@ -7424,6 +7814,7 @@ async function showReferralStats(ctx, user) {
       { projection: { id: 1, firstName: 1, username: 1, level: 1, createdAt: 1 } }
     ).toArray();
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'referrals')]
     ]);
     
@@ -7468,10 +7859,13 @@ async function showReferralRewards(ctx, user) {
   try {
     log(`🎁 Показ наград рефералов для пользователя ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'referrals')]
     ]);
     
+    const referralReward = config.REFERRAL_REWARD || 10;
     const totalEarnings = user.referralsEarnings || 0;
+    const referralsCount = user.referralsCount || 0;
     
     let message = `🎁 *Награды рефералов*\n\n`;
     
@@ -7498,6 +7892,8 @@ async function showReferralRewards(ctx, user) {
     ];
     
     bonuses.forEach(bonus => {
+      const status = bonus.achieved ? '✅' : '🔄';
+      const progress = bonus.achieved ? 
         `Выполнено!` : 
         `Осталось: ${bonus.count - referralsCount} рефералов`;
       
@@ -7530,6 +7926,7 @@ async function showReferralList(ctx, user) {
     log(`👥 Показ списка рефералов для пользователя ${user.id}`);
     
     // Получаем список рефералов из базы данных
+    const referrals = await db.collection('users').find(
       { referrerId: user.id },
       { 
         projection: { 
@@ -7545,6 +7942,7 @@ async function showReferralList(ctx, user) {
       }
     ).toArray();
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'referrals')]
     ]);
     
@@ -7609,6 +8007,7 @@ async function showSettingsMenu(ctx, user) {
     
     const settings = user.settings || {};
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🔔 Уведомления', 'settings_notifications'),
         Markup.button.callback('🔒 Приватность', 'settings_privacy')
@@ -7627,6 +8026,7 @@ async function showSettingsMenu(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
+    const message = 
       `⚙️ *Настройки*\n\n` +
       `🔔 *Уведомления:* ${settings.notifications !== false ? '🟢 Включены' : '🔴 Выключены'}\n` +
       `🔒 *Приватность:* ${settings.privacy !== false ? '🟢 Стандартная' : '🔴 Расширенная'}\n` +
@@ -7649,7 +8049,9 @@ async function showProfileMenu(ctx, user) {
   try {
     log(`👤 Показ меню профиля для пользователя ${user.id}`);
     
+    const rankProgress = await getRankProgress(user);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🎖 Титулы', 'titles'),
         Markup.button.callback('⚔️ Ранги', 'ranks')
@@ -7668,6 +8070,7 @@ async function showProfileMenu(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
+    const message = 
       `👤 *Профиль пользователя*\n\n` +
       `👤 *Основная информация:*\n` +
       `├ Имя: ${user.firstName || 'Не указано'}\n` +
@@ -7700,8 +8103,10 @@ async function showNotificationSettings(ctx, user) {
   try {
     log(`🔔 Показ настроек уведомлений для пользователя ${user.id}`);
     
+    const settings = user.settings || {};
     const notificationsEnabled = settings.notifications !== false;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
           notificationsEnabled ? '🔴 Отключить уведомления' : '🟢 Включить уведомления',
@@ -7711,6 +8116,7 @@ async function showNotificationSettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'settings')]
     ]);
     
+    const message = 
       `🔔 *Настройки уведомлений*\n\n` +
       `📱 *Текущий статус:* ${notificationsEnabled ? '🟢 Включены' : '🔴 Выключены'}\n\n` +
       `📋 *Типы уведомлений:*\n` +
@@ -7739,8 +8145,10 @@ async function showPrivacySettings(ctx, user) {
   try {
     log(`🔒 Показ настроек приватности для пользователя ${user.id}`);
     
+    const settings = user.settings || {};
     const privacyEnabled = settings.privacy !== false;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
           privacyEnabled ? '🔴 Расширенная приватность' : '🟢 Стандартная приватность',
@@ -7750,6 +8158,7 @@ async function showPrivacySettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'settings')]
     ]);
     
+    const message = 
       `🔒 *Настройки приватности*\n\n` +
       `🛡️ *Текущий режим:* ${privacyEnabled ? '🟢 Стандартная' : '🔴 Расширенная'}\n\n` +
       `📊 *Стандартная приватность:*\n` +
@@ -7778,8 +8187,10 @@ async function showLanguageSettings(ctx, user) {
   try {
     log(`🌐 Показ настроек языка для пользователя ${user.id}`);
     
+    const settings = user.settings || {};
     const currentLanguage = settings.language || 'ru';
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
           currentLanguage === 'ru' ? '✅ 🇷🇺 Русский' : '🇷🇺 Русский',
@@ -7793,6 +8204,7 @@ async function showLanguageSettings(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'settings')]
     ]);
     
+    const message = 
       `🌐 *Настройки языка*\n\n` +
       `🗣️ *Текущий язык:* ${currentLanguage === 'ru' ? '🇷🇺 Русский' : '🇺🇸 English'}\n\n` +
       `📝 *Выберите язык интерфейса:*\n\n` +
@@ -7819,12 +8231,14 @@ async function showResetSettings(ctx, user) {
   try {
     log(`🔄 Показ настроек сброса для пользователя ${user.id}`);
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('⚠️ Сбросить настройки', 'confirm_reset'),
         Markup.button.callback('🔙 Назад', 'settings')
       ]
     ]);
     
+    const message = 
       `🔄 *Сброс настроек*\n\n` +
       `⚠️ *Внимание!* Это действие нельзя отменить.\n\n` +
       `🗑️ *Что будет сброшено:*\n` +
@@ -7857,6 +8271,7 @@ async function toggleNotificationSetting(ctx, user) {
   try {
     log(`🔔 Переключение настроек уведомлений для пользователя ${user.id}`);
     
+    const settings = user.settings || {};
     const newNotificationState = settings.notifications === false ? true : false;
     
     // Обновляем настройки в базе данных
@@ -7873,11 +8288,13 @@ async function toggleNotificationSetting(ctx, user) {
     // Очищаем кеш
     userCache.delete(user.id);
     
+    const status = newNotificationState ? 'включены' : 'выключены';
     log(`✅ Уведомления ${status} для пользователя ${user.id}`);
     
     await ctx.answerCbQuery(`✅ Уведомления ${status}!`);
     
     // Обновляем меню настроек уведомлений
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showNotificationSettings(ctx, updatedUser);
     }
@@ -7891,6 +8308,7 @@ async function togglePrivacySetting(ctx, user) {
   try {
     log(`🔒 Переключение настроек приватности для пользователя ${user.id}`);
     
+    const settings = user.settings || {};
     const newPrivacyState = settings.privacy === false ? true : false;
     
     // Обновляем настройки в базе данных
@@ -7907,11 +8325,13 @@ async function togglePrivacySetting(ctx, user) {
     // Очищаем кеш
     userCache.delete(user.id);
     
+    const status = newPrivacyState ? 'стандартная' : 'расширенная';
     log(`✅ Приватность изменена на ${status} для пользователя ${user.id}`);
     
     await ctx.answerCbQuery(`✅ Приватность: ${status}!`);
     
     // Обновляем меню настроек приватности
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showPrivacySettings(ctx, updatedUser);
     }
@@ -7944,6 +8364,7 @@ async function setLanguage(ctx, user, language) {
     await ctx.answerCbQuery(`✅ Язык изменен на ${langName}!`);
     
     // Обновляем меню настроек языка
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showLanguageSettings(ctx, updatedUser);
     }
@@ -7980,6 +8401,7 @@ async function resetUserSettings(ctx, user) {
     await ctx.answerCbQuery('✅ Настройки сброшены!');
     
     // Возвращаемся в главное меню настроек
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showSettingsMenu(ctx, updatedUser);
     }
@@ -7993,7 +8415,9 @@ async function showTasksMenu(ctx, user) {
   try {
     log(`📋 Показ меню заданий для пользователя ${user.id}`);
     
+    const tasks = user.tasks || {};
     const completedTasks = tasks.completedTasks || 0;
+    const totalEarnings = tasks.totalTaskEarnings || 0;
     
     // Подсчитываем статус RichAds офферов
     const sponsorTasks = await getRichAdsTasks();
@@ -8014,6 +8438,7 @@ async function showTasksMenu(ctx, user) {
       sponsorStatus = '🎁';
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(`${sponsorStatus} RichAds офферы`, 'tasks_sponsor'),
         Markup.button.callback('📅 Ежедневные задания', 'tasks_daily')
@@ -8025,6 +8450,7 @@ async function showTasksMenu(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
     
+    const message = 
       `📋 *Система заданий*\n\n` +
       `📊 *Ваша статистика:*\n` +
       `├ Выполнено заданий: \`${completedTasks}\`\n` +
@@ -8055,6 +8481,7 @@ async function showSponsorTasks(ctx, user) {
     logAction(user.id, 'showSponsorTasks', 'Начало показа RichAds офферов');
     log(`🎯 Показ RichAds офферов для пользователя ${user.id}`);
     
+    const sponsorTasks = await getRichAdsTasks();
     logAction(user.id, 'getRichAdsTasks', { count: sponsorTasks.length, offers: sponsorTasks.map(o => ({ id: o.id, title: o.title })) });
     log(`🎯 Получены RichAds офферы: ${sponsorTasks.length} офферов`);
     
@@ -8076,6 +8503,7 @@ async function showSponsorTasks(ctx, user) {
       // Все офферы выполнены - показываем общий список
       const taskButtons = [];
       sponsorTasks.forEach((task, index) => {
+        const userTask = userTasks[task.id];
         // Показываем только те офферы, которые существуют в userTasks и завершены
         if (userTask && userTask.completed && userTask.claimed) {
           taskButtons.push([
@@ -8088,11 +8516,13 @@ async function showSponsorTasks(ctx, user) {
         Markup.button.callback('🔙 Назад', 'tasks')
       ]);
       
+      const keyboard = Markup.inlineKeyboard(taskButtons);
       
       let message = `✅ *Все RichAds офферы выполнены!*\n\n`;
       message += `🎉 Поздравляем! Вы выполнили все доступные RichAds офферы.\n\n`;
       
       sponsorTasks.forEach((task, index) => {
+        const userTask = userTasks[task.id];
         // Показываем только те офферы, которые существуют в userTasks и завершены
         if (userTask && userTask.completed && userTask.claimed) {
           const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
@@ -8124,6 +8554,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     logAction(user.id, 'showSponsorTaskDetails', { taskId, action: 'начало' });
     log(`🎯 Показ деталей RichAds оффера ${taskId} для пользователя ${user.id}`);
     
+    const sponsorTasks = await getRichAdsTasks();
     const task = sponsorTasks.find(t => t.id === taskId);
     
     logAction(user.id, 'findTaskInDetails', { taskId, taskFound: !!task, taskTitle: task?.title });
@@ -8134,15 +8565,19 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       return;
     }
     
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
     const isCompleted = userTask.completed || false;
     const isClaimed = userTask.claimed || false;
     const hasScreenshot = userTask.screenshot || false;
     
     // Если задание полностью завершено (выполнено и получена награда)
     if (isCompleted && isClaimed) {
+      const keyboard = Markup.inlineKeyboard([
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
       
       let message = `✅ *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8162,10 +8597,12 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     // Если задание выполнено, но награда не получена
     if (isCompleted && !isClaimed) {
+      const keyboard = Markup.inlineKeyboard([
         [Markup.button.callback('🎁 Получить награду', `claim_sponsor_${taskId}`)],
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
       
       let message = `🎁 *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8184,11 +8621,13 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     // Если скриншот отправлен, но не проверен
     if (hasScreenshot && !isCompleted) {
+      const keyboard = Markup.inlineKeyboard([
         [Markup.button.callback('✅ Проверить выполнение', `verify_sponsor_${taskId}`)],
         [Markup.button.callback('📸 Отправить новый скриншот', `send_screenshot_${taskId}`)],
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
       
       let message = `📸 *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8211,6 +8650,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     // Проверяем, есть ли следующее задание
     const hasNextTask = allSponsorTasks.some(t => {
       if (t.id === taskId) return false; // Пропускаем текущее задание
+      const userTask = userTasks[t.id] || {};
       return !userTask.completed || !userTask.claimed;
     });
     
@@ -8231,7 +8671,9 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
       Markup.button.callback('🔙 Назад', 'tasks_sponsor')
     ]);
     
+    const keyboard = Markup.inlineKeyboard(keyboardButtons);
     
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
     
     let message = `🔄 *${escapeMarkdown(task.title)}*\n\n`;
     message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8287,12 +8729,16 @@ async function verifySponsorTask(ctx, user, taskId) {
   try {
     log(`✅ Проверка выполнения RichAds оффера ${taskId} для пользователя ${user.id}`);
     
+    const sponsorTasks = await getRichAdsTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.answerCbQuery('❌ Оффер не найден');
       return;
     }
     
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
     
     if (userTask.completed && userTask.claimed) {
       await ctx.answerCbQuery('❌ Оффер уже выполнен и награда получена');
@@ -8348,10 +8794,12 @@ async function verifySponsorTask(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
     log(`✅ RichAds оффер ${taskId} выполнен пользователем ${user.id}`);
     await ctx.answerCbQuery(`✅ Оффер выполнен! Награда: ${rewardText}`);
     
     // Обновляем детали оффера
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showSponsorTaskDetails(ctx, updatedUser, taskId);
     }
@@ -8364,12 +8812,16 @@ async function claimSponsorTask(ctx, user, taskId) {
   try {
     log(`🎁 Получение награды RichAds оффера ${taskId} для пользователя ${user.id}`);
     
+    const sponsorTasks = await getRichAdsTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.answerCbQuery('❌ Оффер не найден');
       return;
     }
     
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
     
     if (!userTask.completed) {
       await ctx.answerCbQuery('❌ Оффер не выполнен');
@@ -8392,6 +8844,7 @@ async function claimSponsorTask(ctx, user, taskId) {
     
     // Начисляем награду
     const rewardType = task.rewardType || 'stars';
+    const updateData = { 
       $inc: { 
         'tasks.completedTasks': 1,
         'tasks.totalTaskEarnings': task.reward
@@ -8428,10 +8881,12 @@ async function claimSponsorTask(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
+    const rewardText = rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
     log(`🎁 Награда RichAds оффера ${taskId} получена пользователем ${user.id}: ${rewardText}`);
     await ctx.answerCbQuery(`🎁 Награда получена! +${rewardText}`);
     
     // Возвращаем пользователя к списку RichAds офферов
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showSponsorTasks(ctx, updatedUser);
     }
@@ -8445,9 +8900,15 @@ async function showDailyTasks(ctx, user) {
     log(`📅 Показ ежедневных заданий для пользователя ${user.id}`);
     
     const dailyTasks = getDailyTasks();
+    const userTasks = user.tasks?.dailyTasks || {};
     
     // Создаем кнопки для получения наград
+    const buttons = [];
     dailyTasks.forEach((task) => {
+      const userTask = userTasks[task.id] || {};
+      const progress = userTask.progress || 0;
+      const isCompleted = progress >= task.target;
+      const isClaimed = userTask.claimed || false;
       
       if (isCompleted && !isClaimed) {
         buttons.push([Markup.button.callback(`🎁 Получить награду: ${task.title}`, `claim_daily_${task.id}`)]);
@@ -8456,11 +8917,17 @@ async function showDailyTasks(ctx, user) {
     
     buttons.push([Markup.button.callback('🔙 Назад', 'tasks')]);
     
+    const keyboard = Markup.inlineKeyboard(buttons);
     
     let message = `📅 *Ежедневные задания*\n\n`;
     message += `🔄 *Эти задания обновляются каждый день!*\n\n`;
     
     dailyTasks.forEach((task, index) => {
+      const userTask = userTasks[task.id] || {};
+      const progress = userTask.progress || 0;
+      const isCompleted = progress >= task.target;
+      const isClaimed = userTask.claimed || false;
+      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
       
       message += `${status} *${task.title}*\n`;
       message += `├ ${task.description}\n`;
@@ -8491,12 +8958,16 @@ async function handleSendScreenshot(ctx, user, taskId) {
   try {
     log(`📸 Запрос отправки скриншота для задания ${taskId} от пользователя ${user.id}`);
     
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.answerCbQuery('❌ Задание не найдено');
       return;
     }
     
+    const userTasks = user.tasks?.sponsorTasks || {};
+    const userTask = userTasks[taskId] || {};
     
     // Проверяем, не было ли задание уже одобрено
     if (userTask.completed && userTask.claimed) {
@@ -8546,6 +9017,8 @@ async function handleScreenshotUpload(ctx, user, taskId) {
   try {
     log(`📸 Обработка скриншота для задания ${taskId} от пользователя ${user.id}`);
     
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.reply('❌ Задание не найдено');
@@ -8576,6 +9049,7 @@ async function handleScreenshotUpload(ctx, user, taskId) {
     // Отправляем заявку в канал поддержки
     const supportChannel = config.SUPPORT_CHANNEL;
     if (supportChannel) {
+      const keyboard = Markup.inlineKeyboard([
         [
           Markup.button.callback('✅ Одобрить', `approve_screenshot_${user.id}_${taskId}`),
           Markup.button.callback('❌ Отклонить', `reject_screenshot_${user.id}_${taskId}`)
@@ -8625,9 +9099,12 @@ async function showNextSponsorTask(ctx, user) {
   try {
     log(`⏭️ Показ следующего RichAds оффера для пользователя ${user.id}`);
     
+    const sponsorTasks = await getRichAdsTasks();
+    const userTasks = user.tasks?.sponsorTasks || {};
     
     // Находим следующий невыполненный оффер
     const nextTask = sponsorTasks.find(task => {
+      const userTask = userTasks[task.id] || {};
       return !userTask.completed;
     });
     
@@ -8647,7 +9124,11 @@ async function showTasksProgress(ctx, user) {
   try {
     log(`📊 Показ прогресса заданий для пользователя ${user.id}`);
     
+    const tasks = user.tasks || {};
+    const completedTasks = tasks.completedTasks || 0;
+    const totalEarnings = tasks.totalTaskEarnings || 0;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'tasks')]
     ]);
     
@@ -8660,6 +9141,8 @@ async function showTasksProgress(ctx, user) {
     message += `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Stars\n\n`;
     
     // Статистика по типам
+    const sponsorTasks = tasks.sponsorTasks || {};
+    const dailyTasks = tasks.dailyTasks || {};
     
     const completedSponsor = Object.values(sponsorTasks).filter(t => t && t.completed).length;
     const completedDaily = Object.values(dailyTasks).filter(t => t && t.claimed).length;
@@ -8690,6 +9173,8 @@ async function showTasksProgress(ctx, user) {
     
     if (recentTasks.length > 0) {
       recentTasks.forEach((task, index) => {
+        const daysAgo = Math.floor((Date.now() - task.claimedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const timeText = daysAgo === 0 ? 'сегодня' : daysAgo === 1 ? 'вчера' : `${daysAgo} дн. назад`;
         
         message += `${index + 1}. ${task.type === 'sponsor' ? '🎯' : '📅'} Задание выполнено\n`;
         message += `└ ${timeText}\n\n`;
@@ -8714,13 +9199,18 @@ async function showTasksAchievements(ctx, user) {
   try {
     log(`🏆 Показ достижений в заданиях для пользователя ${user.id}`);
     
+    const tasks = user.tasks || {};
+    const completedTasks = tasks.completedTasks || 0;
+    const totalEarnings = tasks.totalTaskEarnings || 0;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'tasks')]
     ]);
     
     let message = `🏆 *Достижения в заданиях*\n\n`;
     
     // Система достижений
+    const achievements = [
       { id: 'first_task', title: '🎯 Первое задание', description: 'Выполните первое задание', requirement: 1, reward: 100 },
       { id: 'task_master', title: '🎯 Мастер заданий', description: 'Выполните 10 заданий', requirement: 10, reward: 500 },
       { id: 'task_expert', title: '🎯 Эксперт заданий', description: 'Выполните 25 заданий', requirement: 25, reward: 1500 },
@@ -8729,6 +9219,7 @@ async function showTasksAchievements(ctx, user) {
     ];
     
     // Проверяем достижения
+    const userAchievements = tasks.achievements || {};
     
     message += `📊 *Ваша статистика:*\n`;
     message += `├ Выполнено заданий: \`${completedTasks}\`\n`;
@@ -8738,7 +9229,11 @@ async function showTasksAchievements(ctx, user) {
     message += `🏆 *Достижения:*\n`;
     
     achievements.forEach(achievement => {
+      const isCompleted = userAchievements[achievement.id]?.completed || false;
+      const isClaimed = userAchievements[achievement.id]?.claimed || false;
+      const progress = Math.min(100, Math.round((completedTasks / achievement.requirement) * 100));
       
+      const status = isCompleted ? (isClaimed ? '✅' : '🎁') : '🔄';
       
       message += `${status} *${achievement.title}*\n`;
       message += `├ ${achievement.description}\n`;
@@ -8807,6 +9302,7 @@ async function getRichAdsTasks() {
     logError(error, 'Получение RichAds офферов');
     // Возвращаем демо-офферы при ошибке
     const { richAdsIntegration } = require('./richads-integration');
+    const demoOffers = richAdsIntegration.getDemoOffers();
     log(`📋 Возвращено ${demoOffers.length} демо-офферов при ошибке`);
     return demoOffers;
   }
@@ -8852,6 +9348,8 @@ function getDailyTasks() {
 // Функция для обновления прогресса ежедневных заданий
 async function updateDailyTaskProgress(user, taskType, amount = 1) {
   try {
+    const today = new Date().toDateString();
+    const userTasks = user.tasks?.dailyTasks || {};
     
     // Проверяем, нужно ли сбросить задания (новый день)
     const lastReset = user.lastDailyTasksReset;
@@ -8905,12 +9403,18 @@ async function updateDailyTaskProgress(user, taskType, amount = 1) {
 // Функция для получения награды за ежедневное задание
 async function claimDailyTaskReward(ctx, user, taskId) {
   try {
+    const dailyTasks = getDailyTasks();
+    const task = dailyTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.answerCbQuery('❌ Задание не найдено!');
       return;
     }
     
+    const userTasks = user.tasks?.dailyTasks || {};
+    const userTask = userTasks[taskId] || {};
+    const progress = userTask.progress || 0;
+    const isClaimed = userTask.claimed || false;
     
     if (progress < task.target) {
       await ctx.answerCbQuery('❌ Задание еще не выполнено!');
@@ -8945,7 +9449,9 @@ async function claimDailyTaskReward(ctx, user, taskId) {
     userCache.delete(user.id);
     
     // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
     if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
       if (levelResult.levelUp) {
         log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
       }
@@ -8976,6 +9482,8 @@ async function showRanksMenu(ctx, user) {
     // Отладка прогресса ранга
     await debugRankProgress(user);
     
+    const rankProgress = await getRankProgress(user);
+    const ranks = getRankRequirements();
     
     // Дополнительная проверка для отладки
     console.log(`🎯 Показ рангов для пользователя ${user.id}:`, {
@@ -8986,6 +9494,7 @@ async function showRanksMenu(ctx, user) {
       isMax: rankProgress.isMax
     });
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'settings')]
     ]);
     
@@ -9008,6 +9517,7 @@ async function showRanksMenu(ctx, user) {
     ranks.forEach((rank, index) => {
       const isCurrent = rank.level === rankProgress.current.level;
       const isUnlocked = user.level >= rank.level;
+      const status = isCurrent ? '🎯' : (isUnlocked ? '✅' : '🔒');
       
       message += `${status} *${rank.name}*\n`;
       message += `├ Уровень: ${rank.level}\n`;
@@ -9033,8 +9543,16 @@ async function showRanksMenu(ctx, user) {
 
 // ==================== ТИТУЛЫ ====================
 function getTitlesList(user) {
+  const farStarsount = user.farm?.farStarsount || 0;
   const minerTotal = user.miner?.totalMined || 0;
+  const streak = user.dailyBonus?.streak || 0;
+  const level = user.level || 1;
   const stars = user.stars || 0;
+  const totalStars = user.totalEarnedMagnuStarsoins || 0;
+  const totalStars = user.totalEarnedStars || 0;
+  const referrals = user.referralsCount || 0;
+  const achievements = user.achievementsCount || 0;
+  const isAdmin = user.isAdmin || false;
 
   const definitions = [
     // Обычные (5)
@@ -9070,6 +9588,7 @@ function getTitlesList(user) {
 
 async function syncUserTitles(user) {
   try {
+    const definitions = getTitlesList(user);
     const ownedSet = new Set(user.titles || []);
     const toAdd = definitions.filter(t => t.unlocked && !ownedSet.has(t.name)).map(t => t.name);
 
@@ -9111,9 +9630,12 @@ async function showTitlesMenu(ctx, user) {
 
   for (const t of definitions) {
     const has = (user.titles || []).includes(t.name);
+    const status = has ? '✅' : (t.rarity === 'Секретный' ? '❔' : '🔒');
+    const titleName = has ? t.name : (t.rarity === 'Секретный' ? 'Секретный титул' : t.name);
     message += `${status} ${titleName} — ${t.rarity}${has ? '' : ` (условие: ${t.conditionText})`}\n`;
   }
 
+  const buttons = [
     [Markup.button.callback('🧭 Сменить титул', 'titles_select')],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ];
@@ -9124,6 +9646,7 @@ async function showTitlesMenu(ctx, user) {
   });
 }
 async function showTitlesSelectMenu(ctx, user) {
+  const definitions = getTitlesList(user);
   const ownedDefs = definitions.filter(d => (user.titles || []).includes(d.name));
 
   // Фоллбек для титулов, которых нет в определениях
@@ -9131,6 +9654,7 @@ async function showTitlesSelectMenu(ctx, user) {
     .filter(n => !ownedDefs.some(d => d.name === n))
     .map(n => ({ id: 'name_' + Buffer.from(n, 'utf8').toString('base64'), name: n }));
 
+  const items = [...ownedDefs.map(d => ({ id: d.id, name: d.name })), ...extraOwned];
 
   let message = `🎖 *Выбор титула*\n\n`;
   message += `Текущий: ${user.mainTitle}\n\n`;
@@ -9153,6 +9677,7 @@ let afterActions = [];
 afterActions.push(() => {
   bot.action('titles', async (ctx) => {
     try {
+      const user = await getUser(ctx.from.id);
       if (!user) return;
       await showTitlesMenu(ctx, user);
     } catch (error) {
@@ -9162,6 +9687,7 @@ afterActions.push(() => {
 
   bot.action('ranks', async (ctx) => {
     try {
+      const user = await getUser(ctx.from.id);
       if (!user) return;
       await showRanksMenu(ctx, user);
     } catch (error) {
@@ -9171,6 +9697,7 @@ afterActions.push(() => {
 
   bot.action('titles_select', async (ctx) => {
     try {
+      const user = await getUser(ctx.from.id);
       if (!user) return;
       await showTitlesSelectMenu(ctx, user);
     } catch (error) {
@@ -9183,8 +9710,10 @@ afterActions.push(() => {
       const data = ctx.callbackQuery?.data || '';
       const rawId = data.replace('set_title_', '');
 
+      const user = await getUser(ctx.from.id);
       if (!user) return;
 
+      const definitions = getTitlesList(user);
       let selectedName = null;
 
       const byId = definitions.find(d => d.id === rawId);
@@ -9227,13 +9756,18 @@ afterActions.push(() => {
 // Тестовый маршрут для проверки майнинга
 app.get('/test-mining', async (req, res) => {
     try {
+        const currentSeason = getCurrentMiningSeason();
+        const users = await db.collection('users').find({
             $or: [
                 { 'miningStats.lastReward': { $exists: true } },
                 { 'miners': { $exists: true, $ne: [] } }
             ]
         }).toArray();
         
+        const testUser = users[0];
         if (testUser) {
+            const userWithMining = initializeNewMiningSystem(testUser);
+            const totalSpeed = calculateTotalMiningSpeed(userWithMining);
             
             res.json({
                 status: 'mining-test',
@@ -9288,6 +9822,7 @@ app.get('/force-save-all', async (req, res) => {
     try {
         console.log('💾 Принудительное сохранение всех пользователей...');
         
+        const users = await db.collection('users').find({}).toArray();
         let savedCount = 0;
         
         for (const user of users) {
@@ -9317,6 +9852,7 @@ app.get('/force-save-all', async (req, res) => {
 // Маршрут для проверки состояния базы данных
 app.get('/db-status', async (req, res) => {
     try {
+        const users = await db.collection('users').find({}).toArray();
         const usersWithMiners = users.filter(u => u.miners && u.miners.length > 0);
         const usersWithMiningStats = users.filter(u => u.miningStats);
         
@@ -9378,6 +9914,7 @@ bot.start(async (ctx) => {
     });
     
     console.log(`👤 Получение пользователя ${ctx.from.id}`);
+    const user = await getUser(ctx.from.id, ctx);
     if (!user) {
       console.log(`❌ Не удалось получить пользователя ${ctx.from.id}`);
       await ctx.reply('❌ Ошибка создания пользователя');
@@ -9456,12 +9993,16 @@ bot.start(async (ctx) => {
 // Команда для открытия WebApp
 bot.command('webapp', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) {
       await ctx.reply('❌ Пользователь не найден');
       return;
     }
 
     // Проверяем доступ к WebApp
+    const webappEnabled = process.env.WEBAPP_ENABLED === 'true';
+    const adminOnly = process.env.WEBAPP_ADMIN_ONLY === 'true';
+    const isAdmin = config.ADMIN_IDS.includes(user.id);
 
     if (!webappEnabled) {
       await ctx.reply('🚧 WebApp временно недоступен');
@@ -9476,6 +10017,7 @@ bot.command('webapp', async (ctx) => {
     // Создаем WebApp кнопку
     const webappUrl = process.env.WEBAPP_URL || `https://${process.env.RAILWAY_STATIC_URL || 'your-app.railway.app'}/webapp`;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.webApp('🎮 Открыть WebApp', webappUrl)]
     ]);
 
@@ -9504,8 +10046,10 @@ async function handleAdminSearchUser(ctx, user, text) {
     
     // Пытаемся найти пользователя по ID или username
     if (text.startsWith('@')) {
+      const username = text.substring(1);
       targetUser = await db.collection('users').findOne({ username: username });
     } else {
+      const userId = parseInt(text);
       if (isNaN(userId)) {
         await ctx.reply('❌ Неверный формат ID. Используйте число или @username');
         return;
@@ -9518,6 +10062,7 @@ async function handleAdminSearchUser(ctx, user, text) {
       return;
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🚫 Заблокировать', `admin_ban_${targetUser.id}`),
         Markup.button.callback('✅ Разблокировать', `admin_unban_${targetUser.id}`)
@@ -9529,6 +10074,7 @@ async function handleAdminSearchUser(ctx, user, text) {
       [Markup.button.callback('🔙 Назад', 'admin_users')]
     ]);
     
+    const message = 
       `👤 *Информация о пользователе*\n\n` +
       `🆔 *ID:* \`${targetUser.id}\`\n` +
       `👤 *Имя:* ${targetUser.firstName || 'Не указано'}\n` +
@@ -9562,11 +10108,13 @@ async function handleAdminSearchUser(ctx, user, text) {
 
 async function handleAdminBanUser(ctx, user, text) {
   try {
+    const userId = parseInt(text);
     if (isNaN(userId)) {
       await ctx.reply('❌ Неверный формат ID. Используйте число');
       return;
     }
     
+    const targetUser = await db.collection('users').findOne({ id: userId });
     if (!targetUser) {
       await ctx.reply('❌ Пользователь не найден');
       return;
@@ -9598,11 +10146,13 @@ async function handleAdminBanUser(ctx, user, text) {
 }
 async function handleAdminUnbanUser(ctx, user, text) {
   try {
+    const userId = parseInt(text);
     if (isNaN(userId)) {
       await ctx.reply('❌ Неверный формат ID. Используйте число');
       return;
     }
     
+    const targetUser = await db.collection('users').findOne({ id: userId });
     if (!targetUser) {
       await ctx.reply('❌ Пользователь не найден');
       return;
@@ -9706,6 +10256,7 @@ async function handleAdminSetMinerReward(ctx, user, text) {
 }
 async function handleAdminSetReferralReward(ctx, user, text) {
   try {
+    const newReward = parseFloat(text);
     if (isNaN(newReward) || newReward < 0) {
       await ctx.reply('❌ Неверное значение. Введите положительное число');
       return;
@@ -9834,6 +10385,8 @@ async function handleCreateSupportTicket(ctx, user, text) {
     userCache.delete(user.id);
     
     // Отправляем тикет в канал поддержки
+    const supportChannel = config.SUPPORT_CHANNEL;
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Ответить', `support_answer_${ticket.id}`),
         Markup.button.callback('⏳ В обработке', `support_progress_${ticket.id}`)
@@ -9844,6 +10397,7 @@ async function handleCreateSupportTicket(ctx, user, text) {
       ]
     ]);
     
+    const supportMessage = 
       `🆘 *Новый тикет поддержки*\n\n` +
       `🆔 *ID тикета:* \`${ticket.id}\`\n` +
       `👤 *Пользователь:* ${getDisplayName(user)}\n` +
@@ -9931,6 +10485,7 @@ async function handleAdminAnswerTicket(ctx, user, text) {
     }
     
     // Получаем тикет из базы данных
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
     if (!ticket) {
       await ctx.reply('❌ Тикет не найден');
       return;
@@ -9959,6 +10514,7 @@ async function handleAdminAnswerTicket(ctx, user, text) {
     });
     // Отправляем ответ пользователю
     try {
+      const userMessage = 
         `✅ *Ответ на ваш тикет*\n\n` +
         `🆔 *ID тикета:* \`${ticketId}\`\n` +
         `📝 *Ваша проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
@@ -9976,6 +10532,8 @@ async function handleAdminAnswerTicket(ctx, user, text) {
     }
     
     // Обновляем сообщение в канале поддержки
+    const supportChannel = '@magnumsupported';
+    const message = 
       `✅ *Тикет отвечен*\n\n` +
       `🆔 *ID тикета:* \`${ticketId}\`\n` +
       `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
@@ -10044,12 +10602,14 @@ async function handleAdminGiveRank(ctx, user, text) {
     userCache.delete(user.id);
     
     // Парсим данные
+    const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
       await ctx.reply('❌ Неверный формат! Используйте: ID УРОВЕНЬ\n\n💡 Пример: 123456789 50');
       return;
     }
     
     const targetUserId = parseInt(parts[0]);
+    const newLevel = parseInt(parts[1]);
     
     // Валидация данных
     if (!targetUserId || targetUserId <= 0) {
@@ -10063,6 +10623,7 @@ async function handleAdminGiveRank(ctx, user, text) {
     }
     
     // Ищем пользователя
+    const targetUser = await db.collection('users').findOne({ id: targetUserId });
     if (!targetUser) {
       await ctx.reply(`❌ Пользователь с ID ${targetUserId} не найден!`);
       return;
@@ -10089,6 +10650,7 @@ async function handleAdminGiveRank(ctx, user, text) {
     userCache.delete(targetUserId);
     
     // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_ranks')]
     ]);
     
@@ -10159,6 +10721,7 @@ async function handleBugReport(ctx, user, text) {
     }
     
     // Отправляем подтверждение пользователю
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад в поддержку', 'support')]
     ]);
     
@@ -10197,12 +10760,14 @@ async function handleAdminCreatePromocode(ctx, user, text) {
     userCache.delete(user.id);
     
     // Парсим данные промокода
+    const parts = text.trim().split(/\s+/);
     if (parts.length < 3) {
       await ctx.reply('❌ Неверный формат! Используйте: КОД НАГРАДА АКТИВАЦИИ\n\n💡 Пример: WELCOME 100 50');
       return;
     }
     
     const code = parts[0].toUpperCase();
+    const reward = parseFloat(parts[1]);
     const maxActivations = parseInt(parts[2]);
     
     // Валидация данных
@@ -10246,6 +10811,7 @@ async function handleAdminCreatePromocode(ctx, user, text) {
     await db.collection('promocodes').insertOne(promocode);
     
     // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
     ]);
     
@@ -10285,11 +10851,14 @@ async function handleAdminCreatePromoStars(ctx, user, text) {
     userCache.delete(user.id);
     
     // Парсим данные ключа
+    const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
       await ctx.reply('❌ Неверный формат! Используйте: НАГРАДА АКТИВАЦИИ\n\n💡 Пример: 100 50');
       return;
     }
     
+    const reward = parseFloat(parts[0]);
+    const maxActivations = parseInt(parts[1]);
     
     // Генерируем уникальный ключ
     let code;
@@ -10316,12 +10885,14 @@ async function handleAdminCreatePromoStars(ctx, user, text) {
     }
     
     // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
     if (existingPromocode) {
       await ctx.reply(`❌ Промокод "${code}" уже существует!`);
       return;
     }
     
     // Создаем промокод
+    const promocode = {
       code: code,
       reward: reward,
       rewardType: 'Stars',
@@ -10339,6 +10910,7 @@ async function handleAdminCreatePromoStars(ctx, user, text) {
     await db.collection('promocodes').insertOne(promocode);
     
     // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
     ]);
     
@@ -10376,11 +10948,14 @@ async function handleAdminCreatePromoStars(ctx, user, text) {
     userCache.delete(user.id);
     
     // Парсим данные ключа
+    const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
       await ctx.reply('❌ Неверный формат! Используйте: НАГРАДА АКТИВАЦИИ\n\n💡 Пример: 50 25');
       return;
     }
     
+    const reward = parseFloat(parts[0]);
+    const maxActivations = parseInt(parts[1]);
     
     // Генерируем уникальный ключ
     let code;
@@ -10407,12 +10982,14 @@ async function handleAdminCreatePromoStars(ctx, user, text) {
     }
     
     // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
     if (existingPromocode) {
       await ctx.reply(`❌ Промокод "${code}" уже существует!`);
       return;
     }
     
     // Создаем промокод
+    const promocode = {
       code: code,
       reward: reward,
       rewardType: 'stars',
@@ -10430,6 +11007,7 @@ async function handleAdminCreatePromoStars(ctx, user, text) {
     await db.collection('promocodes').insertOne(promocode);
     
     // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
     ]);
     
@@ -10467,12 +11045,14 @@ async function handleAdminCreatePromoTitle(ctx, user, text) {
     userCache.delete(user.id);
     
     // Парсим данные ключа
+    const parts = text.trim().split(/\s+/);
     if (parts.length < 2) {
       await ctx.reply('❌ Неверный формат! Используйте: ТИТУЛ АКТИВАЦИИ\n\n💡 Пример: 👑 Легенда 10');
       return;
     }
     
     const title = parts.slice(0, -1).join(' '); // Все части кроме последней
+    const maxActivations = parseInt(parts[parts.length - 1]);
     
     // Генерируем уникальный ключ
     let code;
@@ -10499,12 +11079,14 @@ async function handleAdminCreatePromoTitle(ctx, user, text) {
     }
     
     // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
     if (existingPromocode) {
       await ctx.reply(`❌ Промокод "${code}" уже существует!`);
       return;
     }
     
     // Создаем промокод
+    const promocode = {
       code: code,
       reward: title,
       rewardType: 'title',
@@ -10522,6 +11104,7 @@ async function handleAdminCreatePromoTitle(ctx, user, text) {
     await db.collection('promocodes').insertOne(promocode);
     
     // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
     ]);
     
@@ -10573,11 +11156,13 @@ async function handleAdminCreatePromoChest(ctx, user, text, chestType) {
     userCache.delete(user.id);
     
     // Парсим данные ключа
+    const parts = text.trim().split(/\s+/);
     if (parts.length < 1) {
       await ctx.reply(`❌ Неверный формат! Используйте: АКТИВАЦИИ\n\n💡 Пример: 100`);
       return;
     }
     
+    const maxActivations = parseInt(parts[0]);
     
     // Генерируем уникальный ключ
     let code;
@@ -10599,12 +11184,14 @@ async function handleAdminCreatePromoChest(ctx, user, text, chestType) {
     }
     
     // Проверяем, не существует ли уже такой промокод
+    const existingPromocode = await db.collection('promocodes').findOne({ code: code });
     if (existingPromocode) {
       await ctx.reply(`❌ Промокод "${code}" уже существует!`);
       return;
     }
     
     // Создаем промокод с сундуком
+    const promocode = {
       code: code,
       rewardType: 'chest',
       chestType: chestType,
@@ -10622,6 +11209,7 @@ async function handleAdminCreatePromoChest(ctx, user, text, chestType) {
     await db.collection('promocodes').insertOne(promocode);
     
     // Отправляем подтверждение админу
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
     ]);
     
@@ -10771,6 +11359,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
   try {
     log(`🎫 Пользователь ${user.id} активирует промокод: "${text}"`);
     
+    const code = text.trim().toUpperCase();
     
     // Валидация кода
     if (!code || code.length < 3) {
@@ -10779,9 +11368,14 @@ async function handleUserEnterPromocode(ctx, user, text) {
     }
     
     // Проверяем дневной лимит промокодов
+    const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
+    const dailyPromocodes = user.dailyPromocodes || [];
+    const todayPromocodes = dailyPromocodes.filter(p => {
+      const promoDate = new Date(p.date);
       return promoDate >= today && promoDate < tomorrow;
     });
     
@@ -10798,6 +11392,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
     }
     
     // Ищем промокод в базе данных
+    const promocode = await db.collection('promocodes').findOne({ 
       code: code, 
       isActive: true 
     });
@@ -10934,7 +11529,9 @@ async function handleUserEnterPromocode(ctx, user, text) {
     userCache.delete(user.id);
     
     // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
     if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
       if (levelResult.levelUp) {
         log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
       }
@@ -10952,6 +11549,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
           rewardText = `👑 Награда: \`${reward}\``;
         }
         
+        const notificationMessage = 
           `🎫 *Активация промокода!*\n\n` +
           `👤 Пользователь: ${user.firstName || 'Неизвестно'}\n` +
           `🆔 ID: \`${user.id}\`\n` +
@@ -10971,6 +11569,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
     let notificationText = '';
     
     if (rewardType === 'chest') {
+      const rewardText = formatChestReward(chestReward);
       notificationText = `🎉 ${chestReward.emoji} ${chestReward.level} сундук!\n${rewardText}`;
     } else {
       if (rewardType === 'Stars') {
@@ -11008,6 +11607,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
   try {
     log(`🎫 Пользователь ${user.id} активирует промокод текстом: "${text}"`);
     
+    const code = text.trim().toUpperCase();
     
     // Валидация кода
     if (!code || code.length < 3) {
@@ -11016,9 +11616,14 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
     }
     
     // Проверяем дневной лимит промокодов
+    const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
+    const dailyPromocodes = user.dailyPromocodes || [];
+    const todayPromocodes = dailyPromocodes.filter(p => {
+      const promoDate = new Date(p.date);
       return promoDate >= today && promoDate < tomorrow;
     });
     
@@ -11028,12 +11633,14 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
     }
     
     // Проверяем, не использовал ли пользователь уже этот промокод
+    const usedPromocodes = user.usedPromocodes || [];
     if (usedPromocodes.includes(code)) {
       await ctx.reply('❌ Вы уже использовали этот промокод!');
       return;
     }
     
     // Ищем промокод в базе данных
+    const promocode = await db.collection('promocodes').findOne({ 
       code: code, 
       isActive: true 
     });
@@ -11169,7 +11776,9 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
     userCache.delete(user.id);
     
     // Проверяем и обновляем уровень пользователя
+    const updatedUser = await getUser(user.id);
     if (updatedUser) {
+      const levelResult = await checkAndUpdateLevel(updatedUser);
       if (levelResult.levelUp) {
         log(`🎉 Пользователь ${user.id} повысил уровень до ${levelResult.newLevel}!`);
       }
@@ -11189,6 +11798,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
           rewardText = `👑 Награда: \`${reward}\``;
         }
         
+        const notificationMessage = 
           `🎫 *Активация промокода!*\n\n` +
           `👤 Пользователь: ${user.firstName || 'Неизвестно'}\n` +
           `🆔 ID: \`${user.id}\`\n` +
@@ -11208,6 +11818,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
     let notificationText = '';
     
     if (rewardType === 'chest') {
+      const rewardText = formatChestReward(chestReward);
       notificationText = `🎉 ${chestReward.emoji} ${chestReward.level} сундук!\n${rewardText}`;
     } else {
       if (rewardType === 'Stars') {
@@ -11245,11 +11856,14 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
 
 bot.action('faq_miner', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'support_faq')]
     ]);
     
+    const message = 
       `⛏️ *FAQ - Майнер*\n\n` +
       `*❓ Что такое майнер?*\n` +
       `Майнер - это автоматический способ заработка Stars. Он работает в фоновом режиме и приносит награды каждую минуту.\n\n` +
@@ -11281,11 +11895,14 @@ bot.action('faq_miner', async (ctx) => {
 });
 bot.action('faq_bonus', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'support_faq')]
     ]);
     
+    const message = 
       `🎁 *FAQ - Бонусы*\n\n` +
       `*❓ Что такое ежедневный бонус?*\n` +
       `Ежедневный бонус - это награда, которую можно получить раз в день. Бонус увеличивается с каждым днем подряд.\n\n` +
@@ -11312,11 +11929,14 @@ bot.action('faq_bonus', async (ctx) => {
 });
 bot.action('faq_exchange', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'support_faq')]
     ]);
     
+    const message = 
       `💎 *FAQ - Обмен*\n\n` +
       `*❓ Что такое обмен?*\n` +
       `Обмен позволяет конвертировать Stars в Stars по фиксированному курсу.\n\n` +
@@ -11344,11 +11964,14 @@ bot.action('faq_exchange', async (ctx) => {
 
 bot.action('faq_promocodes', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'support_faq')]
     ]);
     
+    const message = 
       `🎫 *FAQ - Промокоды*\n\n` +
       `*❓ Что такое промокоды?*\n` +
       `Промокоды - это специальные коды, которые дают бонусные Stars при активации.\n\n` +
@@ -11378,11 +12001,14 @@ bot.action('faq_promocodes', async (ctx) => {
 
 bot.action('faq_referrals', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'support_faq')]
     ]);
     
+    const message = 
       `👥 *FAQ - Рефералы*\n\n` +
       `*❓ Что такое реферальная система?*\n` +
       `Реферальная система позволяет получать награды за приглашение друзей в бота.\n\n` +
@@ -11416,11 +12042,14 @@ bot.action('faq_referrals', async (ctx) => {
 
 bot.action('faq_achievements', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'support_faq')]
     ]);
     
+    const message = 
       `🏆 *FAQ - Достижения*\n\n` +
       `*❓ Что такое достижения?*\n` +
       `Достижения - это система наград за выполнение различных задач в боте.\n\n` +
@@ -11455,11 +12084,14 @@ bot.action('faq_achievements', async (ctx) => {
 
 bot.action('faq_tasks', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'support_faq')]
     ]);
     
+    const message = 
       `📋 *FAQ - Задания*\n\n` +
       `*❓ Что такое задания?*\n` +
       `Задания - это способ получить дополнительные Stars за выполнение различных действий.\n\n` +
@@ -11497,16 +12129,19 @@ bot.action('support', async (ctx) => {
     logFunction('bot.action.support', ctx.from.id);
     log(`🆘 Запрос меню поддержки от пользователя ${ctx.from.id}`);
     
+    const user = await getUser(ctx.from.id);
     if (!user) {
       log(`❌ Не удалось получить пользователя ${ctx.from.id} для меню поддержки`);
       return;
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('📝 Создать тикет', 'contact_support')],
       [Markup.button.callback('❓ FAQ', 'support_faq')],
       [Markup.button.callback('🔙 Назад', 'settings')]
     ]);
     
+    const message = 
       `🆘 *Поддержка*\n\n` +
       `👋 Привет! Мы готовы помочь вам с любыми вопросами.\n\n` +
       `📋 *Выберите способ связи:*\n\n` +
@@ -11534,6 +12169,7 @@ bot.action('contact_support', async (ctx) => {
     logFunction('bot.action.contact_support', ctx.from.id);
     log(`🆘 Запрос создания тикета поддержки от пользователя ${ctx.from.id}`);
     
+    const user = await getUser(ctx.from.id);
     if (!user) {
       log(`❌ Не удалось получить пользователя ${ctx.from.id} для создания тикета`);
       return;
@@ -11550,9 +12186,11 @@ bot.action('contact_support', async (ctx) => {
     
     logDebug(`Установлен adminState для пользователя ${ctx.from.id}`, { adminState: 'creating_support_ticket' });
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'support')]
     ]);
     
+    const message = 
       `🆘 *Создание тикета поддержки*\n\n` +
       `Ваш ID: \`${user.id}\`\n\n` +
       `📝 Опишите вашу проблему в одном сообщении.\n\n` +
@@ -11582,6 +12220,7 @@ bot.action(/^support_answer_(.+)$/, async (ctx) => {
   try {
     console.log(`✅ Админ ${ctx.from.id} отвечает на тикет ${ctx.match[1]}`);
     
+    const ticketId = ctx.match[1];
     const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
@@ -11602,10 +12241,12 @@ bot.action(/^support_answer_(.+)$/, async (ctx) => {
     userCache.delete(admin.id);
     console.log(`🗑️ Кеш пользователя ${admin.id} очищен`);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', `support_cancel_${ticketId}`)],
       [Markup.button.url('💬 Открыть чат с ботом', `https://t.me/${(await bot.telegram.getMe()).username}`)]
     ]);
     
+    const message = 
       `✅ *Ответ на тикет*\n\n` +
       `🆔 *ID тикета:* \`${ticketId}\`\n\n` +
       `📝 Напишите ответ пользователю в личном чате с ботом:\n\n` +
@@ -11653,6 +12294,8 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
   try {
     console.log(`⏳ Админ ${ctx.from.id} устанавливает статус "В обработке" для тикета ${ctx.match[1]}`);
     
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
       console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
@@ -11673,6 +12316,7 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
     );
     
     // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
     if (ticket) {
       try {
         await ctx.telegram.sendMessage(ticket.userId, 
@@ -11689,6 +12333,7 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
     }
     
     // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Ответить', `support_answer_${ticketId}`),
         Markup.button.callback('❌ Отклонить', `support_reject_${ticketId}`)
@@ -11698,6 +12343,7 @@ bot.action(/^support_progress_(.+)$/, async (ctx) => {
       ]
     ]);
     
+    const message = 
       `⏳ *Тикет в обработке*\n\n` +
       `🆔 *ID тикета:* \`${ticketId}\`\n` +
       `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
@@ -11724,6 +12370,8 @@ bot.action(/^support_reject_(.+)$/, async (ctx) => {
   try {
     console.log(`❌ Админ ${ctx.from.id} отклоняет тикет ${ctx.match[1]}`);
     
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
       console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
@@ -11744,6 +12392,7 @@ bot.action(/^support_reject_(.+)$/, async (ctx) => {
     );
     
     // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
     if (ticket) {
       try {
         await ctx.telegram.sendMessage(ticket.userId, 
@@ -11760,6 +12409,7 @@ bot.action(/^support_reject_(.+)$/, async (ctx) => {
     }
     
     // Обновляем сообщение в канале
+    const message = 
       `❌ *Тикет отклонен*\n\n` +
       `🆔 *ID тикета:* \`${ticketId}\`\n` +
       `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
@@ -11787,6 +12437,8 @@ bot.action(/^support_close_(.+)$/, async (ctx) => {
   try {
     console.log(`🔒 Админ ${ctx.from.id} закрывает тикет ${ctx.match[1]}`);
     
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
       console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
@@ -11807,6 +12459,7 @@ bot.action(/^support_close_(.+)$/, async (ctx) => {
     );
     
     // Отправляем уведомление пользователю
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
     if (ticket) {
       try {
         await ctx.telegram.sendMessage(ticket.userId, 
@@ -11823,6 +12476,7 @@ bot.action(/^support_close_(.+)$/, async (ctx) => {
     }
     
     // Обновляем сообщение в канале
+    const message = 
       `🔒 *Тикет закрыт*\n\n` +
       `🆔 *ID тикета:* \`${ticketId}\`\n` +
       `👤 *Пользователь:* ${ticket?.firstName || 'Не указано'}\n` +
@@ -11850,6 +12504,8 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
   try {
     console.log(`🔙 Админ ${ctx.from.id} отменяет ответ на тикет ${ctx.match[1]}`);
     
+    const ticketId = ctx.match[1];
+    const admin = await getUser(ctx.from.id);
     
     if (!admin || !isAdmin(admin.id)) {
       console.log(`❌ Пользователь ${ctx.from.id} не является админом`);
@@ -11867,7 +12523,9 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
     userCache.delete(admin.id);
     
     // Возвращаемся к исходному сообщению тикета
+    const ticket = await db.collection('supportTickets').findOne({ id: ticketId });
     if (ticket) {
+      const keyboard = Markup.inlineKeyboard([
         [
           Markup.button.callback('✅ Ответить', `support_answer_${ticketId}`),
           Markup.button.callback('⏳ В обработке', `support_progress_${ticketId}`)
@@ -11878,6 +12536,7 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
         ]
       ]);
       
+      const message = 
         `🆘 *Тикет поддержки*\n\n` +
         `🆔 *ID тикета:* \`${ticketId}\`\n` +
         `👤 *Пользователь:* ${ticket.firstName || 'Не указано'}\n` +
@@ -11906,11 +12565,14 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
 // Обработчики для разных способов связи
 bot.action('support_telegram', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'contact_support')]
     ]);
     
+    const message = 
       `📧 *Поддержка через Telegram*\n\n` +
       `Для связи с поддержкой через Telegram:\n\n` +
       `👤 *Администратор:* @magnum_support\n` +
@@ -11936,11 +12598,14 @@ bot.action('support_telegram', async (ctx) => {
 
 bot.action('support_whatsapp', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'contact_support')]
     ]);
     
+    const message = 
       `📱 *Поддержка через WhatsApp*\n\n` +
       `Для связи с поддержкой через WhatsApp:\n\n` +
       `📞 *Номер:* +7 (999) 123-45-67\n` +
@@ -11966,11 +12631,14 @@ bot.action('support_whatsapp', async (ctx) => {
 
 bot.action('support_email', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'contact_support')]
     ]);
     
+    const message = 
       `📧 *Поддержка через Email*\n\n` +
       `Для связи с поддержкой через Email:\n\n` +
       `📧 *Email:* support@magnumtap.com\n` +
@@ -12000,8 +12668,10 @@ bot.action('support_email', async (ctx) => {
 // FAQ
 bot.action('support_faq', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('💰 Бонусы', 'faq_bonus')],
       [Markup.button.callback('⛏️ Майнинг', 'faq_mining')],
       [Markup.button.callback('📈 Биржа', 'faq_exchange')],
@@ -12011,6 +12681,7 @@ bot.action('support_faq', async (ctx) => {
       [Markup.button.callback('🔙 Назад', 'support')]
     ]);
     
+    const message = 
       `❓ *Часто задаваемые вопросы (FAQ)*\n\n` +
       `🔍 Выберите категорию вопросов:\n\n` +
       `💰 *Бонусы* - Вопросы о ежедневных бонусах\n` +
@@ -12035,13 +12706,17 @@ bot.action('support_faq', async (ctx) => {
 // Обработчик одобрения скриншота
 bot.action(/^approve_screenshot_(\d+)_(\d+)$/, async (ctx) => {
   try {
+    const userId = parseInt(ctx.match[1]);
     const taskId = parseInt(ctx.match[2]);
     
+    const user = await getUser(userId);
     if (!user) {
       await ctx.answerCbQuery('❌ Пользователь не найден');
       return;
     }
     
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.answerCbQuery('❌ Задание не найдено');
@@ -12092,12 +12767,17 @@ bot.action(/^approve_screenshot_(\d+)_(\d+)$/, async (ctx) => {
 // Обработчик отклонения скриншота
 bot.action(/^reject_screenshot_(\d+)_(\d+)$/, async (ctx) => {
   try {
+    const userId = parseInt(ctx.match[1]);
+    const taskId = parseInt(ctx.match[2]);
     
+    const user = await getUser(userId);
     if (!user) {
       await ctx.answerCbQuery('❌ Пользователь не найден');
       return;
     }
     
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.answerCbQuery('❌ Задание не найдено');
@@ -12151,13 +12831,18 @@ bot.action(/^reject_screenshot_(\d+)_(\d+)$/, async (ctx) => {
 // Обработчик отклонения с причиной
 bot.action(/^reject_reason_(\d+)_(\d+)_(.+)$/, async (ctx) => {
   try {
+    const userId = parseInt(ctx.match[1]);
+    const taskId = parseInt(ctx.match[2]);
     const reason = ctx.match[3];
     
+    const user = await getUser(userId);
     if (!user) {
       await ctx.answerCbQuery('❌ Пользователь не найден');
       return;
     }
     
+    const sponsorTasks = getSponsorTasks();
+    const task = sponsorTasks.find(t => t.id === taskId);
     
     if (!task) {
       await ctx.answerCbQuery('❌ Задание не найдено');
@@ -12221,6 +12906,7 @@ bot.action('main_menu', async (ctx) => {
     logFunction('bot.action.main_menu', ctx.from.id);
     log(`🏠 Запрос главного меню от пользователя ${ctx.from.id}`);
     
+    const user = await getUser(ctx.from.id);
     if (!user) {
       log(`❌ Не удалось получить пользователя ${ctx.from.id} для главного меню`);
       return;
@@ -12249,6 +12935,7 @@ bot.action('main_menu', async (ctx) => {
 // Роадмап
 bot.action('roadmap', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('Скоро...');
@@ -12258,6 +12945,7 @@ bot.action('roadmap', async (ctx) => {
 });
 bot.action('roadmap_q4_2025', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showRoadmapQ4_2025(ctx, user);
@@ -12268,6 +12956,7 @@ bot.action('roadmap_q4_2025', async (ctx) => {
 
 bot.action('roadmap_q1_2026', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showRoadmapQ1_2026(ctx, user);
@@ -12278,6 +12967,7 @@ bot.action('roadmap_q1_2026', async (ctx) => {
 
 bot.action('roadmap_q2_2026', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showRoadmapQ2_2026(ctx, user);
@@ -12288,6 +12978,7 @@ bot.action('roadmap_q2_2026', async (ctx) => {
 
 bot.action('roadmap_q3_2026', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showRoadmapQ3_2026(ctx, user);
@@ -12300,6 +12991,7 @@ bot.action('roadmap_q3_2026', async (ctx) => {
 
 bot.action('roadmap_suggestions', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showRoadmapSuggestions(ctx, user);
@@ -12311,6 +13003,7 @@ bot.action('roadmap_suggestions', async (ctx) => {
 // Майнинг
 bot.action('miner', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Проверяем, является ли пользователь админом
@@ -12328,6 +13021,7 @@ bot.action('miner', async (ctx) => {
 
 bot.action('start_miner', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await startMiner(ctx, user);
@@ -12338,6 +13032,7 @@ bot.action('start_miner', async (ctx) => {
 
 bot.action('stop_miner', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await stopMiner(ctx, user);
@@ -12348,6 +13043,7 @@ bot.action('stop_miner', async (ctx) => {
 
 bot.action('upgrade_miner', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showMinerUpgrade(ctx, user);
@@ -12358,6 +13054,7 @@ bot.action('upgrade_miner', async (ctx) => {
 
 bot.action('miner_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showMinerStats(ctx, user);
@@ -12368,6 +13065,7 @@ bot.action('miner_stats', async (ctx) => {
 
 bot.action('miner_season_info', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showMinerSeasonInfo(ctx, user);
@@ -12377,6 +13075,7 @@ bot.action('miner_season_info', async (ctx) => {
 });
 bot.action('confirm_miner_upgrade', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await upgradeMiner(ctx, user);
@@ -12388,6 +13087,7 @@ bot.action('confirm_miner_upgrade', async (ctx) => {
 // Новые обработчики для системы майнинга
 bot.action('miner_shop', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showMinerShop(ctx, user, 0);
@@ -12399,6 +13099,7 @@ bot.action('miner_shop', async (ctx) => {
 // Обработчики навигации по магазину майнеров
 bot.action(/^miner_shop_(\d+)$/, async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     const minerIndex = parseInt(ctx.match[1]);
@@ -12421,6 +13122,7 @@ bot.action('miner_shop_limit', async (ctx) => {
 
 bot.action('miner_leaderboard', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showMinerLeaderboard(ctx, user);
@@ -12431,6 +13133,7 @@ bot.action('miner_leaderboard', async (ctx) => {
 
 bot.action('miner_leaderboard_total', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showMinerLeaderboardTotal(ctx, user);
@@ -12441,6 +13144,7 @@ bot.action('miner_leaderboard_total', async (ctx) => {
 
 bot.action('miner_leaderboard_season', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showMinerLeaderboardSeason(ctx, user);
@@ -12451,6 +13155,7 @@ bot.action('miner_leaderboard_season', async (ctx) => {
 
 bot.action('miner_upgrades', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Проверяем права админа
@@ -12468,9 +13173,11 @@ bot.action('miner_upgrades', async (ctx) => {
 // Обработчики покупки майнеров
 bot.action(/^buy_miner_(.+)$/, async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     const minerType = ctx.match[1];
+    const result = await buyMiner(user, minerType);
     
     await ctx.answerCbQuery(result.message);
     
@@ -12487,6 +13194,7 @@ bot.action(/^buy_miner_(.+)$/, async (ctx) => {
 // Обработчики апгрейда майнеров
 bot.action(/^upgrade_miner_(.+)$/, async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Проверяем, является ли пользователь админом
@@ -12495,6 +13203,8 @@ bot.action(/^upgrade_miner_(.+)$/, async (ctx) => {
       return;
     }
     
+    const minerType = ctx.match[1];
+    const result = await upgradeMiner(user, minerType);
     
     await ctx.answerCbQuery(result.message);
     
@@ -12520,6 +13230,7 @@ bot.action('insufficient_funds', async (ctx) => {
 // Обмен
 bot.action('exchange', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Проверяем права админа
@@ -12541,6 +13252,7 @@ bot.action('exchange', async (ctx) => {
 // Обработчики для ввода суммы обмена
 bot.action('exchange_custom_Stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Устанавливаем состояние для ввода суммы Stars
@@ -12551,6 +13263,7 @@ bot.action('exchange_custom_Stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'exchange')]
     ]);
     
@@ -12571,6 +13284,7 @@ bot.action('exchange_custom_Stars', async (ctx) => {
 
 bot.action('exchange_custom_stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Устанавливаем состояние для ввода суммы Stars
@@ -12581,7 +13295,9 @@ bot.action('exchange_custom_stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const exchangeRate = await calculateExchangeRate();
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'exchange')]
     ]);
     
@@ -12604,8 +13320,10 @@ bot.action('exchange_custom_stars', async (ctx) => {
 
 bot.action('exchange_all', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const amount = Math.floor(user.magnuStarsoins);
     if (amount <= 0) {
       await ctx.answerCbQuery('❌ У вас нет Stars для обмена!');
       return;
@@ -12620,6 +13338,7 @@ bot.action('exchange_all', async (ctx) => {
 // Обработчики для новых функций биржи
 bot.action('exchange_chart', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeChart(ctx, user);
@@ -12631,6 +13350,7 @@ bot.action('exchange_chart', async (ctx) => {
 
 bot.action('exchange_history', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeHistory(ctx, user);
@@ -12642,6 +13362,7 @@ bot.action('exchange_history', async (ctx) => {
 
 bot.action('exchange_settings', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeSettings(ctx, user);
@@ -12653,6 +13374,7 @@ bot.action('exchange_settings', async (ctx) => {
 
 bot.action('exchange_news', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeNews(ctx, user);
@@ -12664,6 +13386,7 @@ bot.action('exchange_news', async (ctx) => {
 
 bot.action('exchange_refresh', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Очищаем кеш для получения свежих данных
@@ -12671,6 +13394,7 @@ bot.action('exchange_refresh', async (ctx) => {
     statsCache.delete('reserve');
     
     // Получаем обновленного пользователя
+    const updatedUser = await getUser(ctx.from.id);
     if (updatedUser) {
       await showExchangeMenu(ctx, updatedUser);
       await ctx.answerCbQuery('✅ Биржа обновлена!');
@@ -12684,6 +13408,7 @@ bot.action('exchange_refresh', async (ctx) => {
 // Обработчики для графика курса
 bot.action('chart_24h', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeChart(ctx, user);
@@ -12695,6 +13420,7 @@ bot.action('chart_24h', async (ctx) => {
 
 bot.action('chart_7d', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeChart(ctx, user);
@@ -12706,6 +13432,7 @@ bot.action('chart_7d', async (ctx) => {
 
 bot.action('chart_30d', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeChart(ctx, user);
@@ -12717,6 +13444,7 @@ bot.action('chart_30d', async (ctx) => {
 
 bot.action('chart_all', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeChart(ctx, user);
@@ -12729,6 +13457,7 @@ bot.action('chart_all', async (ctx) => {
 // Обработчики для истории обменов
 bot.action('history_all', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeHistory(ctx, user);
@@ -12740,6 +13469,7 @@ bot.action('history_all', async (ctx) => {
 
 bot.action('history_profit', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeHistory(ctx, user);
@@ -12751,6 +13481,7 @@ bot.action('history_profit', async (ctx) => {
 
 bot.action('history_loss', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeHistory(ctx, user);
@@ -12762,6 +13493,7 @@ bot.action('history_loss', async (ctx) => {
 
 bot.action('history_dates', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showExchangeHistory(ctx, user);
@@ -12774,6 +13506,7 @@ bot.action('history_dates', async (ctx) => {
 // Обработчики для настроек биржи
 bot.action('exchange_notifications', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('🔔 Настройки уведомлений будут добавлены в следующем обновлении!');
@@ -12785,6 +13518,7 @@ bot.action('exchange_notifications', async (ctx) => {
 
 bot.action('exchange_auto', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('📊 Автообмен будет добавлен в следующем обновлении!');
@@ -12795,6 +13529,7 @@ bot.action('exchange_auto', async (ctx) => {
 });
 bot.action('exchange_limits', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('🎯 Настройки лимитов будут добавлены в следующем обновлении!');
@@ -12806,6 +13541,7 @@ bot.action('exchange_limits', async (ctx) => {
 
 bot.action('exchange_security', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('🔒 Настройки безопасности будут добавлены в следующем обновлении!');
@@ -12818,6 +13554,7 @@ bot.action('exchange_security', async (ctx) => {
 // Обработчики для новостей биржи
 bot.action('news_analytics', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('📈 Аналитика будет добавлена в следующем обновлении!');
@@ -12828,6 +13565,7 @@ bot.action('news_analytics', async (ctx) => {
 });
 bot.action('news_reports', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('📊 Отчеты будут добавлены в следующем обновлении!');
@@ -12839,6 +13577,7 @@ bot.action('news_reports', async (ctx) => {
 
 bot.action('news_updates', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('🔔 Обновления будут добавлены в следующем обновлении!');
@@ -12850,6 +13589,7 @@ bot.action('news_updates', async (ctx) => {
 
 bot.action('news_latest', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('📰 Последние новости будут добавлены в следующем обновлении!');
@@ -12862,6 +13602,7 @@ bot.action('news_latest', async (ctx) => {
 // Вывод средств
 bot.action('withdrawal', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showWithdrawalMenu(ctx, user);
@@ -12873,6 +13614,7 @@ bot.action('withdrawal', async (ctx) => {
 // Обработчики вывода средств
 bot.action('withdrawal_Stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('🚧 Функция в разработке');
@@ -12884,6 +13626,7 @@ bot.action('withdrawal_Stars', async (ctx) => {
 
 bot.action('withdrawal_stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     if (user.stars < 50) {
@@ -12898,6 +13641,7 @@ bot.action('withdrawal_stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'withdrawal')]
     ]);
     
@@ -12921,12 +13665,16 @@ bot.action('withdrawal_stars', async (ctx) => {
 
 bot.action('withdrawal_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const withdrawal = user.withdrawal || { withdrawalCount: 0, totalWithdrawn: 0 };
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'withdrawal')]
     ]);
     
+    const message = 
       `📊 *Статистика выводов*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
@@ -12950,11 +13698,14 @@ bot.action('withdrawal_stats', async (ctx) => {
 
 bot.action('withdrawal_history', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'withdrawal')]
     ]);
     
+    const message = 
       `📋 *История выводов*\n\n` +
       `📝 История выводов недоступна.\n\n` +
       `💡 *Информация:*\n` +
@@ -12977,6 +13728,7 @@ bot.action('withdrawal_history', async (ctx) => {
 // Рефералы
 bot.action('referrals', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showReferralsMenu(ctx, user);
@@ -12987,6 +13739,7 @@ bot.action('referrals', async (ctx) => {
 
 bot.action('referral_link', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showReferralLink(ctx, user);
@@ -12996,6 +13749,7 @@ bot.action('referral_link', async (ctx) => {
 });
 bot.action('referral_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showReferralStats(ctx, user);
@@ -13005,6 +13759,7 @@ bot.action('referral_stats', async (ctx) => {
 });
 bot.action('referral_rewards', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showReferralRewards(ctx, user);
@@ -13014,6 +13769,7 @@ bot.action('referral_rewards', async (ctx) => {
 });
 bot.action('referral_list', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showReferralList(ctx, user);
@@ -13024,8 +13780,11 @@ bot.action('referral_list', async (ctx) => {
 
 bot.action('copy_referral_link', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const botUsername = (await ctx.telegram.getMe()).username;
+    const referralLink = `https://t.me/${botUsername}?start=${user.id}`;
     
     await ctx.answerCbQuery('📋 Ссылка скопирована в буфер обмена!');
     await ctx.reply(`🔗 Ваша реферальная ссылка:\n\`${referralLink}\``, { parse_mode: 'Markdown' });
@@ -13038,6 +13797,7 @@ bot.action('copy_referral_link', async (ctx) => {
 // Профиль
 bot.action('profile', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showProfileMenu(ctx, user);
@@ -13048,6 +13808,7 @@ bot.action('profile', async (ctx) => {
 
 bot.action('settings_notifications', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showNotificationSettings(ctx, user);
@@ -13057,6 +13818,7 @@ bot.action('settings_notifications', async (ctx) => {
 });
 bot.action('settings_privacy', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showPrivacySettings(ctx, user);
@@ -13067,6 +13829,7 @@ bot.action('settings_privacy', async (ctx) => {
 
 bot.action('settings_language', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showLanguageSettings(ctx, user);
@@ -13077,6 +13840,7 @@ bot.action('settings_language', async (ctx) => {
 
 bot.action('settings_reset', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showResetSettings(ctx, user);
@@ -13088,6 +13852,7 @@ bot.action('settings_reset', async (ctx) => {
 // Переключатели настроек
 bot.action('toggle_notifications', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await toggleNotificationSetting(ctx, user);
@@ -13098,6 +13863,7 @@ bot.action('toggle_notifications', async (ctx) => {
 
 bot.action('toggle_privacy', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await togglePrivacySetting(ctx, user);
@@ -13108,6 +13874,7 @@ bot.action('toggle_privacy', async (ctx) => {
 
 bot.action('set_language_ru', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await setLanguage(ctx, user, 'ru');
@@ -13118,6 +13885,7 @@ bot.action('set_language_ru', async (ctx) => {
 
 bot.action('set_language_en', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await setLanguage(ctx, user, 'en');
@@ -13128,6 +13896,7 @@ bot.action('set_language_en', async (ctx) => {
 
 bot.action('confirm_reset', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await resetUserSettings(ctx, user);
@@ -13155,6 +13924,7 @@ bot.action('bonus_user', async (ctx) => {
 
 bot.action('claim_bonus', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await claimBonus(ctx, user);
@@ -13165,6 +13935,7 @@ bot.action('claim_bonus', async (ctx) => {
 
 bot.action('bonus_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showBonusStats(ctx, user);
@@ -13175,6 +13946,7 @@ bot.action('bonus_stats', async (ctx) => {
 
 bot.action('bonus_streak', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showBonusStreak(ctx, user);
@@ -13187,10 +13959,17 @@ bot.action('bonus_streak', async (ctx) => {
 
 bot.action('bonus_cooldown', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    const bonus = user.dailyBonus;
+    const now = Date.now();
+    const lastBonus = bonus.lastBonus ? bonus.lastBonus.getTime() : 0;
+    const timeSince = now - lastBonus;
+    const dayInMs = 24 * 60 * 60 * 1000;
     
     if (timeSince < dayInMs) {
+      const remaining = dayInMs - timeSince;
       await ctx.answerCbQuery(`⏳ Подождите ${formatTime(Math.floor(remaining / 1000))} до следующего бонуса!`);
       
       // Запускаем периодическое обновление меню с обратным отсчетом
@@ -13208,6 +13987,7 @@ bot.action('check_subscription', async (ctx) => {
   try {
     const isSubscribed = await checkSubscription(ctx);
     if (isSubscribed) {
+      const user = await getUser(ctx.from.id);
       if (!user) return;
       
       await showMainMenu(ctx, user);
@@ -13217,6 +13997,7 @@ bot.action('check_subscription', async (ctx) => {
   } catch (error) {
     logError(error, 'Проверка подписки (обработчик)');
     // В случае ошибки показываем главное меню
+    const user = await getUser(ctx.from.id);
     if (user) {
       await showMainMenu(ctx, user);
     }
@@ -13225,6 +14006,7 @@ bot.action('check_subscription', async (ctx) => {
 // Админ панель
 bot.action('admin', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showAdminPanel(ctx, user);
@@ -13234,6 +14016,7 @@ bot.action('admin', async (ctx) => {
 });
 bot.action('admin_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showAdminStats(ctx, user);
@@ -13244,6 +14027,7 @@ bot.action('admin_stats', async (ctx) => {
 
 bot.action('admin_users', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showAdminUsers(ctx, user);
@@ -13254,6 +14038,7 @@ bot.action('admin_users', async (ctx) => {
 
 bot.action('admin_balance', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showAdminBalance(ctx, user);
@@ -13265,6 +14050,7 @@ bot.action('admin_balance', async (ctx) => {
 // Обработчики для управления пользователями
 bot.action('admin_search_user', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13277,6 +14063,7 @@ bot.action('admin_search_user', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_users')]
     ]);
     
@@ -13297,6 +14084,7 @@ bot.action('admin_search_user', async (ctx) => {
 });
 bot.action('admin_top_users', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13310,6 +14098,7 @@ bot.action('admin_top_users', async (ctx) => {
 });
 bot.action('admin_ban_user', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13322,6 +14111,7 @@ bot.action('admin_ban_user', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_users')]
     ]);
     
@@ -13343,6 +14133,7 @@ bot.action('admin_ban_user', async (ctx) => {
 
 bot.action('admin_unban_user', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13355,6 +14146,7 @@ bot.action('admin_unban_user', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_users')]
     ]);
     
@@ -13377,6 +14169,7 @@ bot.action('admin_unban_user', async (ctx) => {
 // Обработчики для управления балансами
 bot.action('admin_add_magnum', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13389,6 +14182,7 @@ bot.action('admin_add_magnum', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_balance')]
     ]);
     
@@ -13411,6 +14205,7 @@ bot.action('admin_add_magnum', async (ctx) => {
 
 bot.action('admin_remove_magnum', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13423,6 +14218,7 @@ bot.action('admin_remove_magnum', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_balance')]
     ]);
     
@@ -13445,6 +14241,7 @@ bot.action('admin_remove_magnum', async (ctx) => {
 
 bot.action('admin_add_stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13457,6 +14254,7 @@ bot.action('admin_add_stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_balance')]
     ]);
     
@@ -13479,6 +14277,7 @@ bot.action('admin_add_stars', async (ctx) => {
 
 bot.action('admin_remove_stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13491,6 +14290,7 @@ bot.action('admin_remove_stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_balance')]
     ]);
     
@@ -13513,6 +14313,7 @@ bot.action('admin_remove_stars', async (ctx) => {
 
 bot.action('admin_posts', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showAdminPosts(ctx, user);
@@ -13522,6 +14323,7 @@ bot.action('admin_posts', async (ctx) => {
 });
 bot.action('admin_promocodes', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showAdminPromocodes(ctx, user);
@@ -13532,6 +14334,7 @@ bot.action('admin_promocodes', async (ctx) => {
 
 bot.action('admin_settings', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13547,6 +14350,7 @@ bot.action('admin_settings', async (ctx) => {
 // Обработчики для управления титулами
 bot.action('admin_titles', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13561,6 +14365,7 @@ bot.action('admin_titles', async (ctx) => {
 
 bot.action('admin_give_title', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13573,6 +14378,7 @@ bot.action('admin_give_title', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_titles')]
     ]);
     
@@ -13610,6 +14416,7 @@ bot.action('admin_give_title', async (ctx) => {
 
 bot.action('admin_remove_title', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13622,6 +14429,7 @@ bot.action('admin_remove_title', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_titles')]
     ]);
     
@@ -13643,6 +14451,7 @@ bot.action('admin_remove_title', async (ctx) => {
 
 bot.action('admin_ranks', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13657,6 +14466,7 @@ bot.action('admin_ranks', async (ctx) => {
 
 bot.action('admin_give_rank', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13669,6 +14479,7 @@ bot.action('admin_give_rank', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_ranks')]
     ]);
     
@@ -13699,6 +14510,7 @@ bot.action('admin_give_rank', async (ctx) => {
 
 bot.action('admin_ranks_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13740,6 +14552,7 @@ async function showAdminRanksStats(ctx, user) {
       { $sort: { '_id': 1 } }
     ]).toArray();
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_ranks')]
     ]);
     
@@ -13753,6 +14566,7 @@ async function showAdminRanksStats(ctx, user) {
       });
       
       // Общая статистика
+      const totalUsers = ranksStats.reduce((sum, rank) => sum + rank.count, 0);
       const maxRank = ranksStats.reduce((max, rank) => rank.count > max.count ? rank : max, ranksStats[0]);
       
       message += `\n📊 *Общая статистика:*\n`;
@@ -13779,12 +14593,14 @@ async function showAdminRanksStats(ctx, user) {
 
 bot.action('admin_titles_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
     // Получаем статистику титулов
+    const users = await db.collection('users').find({}).toArray();
     const titleStats = {};
     
     users.forEach(u => {
@@ -13794,6 +14610,7 @@ bot.action('admin_titles_stats', async (ctx) => {
       });
     });
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_titles')]
     ]);
     
@@ -13805,6 +14622,7 @@ bot.action('admin_titles_stats', async (ctx) => {
       Object.entries(titleStats)
         .sort(([,a], [,b]) => b - a)
         .forEach(([title, count]) => {
+          const percentage = ((count / users.length) * 100).toFixed(1);
           message += `├ ${title}: \`${count}\` (${percentage}%)\n`;
         });
     } else {
@@ -13823,12 +14641,14 @@ bot.action('admin_titles_stats', async (ctx) => {
 
 bot.action('admin_sync_titles', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
     // Синхронизируем титулы для всех пользователей
+    const users = await db.collection('users').find({}).toArray();
     let synced = 0;
     
     for (const u of users) {
@@ -13850,6 +14670,7 @@ bot.action('admin_sync_titles', async (ctx) => {
 
 bot.action('admin_cache', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13869,6 +14690,7 @@ bot.action('admin_cache', async (ctx) => {
 
 bot.action('admin_reserve', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13883,6 +14705,7 @@ bot.action('admin_reserve', async (ctx) => {
 
 bot.action('admin_debug_ranks', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13898,6 +14721,7 @@ bot.action('admin_debug_ranks', async (ctx) => {
 // Обработчики управления голосованием
 bot.action('admin_voting', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13912,6 +14736,7 @@ bot.action('admin_voting', async (ctx) => {
 
 bot.action('admin_voting_create', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13926,6 +14751,7 @@ bot.action('admin_voting_create', async (ctx) => {
 
 bot.action('admin_voting_active', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13940,6 +14766,7 @@ bot.action('admin_voting_active', async (ctx) => {
 
 bot.action('admin_voting_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13954,6 +14781,7 @@ bot.action('admin_voting_stats', async (ctx) => {
 
 bot.action('admin_voting_settings', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13970,6 +14798,7 @@ bot.action('admin_voting_settings', async (ctx) => {
 
 bot.action('admin_voting_delete', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13983,6 +14812,7 @@ bot.action('admin_voting_delete', async (ctx) => {
 });
 bot.action('admin_voting_history', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -13997,6 +14827,7 @@ bot.action('admin_voting_history', async (ctx) => {
 
 bot.action('admin_test_progress', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14011,6 +14842,7 @@ bot.action('admin_test_progress', async (ctx) => {
 
 bot.action('admin_force_level_check', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14025,6 +14857,7 @@ bot.action('admin_force_level_check', async (ctx) => {
 
 bot.action('admin_add_experience', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14038,6 +14871,7 @@ bot.action('admin_add_experience', async (ctx) => {
 });
 bot.action('admin_reserve_add_Stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14050,6 +14884,7 @@ bot.action('admin_reserve_add_Stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
     ]);
     
@@ -14071,6 +14906,7 @@ bot.action('admin_reserve_add_Stars', async (ctx) => {
 
 bot.action('admin_reserve_remove_Stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14083,6 +14919,7 @@ bot.action('admin_reserve_remove_Stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
     ]);
     
@@ -14103,6 +14940,7 @@ bot.action('admin_reserve_remove_Stars', async (ctx) => {
 });
 bot.action('admin_reserve_add_stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14115,6 +14953,7 @@ bot.action('admin_reserve_add_stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
     ]);
     
@@ -14136,6 +14975,7 @@ bot.action('admin_reserve_add_stars', async (ctx) => {
 
 bot.action('admin_reserve_remove_stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14148,6 +14988,7 @@ bot.action('admin_reserve_remove_stars', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_reserve')]
     ]);
     
@@ -14170,6 +15011,7 @@ bot.action('admin_reserve_remove_stars', async (ctx) => {
 // Обработчики для новых функций управления резервом
 bot.action('admin_reserve_update_rate', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14179,6 +15021,8 @@ bot.action('admin_reserve_update_rate', async (ctx) => {
     statsCache.delete('reserve');
     
     // Получаем обновленный резерв и пересчитываем курс
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const newRate = await calculateExchangeRate();
     
     // Сохраняем историю изменения курса
     await db.collection('exchangeHistory').insertOne({
@@ -14201,20 +15045,30 @@ bot.action('admin_reserve_update_rate', async (ctx) => {
 
 bot.action('admin_reserve_rate_details', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
     // Получаем текущий резерв
+    const reserve = await db.collection('reserve').findOne({ currency: 'main' });
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
     // Получаем текущий курс обмена
+    const exchangeRate = await calculateExchangeRate();
     
     // Рассчитываем детали
+    const ratio = magnuStarsoinsReserve / starsReserve;
+    const logRatio = ratio > 1 ? Math.log(ratio) / Math.log(10) : 0;
+    const multiplier = ratio <= 1 ? Math.max(0.1, ratio) : Math.max(0.1, Math.min(50, 1 + logRatio * 2));
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_reserve')]
     ]);
     
+    const message = 
       `📊 *Детали расчета курса*\n\n` +
       `💰 *Резервы:*\n` +
       `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
@@ -14243,6 +15097,7 @@ bot.action('admin_reserve_rate_details', async (ctx) => {
 // Обработчики для управления комиссией
 bot.action('admin_exchange_commission', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14257,6 +15112,7 @@ bot.action('admin_exchange_commission', async (ctx) => {
 
 bot.action('admin_commission_increase', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14275,11 +15131,13 @@ bot.action('admin_commission_increase', async (ctx) => {
 
 bot.action('admin_commission_decrease', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const newCommission = Math.max(config.EXCHANGE_COMMISSION - 0.5, 0); // Минимум 0%
     config.EXCHANGE_COMMISSION = newCommission;
     
     await ctx.answerCbQuery(`✅ Комиссия уменьшена до ${newCommission}%`);
@@ -14292,6 +15150,7 @@ bot.action('admin_commission_decrease', async (ctx) => {
 
 bot.action('admin_commission_set', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14304,6 +15163,7 @@ bot.action('admin_commission_set', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_exchange_commission')]
     ]);
     
@@ -14324,24 +15184,30 @@ bot.action('admin_commission_set', async (ctx) => {
 });
 bot.action('admin_commission_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
     // Получаем статистику обменов
+    const totalExchanges = await db.collection('users').aggregate([
       { $group: { _id: null, total: { $sum: '$exchange.totalExchanges' } } }
     ]).toArray();
     
+    const totalExchanged = await db.collection('users').aggregate([
       { $group: { _id: null, total: { $sum: '$exchange.totalExchanged' } } }
     ]).toArray();
     
     const totalExchangesCount = totalExchanges.length > 0 ? totalExchanges[0].total : 0;
     const totalExchangedAmount = totalExchanged.length > 0 ? totalExchanged[0].total : 0;
+    const totalCommission = (totalExchangedAmount * config.EXCHANGE_COMMISSION) / 100;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_exchange_commission')]
     ]);
     
+    const message = 
       `📊 *Статистика комиссий*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Всего обменов: \`${totalExchangesCount}\`\n` +
@@ -14370,6 +15236,7 @@ bot.action('admin_commission_stats', async (ctx) => {
 // Обработчики комиссии вывода
 bot.action('admin_withdrawal_commission', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14384,12 +15251,14 @@ bot.action('admin_withdrawal_commission', async (ctx) => {
 
 bot.action('admin_withdrawal_commission_increase', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
     // Увеличиваем комиссию на 1%
+    const newCommission = Math.min(10, 5 + 1); // Максимум 10%
     
     await db.collection('config').updateOne(
       { key: 'WITHDRAWAL_COMMISSION' },
@@ -14407,12 +15276,14 @@ bot.action('admin_withdrawal_commission_increase', async (ctx) => {
 
 bot.action('admin_withdrawal_commission_decrease', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
     // Уменьшаем комиссию на 1%
+    const newCommission = Math.max(0, 5 - 1); // Минимум 0%
     
     await db.collection('config').updateOne(
       { key: 'WITHDRAWAL_COMMISSION' },
@@ -14430,6 +15301,7 @@ bot.action('admin_withdrawal_commission_decrease', async (ctx) => {
 
 bot.action('admin_withdrawal_commission_set', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14442,6 +15314,7 @@ bot.action('admin_withdrawal_commission_set', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_withdrawal_commission')]
     ]);
     
@@ -14463,6 +15336,7 @@ bot.action('admin_withdrawal_commission_set', async (ctx) => {
 
 bot.action('admin_withdrawal_commission_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14474,9 +15348,11 @@ bot.action('admin_withdrawal_commission_stats', async (ctx) => {
     const approvedWithdrawals = await db.collection('withdrawalRequests').countDocuments({ status: 'approved' });
     const rejectedWithdrawals = await db.collection('withdrawalRequests').countDocuments({ status: 'rejected' });
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_withdrawal_commission')]
     ]);
     
+    const message = 
       `📊 *Статистика комиссий вывода*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Всего заявок: \`${totalWithdrawals}\`\n` +
@@ -14501,25 +15377,36 @@ bot.action('admin_withdrawal_commission_stats', async (ctx) => {
 
 bot.action('admin_promocodes_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
     // Получаем статистику промокодов
+    const promocodes = await db.collection('promocodes').find({}).toArray();
+    const totalPromocodes = promocodes.length;
+    const activePromocodes = promocodes.filter(p => p.isActive && (!p.expiresAt || p.expiresAt > new Date())).length;
     const expiredPromocodes = promocodes.filter(p => p.expiresAt && p.expiresAt <= new Date()).length;
+    const totalActivations = promocodes.reduce((sum, p) => sum + (p.totalActivations || 0), 0);
+    const totalRewards = promocodes.reduce((sum, p) => sum + (p.totalRewards || 0), 0);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
     ]);
     
     // Получаем активные ключи с оставшимися активациями
     const activeKeys = promocodes.filter(p => p.isActive && p.activations < p.maxActivations);
     const activeKeysList = activeKeys.slice(0, 10).map(p => {
+      const remaining = p.maxActivations - p.activations;
+      const rewardType = p.rewardType || 'Stars';
+      const rewardText = rewardType === 'Stars' ? `${p.reward} Stars` : 
                         rewardType === 'stars' ? `${p.reward} ⭐` :
                         rewardType === 'title' ? p.title : 'Сундук';
       return `🔑 \`${p.code}\` - ${rewardText} (${remaining}/${p.maxActivations})`;
     }).join('\n');
 
+    const message = 
       `📊 *Статистика ключей*\n\n` +
       `🔑 *Общая статистика:*\n` +
       `├ Всего ключей: \`${totalPromocodes}\`\n` +
@@ -14551,12 +15438,16 @@ bot.action('admin_promocodes_stats', async (ctx) => {
 // Недостающие обработчики админ-панели (простые реализации)
 bot.action('admin_posts_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_posts')]]);
+    const message = `📊 *Статистика постов*\n\nДетальная статистика недоступна.`;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'Статистика постов (обработчик)'); }
 });
 
 bot.action('admin_broadcast', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user || !isAdmin(user.id)) return;
     await db.collection('users').updateOne({ id: user.id }, { $set: { adminState: 'broadcasting', updatedAt: new Date() } });
     await ctx.reply('📢 Введите текст для рассылки всем пользователям:');
   } catch (error) { logError(error, 'Рассылка (обработчик)'); }
@@ -14564,8 +15455,10 @@ bot.action('admin_broadcast', async (ctx) => {
 
 bot.action('admin_create_promocode', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🟢 Обычный сундук', 'create_promo_common'),
         Markup.button.callback('🔵 Редкий сундук', 'create_promo_rare')
@@ -14609,6 +15502,7 @@ bot.action('admin_create_promocode', async (ctx) => {
 // Обработчики создания промокодов по типам
 bot.action('create_promo_Stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14634,6 +15528,7 @@ bot.action('create_promo_Stars', async (ctx) => {
 
 bot.action('create_promo_stars', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14659,6 +15554,7 @@ bot.action('create_promo_stars', async (ctx) => {
 
 bot.action('create_promo_title', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14667,6 +15563,7 @@ bot.action('create_promo_title', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
     ]);
     
@@ -14690,6 +15587,7 @@ bot.action('create_promo_title', async (ctx) => {
 
 bot.action('create_promo_custom', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14698,6 +15596,7 @@ bot.action('create_promo_custom', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
     ]);
     
@@ -14728,6 +15627,7 @@ bot.action('create_promo_custom', async (ctx) => {
 // Обычный сундук
 bot.action('create_promo_common', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14736,6 +15636,7 @@ bot.action('create_promo_common', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
     ]);
     
@@ -14762,6 +15663,7 @@ bot.action('create_promo_common', async (ctx) => {
 // Редкий сундук
 bot.action('create_promo_rare', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14770,6 +15672,7 @@ bot.action('create_promo_rare', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
     ]);
     
@@ -14797,6 +15700,7 @@ bot.action('create_promo_rare', async (ctx) => {
 // Эпический сундук
 bot.action('create_promo_epic', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14805,6 +15709,7 @@ bot.action('create_promo_epic', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
     ]);
     
@@ -14833,6 +15738,7 @@ bot.action('create_promo_epic', async (ctx) => {
 // Легендарный сундук
 bot.action('create_promo_legendary', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
@@ -14841,6 +15747,7 @@ bot.action('create_promo_legendary', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
     ]);
     
@@ -14869,12 +15776,14 @@ bot.action('create_promo_legendary', async (ctx) => {
 
 bot.action('admin_mass_give', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user || !isAdmin(user.id)) return;
     await db.collection('users').updateOne({ id: user.id }, { $set: { adminState: 'mass_give', updatedAt: new Date() } });
     await ctx.reply('💰 Введите массовую выдачу (например: "stars 100" или "Stars 50"):');
   } catch (error) { logError(error, 'Массовая выдача (обработчик)'); }
 });
 bot.action('admin_mining_seasons', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14889,6 +15798,7 @@ bot.action('admin_mining_seasons', async (ctx) => {
 
 bot.action('admin_season_start', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -14900,6 +15810,7 @@ bot.action('admin_season_start', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_mining_seasons')]
     ]);
     
@@ -14924,11 +15835,13 @@ bot.action('admin_season_start', async (ctx) => {
 
 bot.action('admin_season_end', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const currentSeason = getCurrentMiningSeason();
     
     // Получаем топ игроков сезона
     const topPlayers = await db.collection('users')
@@ -14941,12 +15854,16 @@ bot.action('admin_season_end', async (ctx) => {
     message += `📊 *Топ-10 игроков сезона:*\n`;
     
     for (let i = 0; i < Math.min(10, topPlayers.length); i++) {
+      const player = topPlayers[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
       message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedStars || 0)} Stars\n`;
     }
     
     message += `\n💡 *Награды будут выданы автоматически*\n`;
     message += `🎯 Выберите действие:`;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🏆 Выдать награды', 'admin_season_rewards'),
         Markup.button.callback('🔄 Сбросить статистику', 'admin_season_reset')
@@ -14966,13 +15883,16 @@ bot.action('admin_season_end', async (ctx) => {
 
 bot.action('admin_season_rewards', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const currentSeason = getCurrentMiningSeason();
     
     // Получаем топ игроков сезона
+    const topPlayers = await db.collection('users')
       .find({ 'miningStats.seasonMinedStars': { $exists: true } })
       .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(50)
@@ -14985,6 +15905,9 @@ bot.action('admin_season_rewards', async (ctx) => {
     let totalRewardsStars = 0;
     
     for (let i = 0; i < Math.min(10, topPlayers.length); i++) {
+      const player = topPlayers[i];
+      const position = i + 1;
+      const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
       
       let rewardStars = 0;
       let rewardStars = 0;
@@ -15011,6 +15934,7 @@ bot.action('admin_season_rewards', async (ctx) => {
     message += `└ Stars: \`${totalRewardsStars}\`\n\n`;
     message += `🎯 Выберите действие:`;
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Выдать награды', 'admin_season_rewards_confirm'),
         Markup.button.callback('📋 Список всех', 'admin_season_rewards_full')
@@ -15030,13 +15954,16 @@ bot.action('admin_season_rewards', async (ctx) => {
 
 bot.action('admin_season_rewards_confirm', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const currentSeason = getCurrentMiningSeason();
     
     // Получаем топ игроков сезона
+    const topPlayers = await db.collection('users')
       .find({ 'miningStats.seasonMinedStars': { $exists: true } })
       .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(50)
@@ -15047,6 +15974,8 @@ bot.action('admin_season_rewards_confirm', async (ctx) => {
     let totalRewardsStars = 0;
     
     for (let i = 0; i < topPlayers.length; i++) {
+      const player = topPlayers[i];
+      const position = i + 1;
       
       let rewardStars = 0;
       let rewardStars = 0;
@@ -15084,6 +16013,7 @@ bot.action('admin_season_rewards_confirm', async (ctx) => {
       }
     }
     
+    const message = 
       `✅ *Награды сезона ${currentSeason.season} выданы!*\n\n` +
       `📊 *Результат:*\n` +
       `├ Игроков получили награды: \`${issuedCount}\`\n` +
@@ -15091,6 +16021,7 @@ bot.action('admin_season_rewards_confirm', async (ctx) => {
       `└ Выдано Stars: \`${totalRewardsStars}\`\n\n` +
       `🎉 *Сезон завершен успешно!*`;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад к управлению', 'admin_mining_seasons')]
     ]);
     
@@ -15108,6 +16039,7 @@ bot.action('admin_season_rewards_confirm', async (ctx) => {
 
 bot.action('admin_season_reset', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -15119,6 +16051,7 @@ bot.action('admin_season_reset', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_mining_seasons')]
     ]);
     
@@ -15143,11 +16076,13 @@ bot.action('admin_season_reset', async (ctx) => {
 
 bot.action('admin_season_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const currentSeason = getCurrentMiningSeason();
     
     // Статистика сезона
     const seasonStats = await db.collection('users').aggregate([
@@ -15164,7 +16099,9 @@ bot.action('admin_season_stats', async (ctx) => {
       }
     ]).toArray();
     
+    const stats = seasonStats[0] || { totalStars: 0, totalStars: 0, avgStars: 0, avgStars: 0, players: 0 };
     
+    const message = 
       `📊 *Статистика сезона ${currentSeason.season}*\n\n` +
       `👥 *Участники:*\n` +
       `├ Всего игроков: \`${stats.players}\`\n` +
@@ -15180,6 +16117,7 @@ bot.action('admin_season_stats', async (ctx) => {
       `├ Дней до конца: \`${currentSeason.daysUntilNextSeason}\`\n` +
       `└ Множитель: \`${currentSeason.multiplier}x\``;
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Назад', 'admin_mining_seasons')]
     ]);
     
@@ -15195,11 +16133,13 @@ bot.action('admin_season_stats', async (ctx) => {
 
 bot.action('admin_miner_levels', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
     const dist = await db.collection('users').aggregate([
       { $match: { 'miner.level': { $exists: true } } },
       { $group: { _id: '$miner.level', cnt: { $sum: 1 } } },
       { $sort: { _id: 1 } }
     ]).toArray();
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_miner_settings')]]);
     let message = `⚙️ *Уровни майнера*`+"\n\n";
     if (dist.length === 0) message += `Нет данных.`; else dist.forEach(d => { message += `Уровень ${d._id}: \`${d.cnt}\``+"\n"; });
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
@@ -15208,16 +16148,22 @@ bot.action('admin_miner_levels', async (ctx) => {
 
 bot.action('admin_referral_bonuses', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_referral_settings')]]);
+    const message = `🏆 *Бонусы за рефералов*`+"\n\n"+`Базовая награда: \`${config.REFERRAL_BONUS}\` Stars.`;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'Бонусы за рефералов (обработчик)'); }
 });
 
 bot.action('admin_referral_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
     const agg = await db.collection('users').aggregate([
       { $group: { _id: null, totalRef: { $sum: { $ifNull: ['$referralsCount', 0] } }, totalEarn: { $sum: { $ifNull: ['$totalReferralEarnings', 0] } }, users: { $sum: 1 } } }
     ]).toArray();
     const g = agg[0] || { totalRef: 0, totalEarn: 0, users: 0 };
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_referral_settings')]]);
+    const message = `👥 *Статистика рефералов*`+"\n\n"+
       `├ Всего рефералов: \`${g.totalRef}\``+"\n"+
       `├ Суммарные выплаты: \`${formatNumber(g.totalEarn)}\` Stars`+"\n"+
       `└ Пользователей: \`${g.users}\``;
@@ -15227,8 +16173,13 @@ bot.action('admin_referral_stats', async (ctx) => {
 
 bot.action('admin_bonus_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const agg = await db.collection('users').aggregate([
       { $group: { _id: null, avgStreak: { $avg: { $ifNull: ['$dailyBonus.streak', 0] } }, maxStreak: { $max: { $ifNull: ['$dailyBonus.streak', 0] } }, gotToday: { $sum: { $cond: [{ $gte: ['$dailyBonus.lastBonus', new Date(Date.now() - 24*60*60*1000)] }, 1, 0] } } } }
     ]).toArray();
+    const g = agg[0] || { avgStreak: 0, maxStreak: 0, gotToday: 0 };
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_settings')]]);
+    const message = `🎁 *Статистика бонусов*`+"\n\n"+
       `├ Средняя серия: \`${(g.avgStreak || 0).toFixed(1)}\``+"\n"+
       `├ Максимальная серия: \`${g.maxStreak || 0}\``+"\n"+
       `└ Получили бонус за 24ч: \`${g.gotToday}\``;
@@ -15238,12 +16189,16 @@ bot.action('admin_bonus_stats', async (ctx) => {
 
 bot.action('admin_bonus_series', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_settings')]]);
+    const message = `🔥 *Серия бонусов*`+"\n\n"+`Ежедневный бонус раз в 24 часа. Серия растет при ежедневных получениях.`;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'Серия бонусов (обработчик)'); }
 });
 
 bot.action('admin_cooldowns', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -15260,6 +16215,7 @@ bot.action('admin_cooldowns', async (ctx) => {
 
 bot.action('admin_daily_bonus', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -15272,6 +16228,7 @@ bot.action('admin_daily_bonus', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_settings')]
     ]);
     
@@ -15298,6 +16255,7 @@ bot.action('admin_daily_bonus', async (ctx) => {
 
 bot.action('admin_miner_settings', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -15310,6 +16268,7 @@ bot.action('admin_miner_settings', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_settings')]
     ]);
     
@@ -15336,6 +16295,7 @@ bot.action('admin_miner_settings', async (ctx) => {
 
 bot.action('admin_referral_settings', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -15348,6 +16308,7 @@ bot.action('admin_referral_settings', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_settings')]
     ]);
     
@@ -15376,18 +16337,27 @@ bot.action('admin_referral_settings', async (ctx) => {
 
 bot.action('admin_cooldown_bonus', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_cooldowns')]]);
+    const message = `🎁 *Кулдаун бонуса*`+"\n\n"+`Ежедневный бонус доступен раз в 24 часа.`;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'Кулдаун бонуса (обработчик)'); }
 });
 
 bot.action('admin_cooldown_miner', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_cooldowns')]]);
+    const message = `⛏️ *Кулдаун майнера*`+"\n\n"+`Начисление награды выполняется каждые 30 минут задачей бота.`;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'Кулдаун майнера (обработчик)'); }
 });
 
 bot.action('admin_cooldown_stats', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_cooldowns')]]);
+    const message = `⏱️ *Статистика кулдаунов*`+"\n\n"+
 
       `├ Кулдаун бонуса: \`24ч\``+"\n"+
       `└ Период награды майнера: \`30м\``;
@@ -15398,6 +16368,7 @@ bot.action('admin_cooldown_stats', async (ctx) => {
 // Промокод
 bot.action('promocode', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await showPromocodeMenu(ctx, user);
@@ -15408,6 +16379,7 @@ bot.action('promocode', async (ctx) => {
 
 bot.action('enter_promocode', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Устанавливаем состояние для ввода промокода
@@ -15417,6 +16389,7 @@ bot.action('enter_promocode', async (ctx) => {
     );
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'promocode')]
     ]);
     
@@ -15442,7 +16415,9 @@ bot.action('enter_promocode', async (ctx) => {
 
 bot.action('promocode_history', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id); if (!user) return;
     const used = user.usedPromocodes || [];
+    const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'promocode')]]);
     let message = `📜 *История промокодов*`+"\n\n";
     message += used.length === 0 ? 'Вы еще не активировали промокоды.' : used.map((c, i) => `${i + 1}. ${c}`).join('\n');
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
@@ -15450,6 +16425,7 @@ bot.action('promocode_history', async (ctx) => {
 });
 bot.action('admin_reset_db', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Проверяем, что пользователь является админом
@@ -15458,6 +16434,7 @@ bot.action('admin_reset_db', async (ctx) => {
       return;
     }
     
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Подтвердить сброс', 'admin_reset_db_confirm'),
         Markup.button.callback('❌ Отмена', 'admin')
@@ -15495,6 +16472,7 @@ bot.action('admin_reset_db', async (ctx) => {
 
 bot.action('admin_reset_db_confirm', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Проверяем, что пользователь является админом
@@ -15508,6 +16486,7 @@ bot.action('admin_reset_db_confirm', async (ctx) => {
     // Выполняем сброс базы данных
     await resetDatabase();
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Вернуться в админ панель', 'admin')]
     ]);
     
@@ -15541,6 +16520,7 @@ bot.action('admin_reset_db_confirm', async (ctx) => {
 // Обработчик изменения награды за рефералов
 bot.action('admin_referral_reward', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -15554,6 +16534,7 @@ bot.action('admin_referral_reward', async (ctx) => {
     
     userCache.delete(user.id);
     
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔙 Отмена', 'admin_referral_settings')]
     ]);
     
@@ -15607,6 +16588,7 @@ async function startBot() {
     
     // [Восстановление] Читаем сохранённое состояние биржи (24ч курс)
     try {
+      const items = await db.collection('config').find({ key: { $in: ['EXCHANGE_RATE_24H','LAST_RATE_UPDATE'] } }).toArray();
       const map = {};
       for (const it of items) map[it.key] = it.value;
       if (typeof map.EXCHANGE_RATE_24H === 'number') exchangeRate24h = map.EXCHANGE_RATE_24H;
@@ -15636,6 +16618,7 @@ async function startBot() {
     
     // Очистка кеша каждые 10 минут для снижения нагрузки
     setInterval(() => {
+      const now = Date.now();
       let userCacheCleared = 0;
       let statsCacheCleared = 0;
       
@@ -15660,6 +16643,11 @@ async function startBot() {
     
     // Проверяем существование файлов WebApp
     // [Оптимизация] Удалён дублирующий импорт fs — используем верхнеуровневый 'fs'
+    const webappEnabled = process.env.WEBAPP_ENABLED === 'true'; // [Изменение] Управляем логами WebApp через переменную окружения
+    const webappPath = path.join(__dirname, 'webapp');
+    const indexPath = path.join(webappPath, 'index.html');
+    const stylesPath = path.join(webappPath, 'styles.css');
+    const scriptPath = path.join(webappPath, 'script.js');
     
     if (webappEnabled) {
         console.log('📁 Проверка файлов WebApp...');
@@ -15698,10 +16686,12 @@ async function startBot() {
 // Обработка скриншотов для спонсорских заданий
 bot.on('photo', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) return;
     
     // Проверяем, ожидает ли пользователь скриншот для спонсорского задания
     if (user.adminState && user.adminState.startsWith('sending_screenshot_')) {
+      const taskId = user.adminState.replace('sending_screenshot_', '');
       await handleScreenshotUpload(ctx, user, parseInt(taskId));
     }
   } catch (error) {
@@ -15713,6 +16703,7 @@ bot.on('photo', async (ctx) => {
 // Должен быть в конце, после всех остальных обработчиков
 bot.on('text', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user) {
       return;
     }
@@ -15903,8 +16894,10 @@ bot.on('text', async (ctx) => {
           }
         } else if (user.adminState === 'mass_give') {
           console.log(`💰 Админ ${ctx.from.id} выполняет массовую выдачу: "${text}"`);
+          const parts = text.trim().split(/\s+/);
           if (parts.length < 2) { await ctx.reply('❌ Формат: "stars 100" или "Stars 50"'); return; }
           const type = parts[0].toLowerCase();
+          const amount = parseFloat(parts[1]);
           if (!['stars','Stars'].includes(type) || !isFinite(amount)) { await ctx.reply('❌ Неверные параметры'); return; }
           const inc = type === 'stars' ? { stars: amount, totalEarnedStars: Math.max(amount, 0) } : { magnuStarsoins: amount, totalEarnedMagnuStarsoins: Math.max(amount, 0) };
           await db.collection('users').updateMany({}, { $inc: inc, $set: { updatedAt: new Date() } });
@@ -15944,6 +16937,7 @@ bot.on('text', async (ctx) => {
 // Обработчики для заявок на вывод
 bot.action(/^approve_(.+)$/, async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
@@ -16006,6 +17000,7 @@ bot.action(/^approve_(.+)$/, async (ctx) => {
     }
     
     // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('✅ Одобрено', 'withdrawal_approved')]
     ]);
     
@@ -16029,11 +17024,13 @@ bot.action(/^approve_(.+)$/, async (ctx) => {
 
 bot.action(/^reject_(.+)$/, async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const requestId = ctx.match[1];
     
     log(`🔍 Попытка отклонения заявки с ID: ${requestId}`);
     
@@ -16045,6 +17042,7 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
     }
     
     // Получаем заявку из базы данных
+    const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
     
     if (!withdrawalRequest) {
       await ctx.answerCbQuery('❌ Заявка не найдена');
@@ -16057,6 +17055,7 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
     }
     
     // Показываем кнопки с причинами отклонения
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('🚫 Недостаточно средств', `reject_${requestId}:funds`),
         Markup.button.callback('🚫 Подозрительная активность', `reject_${requestId}:suspicious`)
@@ -16092,11 +17091,14 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
 
 bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const requestId = ctx.match[1];
+    const reason = ctx.match[2];
     
     log(`🔍 Попытка отклонения заявки с ID: ${requestId}, причина: ${reason}`);
     
@@ -16110,6 +17112,7 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
     }
     
     // Получаем заявку из базы данных
+    const withdrawalRequest = await db.collection('withdrawalRequests').findOne({ _id: new ObjectId(requestId) });
     
     if (!withdrawalRequest) {
       await ctx.answerCbQuery('❌ Заявка не найдена');
@@ -16131,6 +17134,7 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
       'technical': 'Техническая ошибка'
     };
     
+    const reasonText = reasonTexts[reason] || 'Не указана';
     
     // Обновляем статус заявки
     await db.collection('withdrawalRequests').updateOne(
@@ -16161,6 +17165,8 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
     
     // Уведомляем пользователя
     try {
+      const commission = withdrawalRequest.amount * 0.05;
+      const amountAfterCommission = withdrawalRequest.amount * 0.95;
       
       await bot.telegram.sendMessage(
         withdrawalRequest.userId,
@@ -16181,6 +17187,7 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
     }
     
     // Обновляем сообщение в канале
+    const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('❌ Отклонено', 'withdrawal_rejected')]
     ]);
     
@@ -16204,13 +17211,16 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
 
 bot.action(/^cancel_(.+)$/, async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
     
+    const requestId = ctx.match[1];
     
     // Возвращаем к исходному сообщению с кнопками одобрения/отклонения
+    const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Одобрить', `approve_${requestId}`),
         Markup.button.callback('❌ Отклонить', `reject_${requestId}`)
@@ -16242,6 +17252,7 @@ async function handleWithdrawalStars(ctx, user, text) {
     log(`⭐ Пользователь ${user.id} создает заявку на вывод Stars: "${text}"`);
     log(`🔍 Конфигурация каналов: WITHDRAWAL_CHANNEL=${config.WITHDRAWAL_CHANNEL}, SUPPORT_CHANNEL=${config.SUPPORT_CHANNEL}`);
     
+    const amount = parseFloat(text);
     
     // Валидация суммы
           if (isNaN(amount) || amount < 50) {
@@ -16255,6 +17266,7 @@ async function handleWithdrawalStars(ctx, user, text) {
     }
     
     // Создаем заявку на вывод
+    const withdrawalRequest = {
       userId: user.id,
       username: user.username,
       firstName: user.firstName,
@@ -16265,6 +17277,8 @@ async function handleWithdrawalStars(ctx, user, text) {
       updatedAt: new Date()
     };
     
+    const result = await db.collection('withdrawalRequests').insertOne(withdrawalRequest);
+    const requestId = result.insertedId;
     
     // Списываем средства с баланса пользователя
     await db.collection('users').updateOne(
@@ -16283,12 +17297,14 @@ async function handleWithdrawalStars(ctx, user, text) {
     log(`🔍 Проверка канала выплат: ${config.WITHDRAWAL_CHANNEL}`);
     if (config.WITHDRAWAL_CHANNEL) {
       try {
+        const keyboard = Markup.inlineKeyboard([
           [
             Markup.button.callback('✅ Одобрить', `approve_${requestId}`),
             Markup.button.callback('❌ Отклонить', `reject_${requestId}`)
           ]
         ]);
         
+        const message = 
           `💰 *Новая заявка на вывод Stars*\n\n` +
           `👤 *Пользователь:*\n` +
           `├ ID: \`${user.id}\`\n` +
