@@ -90,6 +90,52 @@ app.get('/test', (req, res) => {
     });
 });
 
+// Тестовый маршрут для проверки майнинга
+app.get('/test-mining', async (req, res) => {
+    try {
+        const currentSeason = getCurrentMiningSeason();
+        const users = await db.collection('users').find({
+            $or: [
+                { 'miningStats.lastReward': { $exists: true } },
+                { 'miners': { $exists: true, $ne: [] } }
+            ]
+        }).toArray();
+        
+        const testUser = users[0];
+        if (testUser) {
+            const userWithMining = initializeNewMiningSystem(testUser);
+            const totalSpeed = calculateTotalMiningSpeed(userWithMining);
+            
+            res.json({
+                status: 'mining-test',
+                currentSeason,
+                totalUsers: users.length,
+                testUser: {
+                    id: testUser.id,
+                    miners: userWithMining.miners?.length || 0,
+                    totalSpeed,
+                    miningStats: userWithMining.miningStats
+                },
+                config: {
+                    MINING_REWARD_INTERVAL: config.MINING_REWARD_INTERVAL,
+                    MINING_ACTIVE_CLICK_BONUS: config.MINING_ACTIVE_CLICK_BONUS
+                }
+            });
+        } else {
+            res.json({
+                status: 'mining-test',
+                error: 'No users found',
+                totalUsers: 0
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
+});
+
 // WebApp маршруты (если включены)
 if (process.env.WEBAPP_ENABLED === 'true') {
   app.use('/webapp', express.static(path.join(__dirname, 'webapp'), {
