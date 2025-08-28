@@ -292,23 +292,141 @@ class MagnumWebApp {
         }
     }
 
-    showExchangeMenu() {
-        const currentRate = this.calculateExchangeRate();
+    async showExchangeMenu() {
+        const currentRate = await this.calculateExchangeRate();
         
+        const commission = 2.5;
         this.tg.showPopup({
             title: '💱 Обмен валют',
-            message: `Текущий курс: 1 MC = ${currentRate.toFixed(4)} Stars\n\nВаш баланс:\n💰 ${this.userData.magnumCoins} MC\n⭐ ${this.userData.stars} Stars`,
+            message: `Текущий курс: 1 MC = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс:\n💰 ${this.userData.magnuCoins.toFixed(2)} MC\n⭐ ${this.userData.stars.toFixed(2)} Stars\n\nПримеры:\n• 100 MC → ${(100 * currentRate * (1 - commission/100)).toFixed(4)} Stars\n• 100 Stars → ${((100 / currentRate) * (1 - commission/100)).toFixed(2)} MC`,
             buttons: [
                 { text: '💰 MC → Stars', callback_data: 'exchange_mc_to_stars' },
                 { text: '⭐ Stars → MC', callback_data: 'exchange_stars_to_mc' },
+                { text: '📊 История', callback_data: 'exchange_history' },
                 { text: '❌ Отмена', callback_data: 'cancel' }
             ]
         });
     }
 
-    calculateExchangeRate() {
-        // Простая формула курса (можно заменить на реальную)
-        return 0.001 * (1 + Math.random() * 0.1);
+    async calculateExchangeRate() {
+        try {
+            const response = await fetch('/api/webapp/exchange-rate');
+            const data = await response.json();
+            return data.rate || 0.001;
+        } catch (error) {
+            console.error('Ошибка получения курса:', error);
+            // Fallback на случайный курс
+            return 0.001 * (1 + Math.random() * 0.1);
+        }
+    }
+
+    async showExchangeHistory() {
+        try {
+            this.setLoading(true);
+
+            const response = await fetch(`/api/webapp/exchange-history?userId=${this.userId}`);
+            const data = await response.json();
+
+            if (data.success && data.history && data.history.length > 0) {
+                const historyText = data.history.slice(0, 10).map(item => {
+                    const date = new Date(item.timestamp).toLocaleDateString('ru-RU');
+                    const type = item.direction === 'Stars' ? 'MC → Stars' : 'Stars → MC';
+                    return `${date}: ${type} ${item.amount} → ${item.received.toFixed(4)}`;
+                }).join('\n');
+
+                this.tg.showPopup({
+                    title: '📊 История обменов',
+                    message: historyText,
+                    buttons: [
+                        { text: '🔄 Обновить', callback_data: 'exchange_history' },
+                        { text: '❌ Закрыть', callback_data: 'close' }
+                    ]
+                });
+            } else {
+                this.showNotification('История обменов пуста', 'info');
+            }
+
+        } catch (error) {
+            console.error('Ошибка загрузки истории:', error);
+            this.showNotification('Ошибка загрузки истории обменов', 'error');
+        } finally {
+            this.setLoading(false);
+        }
+    }
+
+    async showExchangeInput(exchangeType) {
+        const currentRate = await this.calculateExchangeRate();
+        const commission = 2.5; // 2.5% комиссия
+
+        let title, message, maxAmount, fromCurrency, toCurrency;
+
+        if (exchangeType === 'mc_to_stars') {
+            title = '💰 MC → Stars';
+            fromCurrency = 'MC';
+            toCurrency = 'Stars';
+            maxAmount = this.userData.magnuCoins;
+            message = `Обмен MC на Stars\nКурс: 1 MC = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.magnuCoins} MC\n\nВведите сумму MC для обмена:`;
+        } else {
+            title = '⭐ Stars → MC';
+            fromCurrency = 'Stars';
+            toCurrency = 'MC';
+            maxAmount = this.userData.stars;
+            message = `Обмен Stars на MC\nКурс: 1 Stars = ${(1/currentRate).toFixed(2)} MC\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.stars} Stars\n\nВведите сумму Stars для обмена:`;
+        }
+
+        const amount = prompt(message);
+
+        if (amount && !isNaN(amount) && amount > 0) {
+            const numAmount = parseFloat(amount);
+            if (numAmount <= maxAmount) {
+                this.performExchange(exchangeType, numAmount, currentRate, commission);
+            } else {
+                this.showNotification(`Недостаточно ${fromCurrency} на балансе`, 'error');
+            }
+        }
+    }
+
+    async performExchange(exchangeType, amount, rate, commission) {
+        try {
+            this.setLoading(true);
+            this.showNotification('Выполняем обмен...', 'info');
+
+            const exchangeData = {
+                userId: this.userId,
+                from: exchangeType === 'mc_to_stars' ? 'Stars' : 'stars',
+                amount: amount
+            };
+
+            const response = await fetch('/api/webapp/exchange', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(exchangeData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Обновляем баланс
+                this.userData.magnuCoins = result.magnuStarsoins;
+                this.userData.stars = result.stars;
+                this.updateUI();
+
+                const receivedAmount = result.stars || result.magnuStarsoins;
+                const commissionAmount = amount * (commission / 100);
+
+                this.showNotification(`✅ Обмен выполнен!\nПолучено: ${receivedAmount.toFixed(4)} ${exchangeType === 'mc_to_stars' ? 'Stars' : 'MC'}\nКомиссия: ${commissionAmount.toFixed(4)}`, 'success');
+            } else {
+                this.showNotification(result.error || 'Ошибка обмена', 'error');
+            }
+
+        } catch (error) {
+            console.error('Ошибка обмена:', error);
+            this.showNotification('Ошибка при выполнении обмена', 'error');
+        } finally {
+            this.setLoading(false);
+        }
     }
 
     async handleTasksClick() {
@@ -396,10 +514,13 @@ window.handleTelegramCallback = function(callbackData) {
             webApp.handleTasksClick();
             break;
         case 'exchange_mc_to_stars':
-            webApp.showExchangeMenu();
+            webApp.showExchangeInput('mc_to_stars');
             break;
         case 'exchange_stars_to_mc':
-            webApp.showExchangeMenu();
+            webApp.showExchangeInput('stars_to_mc');
+            break;
+        case 'exchange_history':
+            webApp.showExchangeHistory();
             break;
         case 'close':
         case 'cancel':

@@ -2042,10 +2042,9 @@ async function formatProfileMessage(user, rankProgress) {
     `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
     `└ 🪙 Stars: \`${formatNumber(user.magnuStarsoins)}\`\n\n` +
     `📊 *Статистика сообщества:*\n` +
-    `├ 👥 Пользователей: \`${formatNumber(globalStats.totalUsers)}\`\n` +
+    `├ 👥 Пользователей: \`${Math.floor(globalStats.totalUsers)}\`\n` +
     `├ 💰 Выведено Stars: \`${formatNumber(globalStats.totalWithdrawnStars)}\`\n` +
-    `├ 💎 Заработано Magnum: \`${formatNumber(globalStats.totalEarnedMagnumCoins)}\`\n` +
-    `└ 📈 Активных майнеров: \`~${Math.floor(globalStats.totalUsers * 0.3)}\`\n\n` +
+    `└ 💎 Заработано Magnum: \`${formatNumber(globalStats.totalEarnedMagnumCoins)}\`\n\n` +
     `📱 *Полезные ссылки:*\n` +
     `├ [📰 Новости](https://t.me/magnumtap)\n` +
     `├ [💰 Выводы](https://t.me/magnumwithdraw)\n` +
@@ -2149,7 +2148,7 @@ async function getGlobalStats() {
     // Получаем общее количество пользователей
     const totalUsers = await db.collection('users').countDocuments();
 
-    // Получаем статистику по валютам
+    // Получаем статистику по валютам (исключая доходы от биржи)
     const usersWithStats = await db.collection('users').find({}, {
       projection: {
         magnuStarsoins: 1,
@@ -2178,6 +2177,30 @@ async function getGlobalStats() {
       totalWithdrawnStars += user.totalWithdrawnStars || 0;
     }
 
+    // Получаем сумму выведенных Stars только из одобренных заявок
+    const approvedWithdrawals = await db.collection('withdrawalRequests').find({ status: 'approved' }).toArray();
+    const totalApprovedWithdrawnStars = approvedWithdrawals.reduce((sum, withdrawal) => {
+      if (withdrawal.currency === 'stars') {
+        return sum + (withdrawal.amount || 0);
+      }
+      return sum;
+    }, 0);
+
+    // Вычитаем доходы от биржи из общего заработка Magnum Coins
+    // Получаем сумму всех обменов на бирже
+    const exchangeOperations = await db.collection('exchangeHistory').find({}).toArray();
+    let totalExchangeMagnumEarnings = 0;
+
+    for (const exchange of exchangeOperations) {
+      // Если пользователь обменял Stars на Magnum Coins, это считается доходом от биржи
+      if (exchange.direction === 'stars') {
+        totalExchangeMagnumEarnings += exchange.received || 0;
+      }
+    }
+
+    // Исключаем доходы от биржи из общего заработка
+    totalEarnedMagnumCoins = Math.max(0, totalEarnedMagnumCoins - totalExchangeMagnumEarnings);
+
     return {
       totalUsers,
       totalMagnumCoins,
@@ -2185,7 +2208,7 @@ async function getGlobalStats() {
       totalEarnedMagnumCoins,
       totalEarnedStars,
       totalWithdrawnMagnumCoins,
-      totalWithdrawnStars
+      totalWithdrawnStars: totalApprovedWithdrawnStars
     };
   } catch (error) {
     console.error('❌ Ошибка получения глобальной статистики:', error);
@@ -5827,21 +5850,28 @@ async function handleAdminSetCommission(ctx, user, text) {
 async function handleAdminSetWithdrawalCommission(ctx, user, text) {
   try {
     const commission = parseFloat(text);
-    
-    if (isNaN(commission) || commission < 0 || commission > 10) {
-      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 10.');
+
+    if (isNaN(commission) || commission < 0 || commission > 15) {
+      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 15.');
       return;
     }
-    
+
+    // Сохраняем комиссию в базу данных
+    await db.collection('config').updateOne(
+      { key: 'WITHDRAWAL_COMMISSION' },
+      { $set: { value: commission } },
+      { upsert: true }
+    );
+
     // Обновляем комиссию в конфигурации
     config.WITHDRAWAL_COMMISSION = commission;
-    
+
     // Сбрасываем состояние админа
     await db.collection('users').updateOne(
       { id: user.id },
       { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
     );
-    
+
     userCache.delete(user.id);
     
     const keyboard = Markup.inlineKeyboard([
@@ -5992,9 +6022,11 @@ async function showAdminWithdrawalCommission(ctx, user) {
       `├ 50 Stars → ${(50 * (1 - commissionDecimal)).toFixed(2)} Stars к выплате\n` +
       `├ 100 Stars → ${(100 * (1 - commissionDecimal)).toFixed(2)} Stars к выплате\n` +
       `└ 500 Stars → ${(500 * (1 - commissionDecimal)).toFixed(2)} Stars к выплате\n\n` +
+      `⚙️ *Диапазон комиссии:* 0% - 15%\n` +
       `💡 *Информация:*\n` +
       `├ Комиссия взимается с каждой заявки на вывод\n` +
       `├ Комиссия остается в системе\n` +
+      `├ Изменения применяются ко всем новым заявкам\n` +
       `└ Комиссия влияет на сумму к выплате\n\n` +
       `🎯 Выберите действие:`;
     
@@ -10879,7 +10911,36 @@ async function handleAdminCreatePromocode(ctx, user, text) {
         reply_markup: keyboard.reply_markup
       }
     );
-    
+
+    // Отправляем уведомление в чат magnumtapchat
+    try {
+      const chatNotification = `🎉 *Новый промокод доступен!*\n\n` +
+        `🎫 Код: \`${code}\`\n` +
+        `🏅 Редкость: Обычный\n` +
+        `💎 Награды:\n` +
+        `├ 💰 Stars: +${formatNumber(reward)}\n\n` +
+        `📊 Статистика:\n` +
+        `├ 🔄 Всего активаций: ${maxActivations}\n` +
+        `├ ✅ Уже активировано: 0\n` +
+        `└ ⏳ Осталось: ${maxActivations}\n\n` +
+        `📅 Дата создания: ${new Date().toLocaleString('ru-RU')}\n` +
+        `⏰ Действует до: Бессрочно\n\n` +
+        `⚡ Успей активировать и получи свои награды первым!`;
+
+      await bot.telegram.sendMessage(config.PROMO_NOTIFICATIONS_CHAT, chatNotification, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [Markup.button.url('🎮 Активировать в боте', `https://t.me/${config.BOT_USERNAME}`)]
+          ]
+        }
+      });
+
+      log(`📢 Уведомление о промокоде ${code} отправлено в чат`);
+    } catch (notifyError) {
+      logError(notifyError, `Отправка уведомления о промокоде ${code}`);
+    }
+
     log(`✅ Промокод ${code} успешно создан админом ${user.id}, награда: ${reward} Stars, активаций: ${maxActivations}`);
     
   } catch (error) {
@@ -11075,7 +11136,36 @@ async function handleAdminCreatePromoStars(ctx, user, text) {
         reply_markup: keyboard.reply_markup
       }
     );
-    
+
+    // Отправляем уведомление в чат magnumtapchat
+    try {
+      const chatNotification = `🎉 *Новый промокод доступен!*\n\n` +
+        `🎫 Код: \`${code}\`\n` +
+        `🏅 Редкость: Stars\n` +
+        `💎 Награды:\n` +
+        `├ ⭐ Stars: +${formatNumber(reward)}\n\n` +
+        `📊 Статистика:\n` +
+        `├ 🔄 Всего активаций: ${maxActivations}\n` +
+        `├ ✅ Уже активировано: 0\n` +
+        `└ ⏳ Осталось: ${maxActivations}\n\n` +
+        `📅 Дата создания: ${new Date().toLocaleString('ru-RU')}\n` +
+        `⏰ Действует до: Бессрочно\n\n` +
+        `⚡ Успей активировать и получи свои награды первым!`;
+
+      await bot.telegram.sendMessage(config.PROMO_NOTIFICATIONS_CHAT, chatNotification, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [Markup.button.url('🎮 Активировать в боте', `https://t.me/${config.BOT_USERNAME}`)]
+          ]
+        }
+      });
+
+      log(`📢 Уведомление о Stars промокоде ${code} отправлено в чат`);
+    } catch (notifyError) {
+      logError(notifyError, `Отправка уведомления о Stars промокоде ${code}`);
+    }
+
     log(`✅ Ключ Stars ${code} успешно создан админом ${user.id}, награда: ${reward} Stars, активаций: ${maxActivations}`);
     
   } catch (error) {
@@ -11172,7 +11262,36 @@ async function handleAdminCreatePromoTitle(ctx, user, text) {
         reply_markup: keyboard.reply_markup
       }
     );
-    
+
+    // Отправляем уведомление в чат magnumtapchat
+    try {
+      const chatNotification = `🎉 *Новый промокод доступен!*\n\n` +
+        `🎫 Код: \`${code}\`\n` +
+        `🏅 Редкость: Титул\n` +
+        `💎 Награды:\n` +
+        `├ 👑 Титул: ${title}\n\n` +
+        `📊 Статистика:\n` +
+        `├ 🔄 Всего активаций: ${maxActivations}\n` +
+        `├ ✅ Уже активировано: 0\n` +
+        `└ ⏳ Осталось: ${maxActivations}\n\n` +
+        `📅 Дата создания: ${new Date().toLocaleString('ru-RU')}\n` +
+        `⏰ Действует до: Бессрочно\n\n` +
+        `⚡ Успей активировать и получи свои награды первым!`;
+
+      await bot.telegram.sendMessage(config.PROMO_NOTIFICATIONS_CHAT, chatNotification, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [Markup.button.url('🎮 Активировать в боте', `https://t.me/${config.BOT_USERNAME}`)]
+          ]
+        }
+      });
+
+      log(`📢 Уведомление о промокоде с титулом ${code} отправлено в чат`);
+    } catch (notifyError) {
+      logError(notifyError, `Отправка уведомления о промокоде с титулом ${code}`);
+    }
+
     log(`✅ Промокод с титулом ${code} успешно создан админом ${user.id}, титул: ${title}, активаций: ${maxActivations}`);
     
   } catch (error) {
@@ -11277,7 +11396,43 @@ async function handleAdminCreatePromoChest(ctx, user, text, chestType) {
         reply_markup: keyboard.reply_markup
       }
     );
-    
+
+    // Отправляем уведомление в чат magnumtapchat
+    try {
+      const rarityNames = {
+        'common': 'Обычный',
+        'rare': 'Редкий',
+        'epic': 'Эпический',
+        'legendary': 'Легендарный'
+      };
+
+      const chatNotification = `🎉 *Новый промокод доступен!*\n\n` +
+        `🎫 Код: \`${code}\`\n` +
+        `🏅 Редкость: ${rarityNames[chestType]}\n` +
+        `💎 Награды:\n` +
+        `├ ${chestEmojis[chestType]} ${chestType.charAt(0).toUpperCase() + chestType.slice(1)} сундук\n\n` +
+        `📊 Статистика:\n` +
+        `├ 🔄 Всего активаций: ${maxActivations}\n` +
+        `├ ✅ Уже активировано: 0\n` +
+        `└ ⏳ Осталось: ${maxActivations}\n\n` +
+        `📅 Дата создания: ${new Date().toLocaleString('ru-RU')}\n` +
+        `⏰ Действует до: Бессрочно\n\n` +
+        `⚡ Успей активировать и получи свои награды первым!`;
+
+      await bot.telegram.sendMessage(config.PROMO_NOTIFICATIONS_CHAT, chatNotification, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [Markup.button.url('🎮 Активировать в боте', `https://t.me/${config.BOT_USERNAME}`)]
+          ]
+        }
+      });
+
+      log(`📢 Уведомление о сундуке ${code} (${chestType}) отправлено в чат`);
+    } catch (notifyError) {
+      logError(notifyError, `Отправка уведомления о сундуке ${code}`);
+    }
+
     log(`✅ Ключ с ${chestNames[chestType]} ${code} успешно создан админом ${user.id}, активаций: ${maxActivations}`);
     
   } catch (error) {
@@ -15514,16 +15669,20 @@ bot.action('admin_withdrawal_commission_increase', async (ctx) => {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
-    
-    // Увеличиваем комиссию на 1%
-    const newCommission = Math.min(10, 5 + 1); // Максимум 10%
-    
+
+    // Получаем текущую комиссию
+    const currentCommission = config.WITHDRAWAL_COMMISSION || 5.0;
+    const newCommission = Math.min(15, currentCommission + 1); // Максимум 15%
+
     await db.collection('config').updateOne(
       { key: 'WITHDRAWAL_COMMISSION' },
       { $set: { value: newCommission } },
       { upsert: true }
     );
-    
+
+    // Обновляем глобальную конфигурацию
+    config.WITHDRAWAL_COMMISSION = newCommission;
+
     await ctx.answerCbQuery(`✅ Комиссия вывода увеличена до ${newCommission}%`);
     await showAdminWithdrawalCommission(ctx, user);
   } catch (error) {
@@ -15539,16 +15698,20 @@ bot.action('admin_withdrawal_commission_decrease', async (ctx) => {
       await ctx.answerCbQuery('❌ Доступ запрещен');
       return;
     }
-    
-    // Уменьшаем комиссию на 1%
-    const newCommission = Math.max(0, 5 - 1); // Минимум 0%
-    
+
+    // Получаем текущую комиссию
+    const currentCommission = config.WITHDRAWAL_COMMISSION || 5.0;
+    const newCommission = Math.max(0, currentCommission - 1); // Минимум 0%
+
     await db.collection('config').updateOne(
       { key: 'WITHDRAWAL_COMMISSION' },
       { $set: { value: newCommission } },
       { upsert: true }
     );
-    
+
+    // Обновляем глобальную конфигурацию
+    config.WITHDRAWAL_COMMISSION = newCommission;
+
     await ctx.answerCbQuery(`✅ Комиссия вывода уменьшена до ${newCommission}%`);
     await showAdminWithdrawalCommission(ctx, user);
   } catch (error) {
@@ -15732,6 +15895,10 @@ bot.action('admin_create_promocode', async (ctx) => {
       [
         Markup.button.callback('👑 Титул', 'create_promo_title'),
         Markup.button.callback('🎫 Пользовательский', 'create_promo_custom')
+      ],
+      [
+        Markup.button.callback('📋 Содержимое сундуков', 'show_chest_contents'),
+        Markup.button.callback('📊 Статистика сундуков', 'chest_statistics')
       ],
       [Markup.button.callback('🔙 Назад', 'admin_promocodes')]
     ]);
@@ -17700,6 +17867,225 @@ bot.action('admin_create_post_no_button', async (ctx) => {
     );
   } catch (error) {
     logError(error, 'Создание поста без кнопки');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик просмотра содержимого сундуков
+bot.action('show_chest_contents', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) return;
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🟢 Обычный', 'show_chest_common'),
+        Markup.button.callback('🔵 Редкий', 'show_chest_rare')
+      ],
+      [
+        Markup.button.callback('🟣 Эпический', 'show_chest_epic'),
+        Markup.button.callback('🟡 Легендарный', 'show_chest_legendary')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+
+    await ctx.editMessageText(
+      `📋 *Содержимое сундуков*\n\n` +
+      `Выберите тип сундука для просмотра возможных наград:\n\n` +
+      `🎁 *Вероятности выпадения:*\n` +
+      `├ 🟢 Обычный: 60%\n` +
+      `├ 🔵 Редкий: 25%\n` +
+      `├ 🟣 Эпический: 11%\n` +
+      `└ 🟡 Легендарный: 4%\n\n` +
+      `🎯 Выберите тип сундука:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Просмотр содержимого сундуков');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчики просмотра содержимого конкретных сундуков
+bot.action('show_chest_common', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) return;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'show_chest_contents')]
+    ]);
+
+    await ctx.editMessageText(
+      `🟢 *Обычный сундук*\n\n` +
+      `💎 *Возможные награды:*\n` +
+      `├ 💰 Stars: 1-1000\n` +
+      `└ ⭐ Stars: 1-5\n\n` +
+      `📊 *Характеристики:*\n` +
+      `├ Вероятность выпадения: 60%\n` +
+      `├ Средняя ценность: ~250 Stars\n` +
+      `└ Подходит для новичков\n\n` +
+      `🎯 Этот сундук дает базовые награды для начинающих игроков.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Просмотр обычного сундука');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('show_chest_rare', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) return;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'show_chest_contents')]
+    ]);
+
+    await ctx.editMessageText(
+      `🔵 *Редкий сундук*\n\n` +
+      `💎 *Возможные награды:*\n` +
+      `├ 💰 Stars: 50-150\n` +
+      `├ ⭐ Stars: 25-75\n` +
+      `└ ⛏️ Майнеры: 1-3 шт.\n\n` +
+      `📊 *Характеристики:*\n` +
+      `├ Вероятность выпадения: 25%\n` +
+      `├ Средняя ценность: ~500 Stars\n` +
+      `└ Содержит майнеры для майнинга\n\n` +
+      `🎯 Этот сундук дает хорошие награды и майнеров для активной игры.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Просмотр редкого сундука');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('show_chest_epic', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) return;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'show_chest_contents')]
+    ]);
+
+    await ctx.editMessageText(
+      `🟣 *Эпический сундук*\n\n` +
+      `💎 *Возможные награды:*\n` +
+      `├ 💰 Stars: 100-300\n` +
+      `├ ⭐ Stars: 50-150\n` +
+      `├ 👑 Титул: Случайный эпический\n` +
+      `└ 📈 Множитель: x1.5\n\n` +
+      `📊 *Характеристики:*\n` +
+      `├ Вероятность выпадения: 11%\n` +
+      `├ Средняя ценность: ~800 Stars\n` +
+      `└ Дает уникальный титул и множитель\n\n` +
+      `🎯 Этот сундук дает ценные награды и уникальный титул.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Просмотр эпического сундука');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('show_chest_legendary', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) return;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'show_chest_contents')]
+    ]);
+
+    await ctx.editMessageText(
+      `🟡 *Легендарный сундук*\n\n` +
+      `💎 *Возможные награды:*\n` +
+      `├ 💰 Stars: 300-800\n` +
+      `├ ⭐ Stars: 100-300\n` +
+      `├ ⛏️ Майнеры: 2-5 шт.\n` +
+      `├ 👑 Титул: Случайный легендарный\n` +
+      `└ 📈 Множитель: x2.0\n\n` +
+      `📊 *Характеристики:*\n` +
+      `├ Вероятность выпадения: 4%\n` +
+      `├ Средняя ценность: ~1500 Stars\n` +
+      `└ Максимальные награды во всех категориях\n\n` +
+      `🎯 Этот сундук дает максимальные награды и эксклюзивные бонусы.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Просмотр легендарного сундука');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+// Обработчик статистики сундуков
+bot.action('chest_statistics', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) return;
+
+    // Получаем статистику по сундукам
+    const chestPromocodes = await db.collection('promocodes').find({
+      rewardType: 'chest',
+      isActive: true
+    }).toArray();
+
+    let commonCount = 0, rareCount = 0, epicCount = 0, legendaryCount = 0;
+    let totalActivations = 0, totalRewards = 0;
+
+    for (const promo of chestPromocodes) {
+      switch (promo.chestType) {
+        case 'common': commonCount++; break;
+        case 'rare': rareCount++; break;
+        case 'epic': epicCount++; break;
+        case 'legendary': legendaryCount++; break;
+      }
+      totalActivations += promo.totalActivations || 0;
+      totalRewards += promo.totalRewards || 0;
+    }
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔄 Обновить', 'chest_statistics')],
+      [Markup.button.callback('🔙 Назад', 'admin_create_promocode')]
+    ]);
+
+    await ctx.editMessageText(
+      `📊 *Статистика сундуков*\n\n` +
+      `🎁 *Активные сундуки:*\n` +
+      `├ 🟢 Обычные: \`${commonCount}\`\n` +
+      `├ 🔵 Редкие: \`${rareCount}\`\n` +
+      `├ 🟣 Эпические: \`${epicCount}\`\n` +
+      `└ 🟡 Легендарные: \`${legendaryCount}\`\n\n` +
+      `📈 *Общая статистика:*\n` +
+      `├ 🔄 Всего активаций: \`${formatNumber(totalActivations)}\`\n` +
+      `├ 💰 Выдано наград: \`${formatNumber(totalRewards)}\`\n` +
+      `└ 📊 Средняя награда: \`${totalActivations > 0 ? Math.round(totalRewards / totalActivations) : 0}\` Stars\n\n` +
+      `🎯 Статистика обновляется в реальном времени.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Статистика сундуков');
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
