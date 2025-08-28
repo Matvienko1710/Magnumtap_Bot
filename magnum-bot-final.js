@@ -1574,6 +1574,17 @@ async function checkAndUpdateLevel(user) {
   }
 }
 
+// Функция для получения требуемого опыта для уровня
+function getRequiredExperience(level) {
+  let requiredExp = 100; // Базовый опыт для 1 уровня
+  
+  for (let i = 2; i <= level; i++) {
+    requiredExp = Math.floor(requiredExp * 1.2);
+  }
+  
+  return requiredExp;
+}
+
 // Функция для отладки прогресса ранга
 async function debugRankProgress(user) {
   const level = user.level || 1;
@@ -5957,27 +5968,39 @@ async function showAdminWithdrawalCommission(ctx, user) {
       [Markup.button.callback('🔙 Назад', 'admin')]
     ]);
     
+    const commission = config.WITHDRAWAL_COMMISSION || 5.0;
+    const commissionDecimal = commission / 100;
+    
     const message = 
       `💰 *Комиссия вывода*\n\n` +
       `💸 *Текущие настройки:*\n` +
-      `├ Текущая комиссия: \`5%\`\n` +
-      `├ Комиссия с 50 Stars: \`${(50 * 0.05).toFixed(2)}\` Stars\n` +
-      `├ Комиссия с 100 Stars: \`${(100 * 0.05).toFixed(2)}\` Stars\n` +
-      `└ Комиссия с 500 Stars: \`${(500 * 0.05).toFixed(2)}\` Stars\n\n` +
+      `├ Текущая комиссия: \`${commission}%\`\n` +
+      `├ Комиссия с 50 Stars: \`${(50 * commissionDecimal).toFixed(2)}\` Stars\n` +
+      `├ Комиссия с 100 Stars: \`${(100 * commissionDecimal).toFixed(2)}\` Stars\n` +
+      `└ Комиссия с 500 Stars: \`${(500 * commissionDecimal).toFixed(2)}\` Stars\n\n` +
       `📊 *Примеры вывода:*\n` +
-      `├ 50 Stars → ${(50 * 0.95).toFixed(2)} Stars к выплате\n` +
-      `├ 100 Stars → ${(100 * 0.95).toFixed(2)} Stars к выплате\n` +
-      `└ 500 Stars → ${(500 * 0.95).toFixed(2)} Stars к выплате\n\n` +
+      `├ 50 Stars → ${(50 * (1 - commissionDecimal)).toFixed(2)} Stars к выплате\n` +
+      `├ 100 Stars → ${(100 * (1 - commissionDecimal)).toFixed(2)} Stars к выплате\n` +
+      `└ 500 Stars → ${(500 * (1 - commissionDecimal)).toFixed(2)} Stars к выплате\n\n` +
       `💡 *Информация:*\n` +
       `├ Комиссия взимается с каждой заявки на вывод\n` +
       `├ Комиссия остается в системе\n` +
       `└ Комиссия влияет на сумму к выплате\n\n` +
       `🎯 Выберите действие:`;
     
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
+    try {
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    } catch (editError) {
+      // Если не удалось отредактировать сообщение, отправляем новое
+      if (editError.message.includes('message is not modified')) {
+        await ctx.answerCbQuery('✅ Меню уже открыто');
+        return;
+      }
+      throw editError;
+    }
     
     log(`✅ Управление комиссией вывода показано для админа ${user.id}`);
   } catch (error) {
@@ -17329,16 +17352,16 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
     // Показываем кнопки с причинами отклонения
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🚫 Недостаточно средств', `reject_${requestId}_funds`),
-        Markup.button.callback('🚫 Подозрительная активность', `reject_${requestId}_suspicious`)
+        Markup.button.callback('🚫 Недостаточно средств', `reject_${requestId}:funds`),
+        Markup.button.callback('🚫 Подозрительная активность', `reject_${requestId}:suspicious`)
       ],
       [
-        Markup.button.callback('🚫 Нарушение правил', `reject_${requestId}_rules`),
-        Markup.button.callback('🚫 Неверные данные', `reject_${requestId}_invalid_data`)
+        Markup.button.callback('🚫 Нарушение правил', `reject_${requestId}:rules`),
+        Markup.button.callback('🚫 Неверные данные', `reject_${requestId}:invalid_data`)
       ],
       [
-        Markup.button.callback('🚫 Слишком частые заявки', `reject_${requestId}_too_frequent`),
-        Markup.button.callback('🚫 Техническая ошибка', `reject_${requestId}_technical`)
+        Markup.button.callback('🚫 Слишком частые заявки', `reject_${requestId}:too_frequent`),
+        Markup.button.callback('🚫 Техническая ошибка', `reject_${requestId}:technical`)
       ],
       [
         Markup.button.callback('🔙 Назад', `cancel_${requestId}`)
@@ -17361,7 +17384,7 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
+bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !config.ADMIN_IDS.includes(user.id)) {
@@ -17369,13 +17392,10 @@ bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
       return;
     }
     
-    const fullRequestId = ctx.match[1];
+    const requestId = ctx.match[1];
     const reason = ctx.match[2];
     
-    log(`🔍 Попытка отклонения заявки с полным ID: ${fullRequestId}, причина: ${reason}`);
-    
-    // Извлекаем ObjectId из полного ID (убираем причину)
-    const requestId = fullRequestId.split('_')[0];
+    log(`🔍 Попытка отклонения заявки с ID: ${requestId}, причина: ${reason}`);
     
     log(`🔍 Извлеченный ObjectId: ${requestId}`);
     
