@@ -2663,14 +2663,13 @@ async function showMinerMenu(ctx, user) {
   const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('🛒 Магазин майнеров', 'miner_shop'),
-      Markup.button.callback('📊 Статистика', 'miner_stats')
+      Markup.button.callback('⚡ Клик', 'miner_active_click')
     ],
     [
-              Markup.button.callback('⚡ Клик', 'miner_active_click'),
-      Markup.button.callback('📅 Сезон', 'miner_season_info')
+      Markup.button.callback('📅 Сезон', 'miner_season_info'),
+      Markup.button.callback('🏆 Рейтинг', 'miner_leaderboard')
     ],
     [
-      Markup.button.callback('🏆 Рейтинг', 'miner_leaderboard'),
       Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
@@ -3831,8 +3830,7 @@ async function updateMinerMenu(ctx, user) {
       )
     ],
     [
-      Markup.button.callback('⬆️ Улучшить майнер', 'upgrade_miner'),
-      Markup.button.callback('📊 Статистика', 'miner_stats')
+      Markup.button.callback('⬆️ Улучшить майнер', 'upgrade_miner')
     ],
     [Markup.button.callback('🔙 Назад', 'main_menu')]
   ]);
@@ -11385,9 +11383,6 @@ bot.action('support', async (ctx) => {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('📝 Создать тикет', 'contact_support')],
       [Markup.button.callback('❓ FAQ', 'support_faq')],
-      [Markup.button.callback('📞 Telegram', 'support_telegram')],
-      [Markup.button.callback('📱 WhatsApp', 'support_whatsapp')],
-      [Markup.button.callback('📧 Email', 'support_email')],
       [Markup.button.callback('🔙 Назад', 'settings')]
     ]);
     
@@ -11396,14 +11391,8 @@ bot.action('support', async (ctx) => {
       `👋 Привет! Мы готовы помочь вам с любыми вопросами.\n\n` +
       `📋 *Выберите способ связи:*\n\n` +
       `📝 *Создать тикет* - Опишите проблему и получите ответ\n` +
-      `❓ *FAQ* - Часто задаваемые вопросы\n` +
-      `📞 *Telegram* - Быстрая связь через Telegram\n` +
-      `📱 *WhatsApp* - Связь через WhatsApp\n` +
-      `📧 *Email* - Отправить письмо на почту\n\n` +
+      `❓ *FAQ* - Часто задаваемые вопросы\n\n` +
       `⏰ *Время ответа:*\n` +
-      `├ Telegram: до 30 минут\n` +
-      `├ WhatsApp: до 1 часа\n` +
-      `├ Email: до 24 часов\n` +
       `└ Тикет: до 2 часов\n\n` +
       `🎯 Выберите действие:`;
     
@@ -11918,6 +11907,42 @@ bot.action('support_email', async (ctx) => {
     });
   } catch (error) {
     logError(error, 'Поддержка Email');
+  }
+});
+
+// FAQ
+bot.action('support_faq', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('💰 Бонусы', 'faq_bonus')],
+      [Markup.button.callback('⛏️ Майнинг', 'faq_mining')],
+      [Markup.button.callback('📈 Биржа', 'faq_exchange')],
+      [Markup.button.callback('👥 Рефералы', 'faq_referrals')],
+      [Markup.button.callback('📋 Задания', 'faq_tasks')],
+      [Markup.button.callback('🏆 Достижения', 'faq_achievements')],
+      [Markup.button.callback('🔙 Назад', 'support')]
+    ]);
+    
+    const message = 
+      `❓ *Часто задаваемые вопросы (FAQ)*\n\n` +
+      `🔍 Выберите категорию вопросов:\n\n` +
+      `💰 *Бонусы* - Вопросы о ежедневных бонусах\n` +
+      `⛏️ *Майнинг* - Вопросы о системе майнинга\n` +
+      `📈 *Биржа* - Вопросы об обмене валют\n` +
+      `👥 *Рефералы* - Вопросы о реферальной системе\n` +
+      `📋 *Задания* - Вопросы о выполнении заданий\n` +
+      `🏆 *Достижения* - Вопросы о достижениях\n\n` +
+      `💡 Если вы не нашли ответ на свой вопрос, создайте тикет поддержки.`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'FAQ');
   }
 });
 
