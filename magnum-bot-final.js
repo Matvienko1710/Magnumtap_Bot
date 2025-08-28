@@ -2274,10 +2274,6 @@ async function showMainMenu(ctx, user) {
     // Добавляем кнопки только для админов (функции в разработке)
     buttons.push([
       Markup.button.callback('📈 Биржа', 'exchange'),
-      Markup.button.callback('🏆 Достижения', 'achievements')
-    ]);
-    buttons.push([
-      Markup.button.callback('📋 Задания', 'tasks'),
       Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ]);
   }
@@ -2348,10 +2344,6 @@ async function showMainMenuStart(ctx, user) {
     // Добавляем кнопки только для админов (функции в разработке)
     buttons.push([
       Markup.button.callback('📈 Биржа', 'exchange'),
-      Markup.button.callback('🏆 Достижения', 'achievements')
-    ]);
-    buttons.push([
-      Markup.button.callback('📋 Задания', 'tasks'),
       Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ]);
   }
@@ -7488,53 +7480,7 @@ async function handleExchangeCustomStars(ctx, user, text) {
 }
 
 // ==================== ДОСТИЖЕНИЯ ====================
-async function showAchievementsMenu(ctx, user) {
-  try {
-    log(`🏆 Показ меню достижений для пользователя ${user.id}`);
-    
-    // Определяем достижения
-    const achievements = getAchievementsList(user);
-    
-    const completedAchievements = achievements.filter(a => a.condition);
-    const totalAchievements = achievements.length;
-    const completionRate = Math.round((completedAchievements.length / totalAchievements) * 100);
-    
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('📊 Прогресс', 'achievements_progress'),
-        Markup.button.callback('🎁 Награды', 'achievements_rewards')
-      ],
-      [Markup.button.callback('🔙 Назад', 'main_menu')]
-    ]);
-    
-    let message = `🏆 *Достижения*\n\n`;
-    message += `📊 *Прогресс:* ${completedAchievements.length}/${totalAchievements} (${completionRate}%)\n\n`;
-    
-    // Показываем последние 5 достижений
-    const recentAchievements = achievements.slice(0, 5);
-    message += `🎯 *Достижения:*\n`;
-    
-    recentAchievements.forEach((achievement, index) => {
-      const status = achievement.condition ? '✅' : '❌';
-      message += `${status} ${achievement.title}\n`;
-      if (index < 4) message += `└ ${achievement.description}\n\n`;
-    });
-    
-    if (achievements.length > 5) {
-      message += `\n... и еще ${achievements.length - 5} достижений\n`;
-    }
-    
-    message += `\n🎯 Выберите действие:`;
-    
-    await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
-  } catch (error) {
-    logError(error, 'Показ меню достижений');
-    await ctx.answerCbQuery('❌ Ошибка загрузки достижений');
-  }
-}
+// Функции достижений удалены
 function getAchievementsList(user) {
   // Убеждаемся, что все необходимые поля существуют
   const farmCount = user.farm?.farmCount || 0;
@@ -13074,7 +13020,14 @@ bot.action('miner', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await ctx.answerCbQuery('Фаза майнинга еще не началась следите за новостями в канале');
+    // Проверяем, является ли пользователь админом
+    if (isAdmin(user.id)) {
+      // Для админов показываем полное меню майнера
+      await showMinerMenu(ctx, user);
+    } else {
+      // Для обычных пользователей показываем уведомление
+      await ctx.answerCbQuery('Фаза майнинга еще не началась следите за новостями в канале');
+    }
   } catch (error) {
     logError(error, 'Меню майнера');
   }
@@ -13806,57 +13759,7 @@ bot.action('withdrawal_history', async (ctx) => {
   }
 });
 
-// Достижения
-bot.action('achievements', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    await showAchievementsMenu(ctx, user);
-  } catch (error) {
-    logError(error, 'Меню достижений');
-  }
-});
-
-bot.action('achievements_progress', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    await showAchievementsProgress(ctx, user);
-  } catch (error) {
-    logError(error, 'Прогресс достижений');
-  }
-});
-
-bot.action('achievements_rewards', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    await showAchievementsRewards(ctx, user);
-  } catch (error) {
-    logError(error, 'Награды достижений');
-  }
-});
+// Достижения - удалены
 
 // Рефералы
 bot.action('referrals', async (ctx) => {
@@ -14037,180 +13940,9 @@ bot.action('confirm_reset', async (ctx) => {
     logError(error, 'Сброс настроек пользователя');
   }
 });
-// Задания
-bot.action('tasks', async (ctx) => {
-  try {
-    log(`📋 Запрос меню заданий от пользователя ${ctx.from.id}`);
-    
-    const user = await getUser(ctx.from.id);
-    if (!user) {
-      log(`❌ Не удалось получить пользователя ${ctx.from.id} для меню заданий`);
-      return;
-    }
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    log(`📋 Показ меню заданий для пользователя ${ctx.from.id}`);
-    await showTasksMenu(ctx, user);
-    log(`✅ Меню заданий показано пользователю ${ctx.from.id}`);
-  } catch (error) {
-    logError(error, 'Меню заданий');
-    log(`❌ Ошибка в меню заданий для пользователя ${ctx.from.id}: ${error.message}`);
-  }
-});
+// Задания - удалены
 
-bot.action('tasks_sponsor', async (ctx) => {
-  try {
-    logAction(ctx.from.id, 'button_tasks_sponsor', 'Нажата кнопка RichAds офферы');
-    log(`🎯 Запрос спонсорских заданий от пользователя ${ctx.from.id}`);
-    
-    const user = await getUser(ctx.from.id);
-    if (!user) {
-      logAction(ctx.from.id, 'userNotFound', 'Пользователь не найден для RichAds офферов');
-      log(`❌ Не удалось получить пользователя ${ctx.from.id} для спонсорских заданий`);
-      return;
-    }
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    logAction(ctx.from.id, 'userFound', { userId: user.id, username: user.username });
-    log(`🎯 Показ спонсорских заданий для пользователя ${ctx.from.id}`);
-    await showSponsorTasks(ctx, user);
-    logAction(ctx.from.id, 'showSponsorTasksComplete', 'RichAds офферы показаны успешно');
-    log(`✅ Спонсорские задания показаны пользователю ${ctx.from.id}`);
-  } catch (error) {
-    logErrorWithContext(error, 'button_tasks_sponsor', ctx.from.id);
-    logError(error, 'Спонсорские задания');
-    log(`❌ Ошибка в tasks_sponsor для пользователя ${ctx.from.id}: ${error.message}`);
-  }
-});
-
-bot.action('tasks_daily', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    await showDailyTasks(ctx, user);
-  } catch (error) {
-    logError(error, 'Ежедневные задания');
-  }
-});
-
-// Обработчики получения наград за ежедневные задания
-bot.action(/^claim_daily_(.+)$/, async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const taskId = ctx.match[1];
-    await claimDailyTaskReward(ctx, user, taskId);
-  } catch (error) {
-    logError(error, 'Получение награды ежедневного задания');
-  }
-});
-
-bot.action('tasks_progress', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    await showTasksProgress(ctx, user);
-  } catch (error) {
-    logError(error, 'Прогресс заданий');
-  }
-});
-
-bot.action('tasks_achievements', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showTasksAchievements(ctx, user);
-  } catch (error) {
-    logError(error, 'Достижения в заданиях');
-  }
-});
-
-// Обработка спонсорских заданий
-bot.action(/^sponsor_task_(\d+)$/, async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const taskId = parseInt(ctx.match[1]);
-    await showSponsorTaskDetails(ctx, user, taskId);
-  } catch (error) {
-    logError(error, 'Детали спонсорского задания');
-  }
-});
-bot.action(/^claim_sponsor_(\d+)$/, async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const taskId = parseInt(ctx.match[1]);
-    await claimSponsorTask(ctx, user, taskId);
-  } catch (error) {
-    logError(error, 'Получение награды спонсорского задания');
-  }
-});
-
-bot.action(/^verify_sponsor_(\d+)$/, async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const taskId = parseInt(ctx.match[1]);
-    await verifySponsorTask(ctx, user, taskId);
-  } catch (error) {
-    logError(error, 'Проверка спонсорского задания');
-  }
-});
-
-// Обработчик отправки скриншота
-bot.action(/^send_screenshot_(\d+)$/, async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const taskId = parseInt(ctx.match[1]);
-    await handleSendScreenshot(ctx, user, taskId);
-  } catch (error) {
-    logError(error, 'Отправка скриншота');
-  }
-});
-
-// Обработчик следующего задания
-bot.action('next_sponsor_task', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showNextSponsorTask(ctx, user);
-  } catch (error) {
-    logError(error, 'Следующее спонсорское задание');
-  }
-});
+// Обработчики заданий - удалены
 
 
 
