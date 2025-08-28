@@ -437,7 +437,8 @@ const config = {
   },
   
   EXCHANGE_COMMISSION: 2.5,
-  MIN_WITHDRAWAL: 100,
+  WITHDRAWAL_COMMISSION: 5.0,
+  MIN_WITHDRAWAL: 50,
   MAX_WITHDRAWAL: 10000,
   
   // Система сезонов майнинга
@@ -2249,7 +2250,7 @@ async function showMainMenu(ctx, user) {
         Markup.button.callback('🗺️ Роадмап', 'roadmap')
       ],
       [
-        Markup.button.callback('⚙️ Настройки', 'settings')
+        Markup.button.callback('👤 Профиль', 'profile')
       ]
     ];
   
@@ -2323,7 +2324,7 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('🗺️ Роадмап', 'roadmap')
     ],
     [
-      Markup.button.callback('⚙️ Настройки', 'settings')
+      Markup.button.callback('👤 Профиль', 'profile')
     ]
   ];
   
@@ -3808,7 +3809,7 @@ async function showWithdrawalMenu(ctx, user) {
     `└ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Magnum Coins\n\n` +
     `💡 *Информация:*\n` +
     `├ 🚧 Вывод MC: в разработке\n` +
-    `├ Минимальная сумма Stars: 15 Stars\n` +
+          `├ Минимальная сумма Stars: 50 Stars\n` +
     `├ Комиссия: 5%\n` +
     `└ Обработка: до 24 часов\n\n` +
     `🎯 Выберите действие:`;
@@ -4715,6 +4716,10 @@ async function showAdminPanel(ctx, user) {
       [
         Markup.button.callback('🏦 Управление резервом', 'admin_reserve'),
         Markup.button.callback('🔍 Отладка рангов', 'admin_debug_ranks')
+      ],
+      [
+        Markup.button.callback('💸 Комиссия обмена', 'admin_exchange_commission'),
+        Markup.button.callback('💰 Комиссия вывода', 'admin_withdrawal_commission')
       ],
       [
         Markup.button.callback('🗑️ Сброс базы данных', 'admin_reset_db')
@@ -5796,6 +5801,53 @@ async function handleAdminSetCommission(ctx, user, text) {
     await ctx.reply('❌ Ошибка установки комиссии.');
   }
 }
+
+// Функция установки комиссии вывода
+async function handleAdminSetWithdrawalCommission(ctx, user, text) {
+  try {
+    const commission = parseFloat(text);
+    
+    if (isNaN(commission) || commission < 0 || commission > 10) {
+      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 10.');
+      return;
+    }
+    
+    // Обновляем комиссию в конфигурации
+    config.WITHDRAWAL_COMMISSION = commission;
+    
+    // Сбрасываем состояние админа
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад в управление комиссией', 'admin_withdrawal_commission')]
+    ]);
+    
+    await ctx.reply(
+      `✅ *Комиссия вывода обновлена!*\n\n` +
+      `💸 Новая комиссия: \`${commission}%\`\n\n` +
+      `📊 *Примеры вывода:*\n` +
+      `├ 50 Stars → ${(50 * (1 - commission / 100)).toFixed(2)} Stars к выплате\n` +
+      `├ 100 Stars → ${(100 * (1 - commission / 100)).toFixed(2)} Stars к выплате\n` +
+      `└ 500 Stars → ${(500 * (1 - commission / 100)).toFixed(2)} Stars к выплате\n\n` +
+      `💡 Комиссия будет применяться ко всем новым заявкам на вывод.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+    
+    console.log(`✅ Админ ${user.id} установил комиссию вывода ${commission}%`);
+  } catch (error) {
+    logError(error, `Установка комиссии вывода админом ${user.id}`);
+    await ctx.reply('❌ Ошибка установки комиссии вывода.');
+  }
+}
+
 async function showAdminSettings(ctx, user) {
   try {
     log(`⚙️ Показ настроек бота для админа ${user.id}`);
@@ -5887,6 +5939,53 @@ async function showAdminExchangeCommission(ctx, user) {
     await ctx.answerCbQuery('❌ Ошибка показа управления комиссией');
   }
 }
+
+// Управление комиссией вывода
+async function showAdminWithdrawalCommission(ctx, user) {
+  try {
+    log(`💰 Показ управления комиссией вывода для админа ${user.id}`);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Увеличить комиссию', 'admin_withdrawal_commission_increase'),
+        Markup.button.callback('➖ Уменьшить комиссию', 'admin_withdrawal_commission_decrease')
+      ],
+      [
+        Markup.button.callback('🎯 Установить точное значение', 'admin_withdrawal_commission_set'),
+        Markup.button.callback('📊 Статистика комиссий', 'admin_withdrawal_commission_stats')
+      ],
+      [Markup.button.callback('🔙 Назад', 'admin')]
+    ]);
+    
+    const message = 
+      `💰 *Комиссия вывода*\n\n` +
+      `💸 *Текущие настройки:*\n` +
+      `├ Текущая комиссия: \`5%\`\n` +
+      `├ Комиссия с 50 Stars: \`${(50 * 0.05).toFixed(2)}\` Stars\n` +
+      `├ Комиссия с 100 Stars: \`${(100 * 0.05).toFixed(2)}\` Stars\n` +
+      `└ Комиссия с 500 Stars: \`${(500 * 0.05).toFixed(2)}\` Stars\n\n` +
+      `📊 *Примеры вывода:*\n` +
+      `├ 50 Stars → ${(50 * 0.95).toFixed(2)} Stars к выплате\n` +
+      `├ 100 Stars → ${(100 * 0.95).toFixed(2)} Stars к выплате\n` +
+      `└ 500 Stars → ${(500 * 0.95).toFixed(2)} Stars к выплате\n\n` +
+      `💡 *Информация:*\n` +
+      `├ Комиссия взимается с каждой заявки на вывод\n` +
+      `├ Комиссия остается в системе\n` +
+      `└ Комиссия влияет на сумму к выплате\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+    
+    log(`✅ Управление комиссией вывода показано для админа ${user.id}`);
+  } catch (error) {
+    logError(error, `Показ управления комиссией вывода для админа ${user.id}`);
+    await ctx.answerCbQuery('❌ Ошибка показа управления комиссией вывода');
+  }
+}
+
 async function showAdminCooldowns(ctx, user) {
   try {
     log(`⏰ Показ настроек кулдаунов для админа ${user.id}`);
@@ -8015,6 +8114,61 @@ async function showSettingsMenu(ctx, user) {
   } catch (error) {
     logError(error, 'Показ меню настроек');
     await ctx.answerCbQuery('❌ Ошибка загрузки настроек');
+  }
+}
+
+// ==================== ПРОФИЛЬ ====================
+async function showProfileMenu(ctx, user) {
+  try {
+    log(`👤 Показ меню профиля для пользователя ${user.id}`);
+    
+    const rankProgress = await getRankProgress(user);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🎖 Титулы', 'titles'),
+        Markup.button.callback('⚔️ Ранги', 'ranks')
+      ],
+      [
+        Markup.button.callback('🔔 Уведомления', 'settings_notifications'),
+        Markup.button.callback('🔒 Приватность', 'settings_privacy')
+      ],
+      [
+        Markup.button.callback('🌐 Язык', 'settings_language'),
+        Markup.button.callback('🔄 Сброс', 'settings_reset')
+      ],
+      [
+        Markup.button.callback('🆘 Поддержка', 'support')
+      ],
+      [Markup.button.callback('🔙 Назад', 'main_menu')]
+    ]);
+    
+    const message = 
+      `👤 *Профиль пользователя*\n\n` +
+      `👤 *Основная информация:*\n` +
+      `├ Имя: ${user.firstName || 'Не указано'}\n` +
+      `├ Username: ${user.username ? '@' + user.username : 'Не указан'}\n` +
+      `├ ID: \`${user.id}\`\n` +
+      `├ Уровень: ${user.level || 1}\n` +
+      `├ Опыт: ${formatNumber(user.experience || 0)}/${formatNumber(getRequiredExperience(user.level || 1))}\n` +
+      `└ Дата регистрации: ${user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : 'Неизвестно'}\n\n` +
+      `💰 *Балансы:*\n` +
+      `├ Magnum Coins: ${formatNumber(user.magnumCoins || 0)}\n` +
+      `├ Stars: ${formatNumber(user.stars || 0)}\n` +
+      `└ Всего заработано: ${formatNumber((user.totalEarnedMagnumCoins || 0) + (user.totalEarnedStars || 0))}\n\n` +
+      `🎯 *Статистика:*\n` +
+      `├ Рефералов: ${user.referralsCount || 0}\n` +
+      `├ Достижений: ${user.achievementsCompleted || 0}\n` +
+      `└ Ранг: ${rankProgress.currentRank}\n\n` +
+      `🎯 Выберите действие:`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Показ меню профиля');
+    await ctx.answerCbQuery('❌ Ошибка загрузки профиля');
   }
 }
 
@@ -13535,8 +13689,8 @@ bot.action('withdrawal_stars', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    if (user.stars < 15) {
-      await ctx.answerCbQuery('❌ Минимальная сумма для вывода: 15 Stars');
+    if (user.stars < 50) {
+      await ctx.answerCbQuery('❌ Минимальная сумма для вывода: 50 Stars');
       return;
     }
     
@@ -13557,7 +13711,7 @@ bot.action('withdrawal_stars', async (ctx) => {
       `💸 Комиссия: 5%\n\n` +
       `Введите сумму для вывода:\n\n` +
       `💡 *Пример:* 15, 50, 100\n\n` +
-      `⚠️ *Внимание:* Минимум 15 Stars!`,
+      `⚠️ *Внимание:* Минимум 50 Stars!`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
@@ -13589,7 +13743,7 @@ bot.action('withdrawal_stats', async (ctx) => {
       `💡 *Информация:*\n` +
       `├ Комиссия за вывод: 5%\n` +
       `├ 🚧 Вывод MC: в разработке\n` +
-      `├ Минимум Stars: 15\n` +
+      `├ Минимум Stars: 50\n` +
       `└ Обработка: до 24 часов`;
     
     await ctx.editMessageText(message, {
@@ -13750,15 +13904,15 @@ bot.action('copy_referral_link', async (ctx) => {
   }
 });
 
-// Настройки
-bot.action('settings', async (ctx) => {
+// Профиль
+bot.action('profile', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showSettingsMenu(ctx, user);
+    await showProfileMenu(ctx, user);
   } catch (error) {
-    logError(error, 'Меню настроек');
+    logError(error, 'Меню профиля');
   }
 });
 
@@ -15361,6 +15515,148 @@ bot.action('admin_commission_stats', async (ctx) => {
   }
 });
 
+// Обработчики комиссии вывода
+bot.action('admin_withdrawal_commission', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await showAdminWithdrawalCommission(ctx, user);
+  } catch (error) {
+    logError(error, 'Управление комиссией вывода');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_withdrawal_commission_increase', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Увеличиваем комиссию на 1%
+    const newCommission = Math.min(10, 5 + 1); // Максимум 10%
+    
+    await db.collection('config').updateOne(
+      { key: 'WITHDRAWAL_COMMISSION' },
+      { $set: { value: newCommission } },
+      { upsert: true }
+    );
+    
+    await ctx.answerCbQuery(`✅ Комиссия вывода увеличена до ${newCommission}%`);
+    await showAdminWithdrawalCommission(ctx, user);
+  } catch (error) {
+    logError(error, 'Увеличение комиссии вывода');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_withdrawal_commission_decrease', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Уменьшаем комиссию на 1%
+    const newCommission = Math.max(0, 5 - 1); // Минимум 0%
+    
+    await db.collection('config').updateOne(
+      { key: 'WITHDRAWAL_COMMISSION' },
+      { $set: { value: newCommission } },
+      { upsert: true }
+    );
+    
+    await ctx.answerCbQuery(`✅ Комиссия вывода уменьшена до ${newCommission}%`);
+    await showAdminWithdrawalCommission(ctx, user);
+  } catch (error) {
+    logError(error, 'Уменьшение комиссии вывода');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_withdrawal_commission_set', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'setting_withdrawal_commission', updatedAt: new Date() } }
+    );
+    
+    userCache.delete(user.id);
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_withdrawal_commission')]
+    ]);
+    
+    await ctx.editMessageText(
+      `🎯 *Установка комиссии вывода*\n\n` +
+      `Введите новое значение комиссии (от 0 до 10):\n\n` +
+      `💡 *Пример:* 3.0, 5.0, 7.5\n\n` +
+      `⚠️ *Внимание:* Комиссия влияет на все заявки на вывод!`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Установка комиссии вывода');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_withdrawal_commission_stats', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+    
+    // Получаем статистику выводов
+    const totalWithdrawals = await db.collection('withdrawalRequests').countDocuments();
+    const pendingWithdrawals = await db.collection('withdrawalRequests').countDocuments({ status: 'pending' });
+    const approvedWithdrawals = await db.collection('withdrawalRequests').countDocuments({ status: 'approved' });
+    const rejectedWithdrawals = await db.collection('withdrawalRequests').countDocuments({ status: 'rejected' });
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Назад', 'admin_withdrawal_commission')]
+    ]);
+    
+    const message = 
+      `📊 *Статистика комиссий вывода*\n\n` +
+      `💰 *Общая статистика:*\n` +
+      `├ Всего заявок: \`${totalWithdrawals}\`\n` +
+      `├ Ожидают: \`${pendingWithdrawals}\`\n` +
+      `├ Одобрено: \`${approvedWithdrawals}\`\n` +
+      `├ Отклонено: \`${rejectedWithdrawals}\`\n` +
+      `└ Текущая комиссия: \`5%\`\n\n` +
+      `💡 *Информация:*\n` +
+      `├ Комиссия взимается с каждой заявки\n` +
+      `├ Комиссия остается в системе\n` +
+      `└ Статистика обновляется в реальном времени`;
+    
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard.reply_markup
+    });
+  } catch (error) {
+    logError(error, 'Статистика комиссий вывода');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
 bot.action('admin_promocodes_stats', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
@@ -16805,6 +17101,9 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'setting_commission') {
           console.log(`💸 Админ ${ctx.from.id} устанавливает комиссию: "${text}"`);
           await handleAdminSetCommission(ctx, user, text);
+        } else if (user.adminState === 'setting_withdrawal_commission') {
+          console.log(`💰 Админ ${ctx.from.id} устанавливает комиссию вывода: "${text}"`);
+          await handleAdminSetWithdrawalCommission(ctx, user, text);
         } else if (user.adminState === 'giving_title') {
           console.log(`👑 Админ ${ctx.from.id} выдает титул: "${text}"`);
           await handleAdminGiveTitle(ctx, user, text);
@@ -17035,10 +17334,13 @@ bot.action(/^reject_(.+)$/, async (ctx) => {
       ],
       [
         Markup.button.callback('🚫 Нарушение правил', `reject_${requestId}_rules`),
-        Markup.button.callback('🚫 Не включены платные сообщения', `reject_${requestId}_premium`)
+        Markup.button.callback('🚫 Неверные данные', `reject_${requestId}_invalid_data`)
       ],
       [
-        Markup.button.callback('🚫 Другая причина', `reject_${requestId}_other`),
+        Markup.button.callback('🚫 Слишком частые заявки', `reject_${requestId}_too_frequent`),
+        Markup.button.callback('🚫 Техническая ошибка', `reject_${requestId}_technical`)
+      ],
+      [
         Markup.button.callback('🔙 Назад', `cancel_${requestId}`)
       ]
     ]);
@@ -17102,8 +17404,9 @@ bot.action(/^reject_(.+)_(.+)$/, async (ctx) => {
       'funds': 'Недостаточно средств в резерве',
       'suspicious': 'Подозрительная активность',
       'rules': 'Нарушение правил использования',
-      'premium': 'Не включены платные сообщения',
-      'other': 'Другая причина'
+      'invalid_data': 'Неверные данные пользователя',
+      'too_frequent': 'Слишком частые заявки на вывод',
+      'technical': 'Техническая ошибка'
     };
     
     const reasonText = reasonTexts[reason] || 'Не указана';
@@ -17227,8 +17530,8 @@ async function handleWithdrawalStars(ctx, user, text) {
     const amount = parseFloat(text);
     
     // Валидация суммы
-    if (isNaN(amount) || amount < 15) {
-      await ctx.reply('❌ Минимальная сумма для вывода: 15 Stars');
+          if (isNaN(amount) || amount < 50) {
+      await ctx.reply('❌ Минимальная сумма для вывода: 50 Stars');
       return;
     }
     
