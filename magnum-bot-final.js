@@ -2323,9 +2323,6 @@ async function showMainMenuStart(ctx, user) {
     [
       Markup.button.callback('🗺️ Роадмап', 'roadmap'),
       Markup.button.callback('⚙️ Настройки', 'settings')
-    ],
-    [
-      Markup.button.webApp('Заработать', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
     ]
   ];
   
