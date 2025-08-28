@@ -3372,6 +3372,15 @@ async function buyMiner(user, minerType) {
     
     // Ищем существующий майнер этого типа
     const existingMiner = userWithMining.miners.find(m => m.type === minerType);
+    const currentCount = existingMiner ? existingMiner.count : 0;
+    
+    // Проверяем лимит покупки (максимум 5 майнеров каждого типа)
+    if (currentCount >= 5) {
+      return { 
+        success: false, 
+        message: `❌ Вы достигли лимита покупки (5 майнеров ${minerConfig.name})` 
+      };
+    }
     
     if (existingMiner) {
       // Увеличиваем количество
@@ -3465,54 +3474,92 @@ async function upgradeMiner(user, minerType) {
 }
 
 // Функции отображения новых меню майнинга
-async function showMinerShop(ctx, user) {
+async function showMinerShop(ctx, user, minerIndex = 0) {
   try {
     const userWithMining = initializeNewMiningSystem(user);
     
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback('🛒 Базовый майнер (100 MC)', 'buy_miner_basic'),
-        Markup.button.callback('🛒 Продвинутый (500 MC)', 'buy_miner_advanced')
-      ],
-      [
-        Markup.button.callback('🛒 Премиум (50 ⭐)', 'buy_miner_premium'),
-        Markup.button.callback('🛒 Легендарный (200 ⭐)', 'buy_miner_legendary')
-      ],
-      [Markup.button.callback('🔙 Назад', 'miner')]
-    ]);
+    // Получаем список всех типов майнеров
+    const minerTypes = Object.keys(config.MINERS);
+    const currentMinerType = minerTypes[minerIndex];
+    const minerConfig = config.MINERS[currentMinerType];
+    
+    if (!minerConfig) {
+      await ctx.answerCbQuery('❌ Майнер не найден');
+      return;
+    }
+    
+    // Получаем статистику пользователя по этому майнеру
+    const userMiner = userWithMining.miners.find(m => m.type === currentMinerType);
+    const userCount = userMiner ? userMiner.count : 0;
+    
+    // Получаем общую статистику по серверу
+    const serverStats = await getServerMinerStats();
+    const serverCount = serverStats[currentMinerType] || 0;
+    
+    // Проверяем лимит покупки (максимум 5 майнеров каждого типа)
+    const canBuy = userCount < 5;
+    const remainingSlots = 5 - userCount;
+    
+    // Создаем клавиатуру с навигацией
+    const keyboard = [];
+    
+    // Кнопки навигации
+    const navRow = [];
+    if (minerIndex > 0) {
+      navRow.push(Markup.button.callback('⬅️ Предыдущий', `miner_shop_${minerIndex - 1}`));
+    }
+    if (minerIndex < minerTypes.length - 1) {
+      navRow.push(Markup.button.callback('Следующий ➡️', `miner_shop_${minerIndex + 1}`));
+    }
+    if (navRow.length > 0) {
+      keyboard.push(navRow);
+    }
+    
+    // Кнопка покупки
+    if (canBuy) {
+      const currencySymbol = minerConfig.currency === 'magnumCoins' ? 'MC' : '⭐';
+      keyboard.push([
+        Markup.button.callback(`🛒 Купить ${minerConfig.name} (${minerConfig.price} ${currencySymbol})`, `buy_miner_${currentMinerType}`)
+      ]);
+    } else {
+      keyboard.push([
+        Markup.button.callback('❌ Лимит достигнут (5/5)', 'miner_shop_limit')
+      ]);
+    }
+    
+    // Кнопка назад
+    keyboard.push([Markup.button.callback('🔙 Назад', 'miner')]);
+    
+    // Формируем сообщение
+    const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
+    const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'MC';
+    const priceSymbol = minerConfig.currency === 'magnumCoins' ? 'MC' : '⭐';
     
     let message = `🛒 *Магазин майнеров*\n\n`;
-    message += `💰 Ваш баланс:\n`;
+    message += `💰 *Ваш баланс:*\n`;
     message += `├ Magnum Coins: ${formatNumber(userWithMining.magnumCoins)}\n`;
     message += `└ Stars: ${formatNumber(userWithMining.stars)}\n\n`;
     
-    message += `📦 *Доступные майнеры:*\n\n`;
+    message += `📦 *${minerConfig.name}*\n`;
+    message += `├ Скорость: ${formatNumber(minerConfig.baseSpeed)} ${currencySymbol}/мин\n`;
+    message += `├ Редкость: ${getRarityEmoji(minerConfig.rarity)} ${minerConfig.rarity}\n`;
+    message += `├ Цена: ${minerConfig.price} ${priceSymbol}\n`;
+    message += `├ У вас: ${userCount}/5 шт.\n`;
+    message += `├ Доступно слотов: ${remainingSlots}\n`;
+    message += `├ Всего на сервере: ${serverCount} шт.\n`;
+    message += `└ ${minerConfig.description}\n\n`;
     
-    for (const [type, minerConfig] of Object.entries(config.MINERS)) {
-      const userMiner = userWithMining.miners.find(m => m.type === type);
-      const userCount = userMiner ? userMiner.count : 0;
-      
-      message += `🔸 *${minerConfig.name}*\n`;
-      const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
-      const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'MC';
-      message += `├ Скорость: ${formatNumber(minerConfig.baseSpeed)} ${currencySymbol}/мин\n`;
-      message += `├ Редкость: ${getRarityEmoji(minerConfig.rarity)} ${minerConfig.rarity}\n`;
-      message += `├ Цена: ${minerConfig.price} ${minerConfig.currency === 'magnumCoins' ? 'MC' : '⭐'}\n`;
-      message += `├ У вас: ${userCount} шт.\n`;
-      message += `└ ${minerConfig.description}\n\n`;
+    message += `📊 *Прогресс:* ${minerIndex + 1}/${minerTypes.length}\n\n`;
+    
+    if (canBuy) {
+      message += `✅ Вы можете купить этот майнер\n`;
+    } else {
+      message += `❌ Вы достигли лимита покупки (5 майнеров)\n`;
     }
-    
-    message += `💡 *Как это работает:*\n`;
-    message += `├ Каждый майнер добывает ресурсы автоматически\n`;
-    message += `├ Скорость зависит от уровня майнера\n`;
-    message += `├ Можно покупать несколько майнеров одного типа\n`;
-    message += `└ Апгрейды увеличивают скорость добычи\n\n`;
-    
-    message += `🎯 Выберите майнера для покупки:`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
+      reply_markup: Markup.inlineKeyboard(keyboard).reply_markup
     });
   } catch (error) {
     logError(error, 'Показ магазина майнеров');
@@ -6450,6 +6497,45 @@ async function saveUserToDatabase(userId, updateData, options = {}) {
   } catch (error) {
     console.error(`❌ Ошибка сохранения пользователя ${userId}:`, error);
     throw error;
+  }
+}
+
+// Функция для получения статистики майнеров по серверу
+async function getServerMinerStats() {
+  try {
+    const stats = {};
+    const minerTypes = Object.keys(config.MINERS);
+    
+    for (const minerType of minerTypes) {
+      const result = await db.collection('users').aggregate([
+        {
+          $match: {
+            [`miners`]: { $exists: true, $ne: [] }
+          }
+        },
+        {
+          $unwind: '$miners'
+        },
+        {
+          $match: {
+            'miners.type': minerType
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalCount: { $sum: '$miners.count' }
+          }
+        }
+      ]).toArray();
+      
+      stats[minerType] = result.length > 0 ? result[0].totalCount : 0;
+    }
+    
+    return stats;
+  } catch (error) {
+    console.error('❌ Ошибка получения статистики майнеров:', error);
+    return {};
   }
 }
 
@@ -12328,9 +12414,31 @@ bot.action('miner_shop', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showMinerShop(ctx, user);
+    await showMinerShop(ctx, user, 0);
   } catch (error) {
     logError(error, 'Магазин майнеров');
+  }
+});
+
+// Обработчики навигации по магазину майнеров
+bot.action(/^miner_shop_(\d+)$/, async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    const minerIndex = parseInt(ctx.match[1]);
+    await showMinerShop(ctx, user, minerIndex);
+  } catch (error) {
+    logError(error, 'Навигация магазина майнеров');
+  }
+});
+
+// Обработчик лимита покупки
+bot.action('miner_shop_limit', async (ctx) => {
+  try {
+    await ctx.answerCbQuery('❌ Вы достигли лимита покупки (5 майнеров каждого типа)');
+  } catch (error) {
+    logError(error, 'Лимит покупки майнеров');
   }
 });
 
