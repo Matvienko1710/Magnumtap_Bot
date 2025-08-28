@@ -11133,13 +11133,25 @@ function generateChestReward() {
   // Распределение вероятностей для разных уровней сундуков
   if (random < 0.6) {
     // 🟢 Обычный сундук (60%)
-    return {
-      level: 'Обычный',
-      emoji: '🟢',
-      magnumCoins: Math.floor(Math.random() * 50) + 10, // 10-60 MC
-      stars: Math.floor(Math.random() * 20) + 5, // 5-25 Stars
-      description: 'Обычные награды'
-    };
+    const isMC = Math.random() < 0.7; // 70% шанс на MC, 30% на Stars
+    
+    if (isMC) {
+      return {
+        level: 'Обычный',
+        emoji: '🟢',
+        magnumCoins: Math.floor(Math.random() * 1000) + 1, // 1-1000 MC
+        stars: 0,
+        description: 'Обычные награды (MC)'
+      };
+    } else {
+      return {
+        level: 'Обычный',
+        emoji: '🟢',
+        magnumCoins: 0,
+        stars: Math.floor(Math.random() * 5) + 1, // 1-5 Stars
+        description: 'Обычные награды (Stars)'
+      };
+    }
   } else if (random < 0.85) {
     // 🔵 Редкий сундук (25%)
     return {
@@ -11444,34 +11456,23 @@ async function handleUserEnterPromocode(ctx, user, text) {
       }
     }
     
-    // Отправляем подтверждение пользователю
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад к промокодам', 'promocode')]
-    ]);
-    
-    let message = `🎉 *Промокод активирован!*\n\n🎫 Код: \`${code}\`\n\n`;
+    // Отправляем всплывающее уведомление
+    let notificationText = '';
     
     if (rewardType === 'chest') {
       const rewardText = formatChestReward(chestReward);
-      message += `${chestReward.emoji} *${chestReward.level} сундук*\n${rewardText}\n\n`;
+      notificationText = `🎉 ${chestReward.emoji} ${chestReward.level} сундук!\n${rewardText}`;
     } else {
-      let rewardText = '';
       if (rewardType === 'mc') {
-        rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
+        notificationText = `💰 Получено ${formatNumber(reward)} Magnum Coins!`;
       } else if (rewardType === 'stars') {
-        rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
+        notificationText = `⭐ Получено ${formatNumber(reward)} Stars!`;
       } else if (rewardType === 'title') {
-        rewardText = `👑 Награда: \`${reward}\``;
+        notificationText = `👑 Получен титул "${reward}"!`;
       }
-      message += `${rewardText}\n\n`;
     }
     
-    message += `📅 Активирован: ${new Date().toLocaleString('ru-RU')}\n\n🎉 Поздравляем с получением награды!`;
-    
-    await ctx.reply(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.reply_markup
-    });
+    await ctx.answerCbQuery(notificationText, { show_alert: true });
     
     let logReward = '';
     if (rewardType === 'chest') {
@@ -13272,31 +13273,10 @@ bot.action('withdrawal_mc', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await ctx.answerCbQuery('🚧 Функция в разработке! Скоро будет доступна.');
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Назад', 'withdrawal')]
-    ]);
-    
-    await ctx.editMessageText(
-      `💰 *Вывод Magnum Coins*\n\n` +
-      `🚧 *Функция в разработке*\n\n` +
-      `⚙️ Мы работаем над системой вывода Magnum Coins.\n` +
-      `📅 Скоро эта функция будет доступна!\n\n` +
-      `💡 *Что будет доступно:*\n` +
-      `├ Минимальная сумма: 10 Magnum Coins\n` +
-      `├ Комиссия: 5%\n` +
-      `├ Обработка: до 24 часов\n` +
-      `└ Безопасные переводы\n\n` +
-      `🔔 Следите за обновлениями!`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
+    await ctx.answerCbQuery('🚧 Функция в разработке');
   } catch (error) {
     logError(error, 'Вывод Magnum Coins (в разработке)');
-    await ctx.answerCbQuery('❌ Ошибка показа информации');
+    await ctx.answerCbQuery('❌ Ошибка');
   }
 });
 
