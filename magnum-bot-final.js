@@ -179,7 +179,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
       res.json({ 
         success: true, 
         reward: reward.toFixed(2),
-        message: `+${reward.toFixed(2)} Stars за активный клик!`
+        message: `+${reward.toFixed(2)} Magnum Coins за активный клик!`
       });
 
     } catch (error) {
@@ -220,7 +220,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
       res.json({ 
         success: true, 
         reward: reward.toFixed(2),
-        message: `+${reward.toFixed(2)} Stars за фарм!`
+        message: `+${reward.toFixed(2)} Magnum Coins за фарм!`
       });
 
     } catch (error) {
@@ -773,7 +773,7 @@ app.post('/api/webapp/miner/toggle', async (req, res) => {
     }
 });
 
-// API для обмена валют (Stars <-> Stars)
+// API для обмена валют (Magnum Coins ↔ Stars)
 app.post('/api/webapp/exchange', async (req, res) => {
     try {
         const { userId, from, amount } = req.body;
@@ -972,10 +972,10 @@ async function calculateExchangeRate() {
     // Используем логарифмическую шкалу для более чувствительного курса
     let multiplier;
     if (ratio <= 1) {
-      // Если Stars меньше или равно Stars, используем линейную шкалу
+      // Если Magnum Coins меньше или равно Stars, используем линейную шкалу
       multiplier = Math.max(0.001, ratio);
     } else {
-      // Если Stars больше Stars, используем логарифмическую шкалу без ограничений
+      // Если Magnum Coins больше Stars, используем логарифмическую шкалу без ограничений
       const logRatio = Math.log(ratio) / Math.log(10); // log10
       multiplier = Math.max(0.001, 1 + logRatio * 2);
     }
@@ -3440,7 +3440,7 @@ async function buyMiner(user, minerType) {
     if (userBalance < minerConfig.price) {
       return { 
         success: false, 
-        message: `❌ Недостаточно ${minerConfig.currency === 'magnuStarsoins' ? 'Stars' : 'Stars'}` 
+        message: `❌ Недостаточно ${minerConfig.currency === 'magnuStarsoins' ? 'Magnum Coins' : 'Stars'}` 
       };
     }
     
@@ -4589,7 +4589,7 @@ async function claimBonus(ctx, user) {
     const streakBonus = Math.min(bonus.streak * 0.5, 5);
     const totalReward = baseReward + streakBonus;
     
-    log(`💰 Расчет бонуса: базовая ${baseReward}, серия ${bonus.streak}, бонус серии ${streakBonus}, итого ${totalReward} Stars`);
+    log(`💰 Расчет бонуса: базовая ${baseReward}, серия ${bonus.streak}, бонус серии ${streakBonus}, итого ${totalReward} Magnum Coins`);
     
     // Проверяем, не пропустил ли день
     let newStreak = bonus.streak + 1;
@@ -5951,7 +5951,7 @@ async function showAdminSettings(ctx, user) {
       `⚙️ *Настройки бота*\n\n` +
       `🔧 *Текущие настройки:*\n` +
 
-      `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Stars\n` +
+      `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
       `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_MINUTE}\` Stars/мин\n` +
       `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Stars\n` +
       `├ 💸 Комиссия обмена: \`${config.EXCHANGE_COMMISSION}%\`\n` +
@@ -6132,15 +6132,15 @@ async function showAdminDailyBonus(ctx, user) {
     const message = 
       `🎁 *Ежедневный бонус*\n\n` +
       `💰 *Текущие настройки:*\n` +
-      `├ Базовая награда: \`${config.DAILY_BONUS_BASE}\` Stars\n` +
-      `├ Бонус за серию: \`+0.5\` Stars за день\n` +
-      `├ Максимальный бонус серии: \`5\` Stars\n` +
-      `└ Максимальная награда: \`${config.DAILY_BONUS_BASE + 5}\` Stars\n\n` +
+      `├ Базовая награда: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
+      `├ Бонус за серию: \`+0.5\` Magnum Coins за день\n` +
+      `├ Максимальный бонус серии: \`5\` Magnum Coins\n` +
+      `└ Максимальная награда: \`${config.DAILY_BONUS_BASE + 5}\` Magnum Coins\n\n` +
       `📊 *Статистика пользователя:*\n` +
       `├ Текущая серия: \`${user.dailyBonus?.streak || 0}\` дней\n` +
       `├ Максимальная серия: \`${user.dailyBonus?.maxStreak || 0}\` дней\n` +
       `├ Получено бонусов: \`${user.dailyBonus?.claimedCount || 0}\`\n` +
-      `└ Заработано бонусами: \`${formatNumber(user.dailyBonus?.totalEarned || 0)}\` Stars\n\n` +
+      `└ Заработано бонусами: \`${formatNumber(user.dailyBonus?.totalEarned || 0)}\` Magnum Coins\n\n` +
       `🎯 Выберите настройку для изменения:`;
     
     await ctx.editMessageText(message, {
@@ -10312,7 +10312,7 @@ async function handleAdminSetBonusBase(ctx, user, text) {
     // Обновляем конфиг в памяти
     config.DAILY_BONUS_BASE = newBonus;
     
-    await ctx.reply(`✅ Базовая награда ежедневного бонуса изменена на ${newBonus} Stars`);
+    await ctx.reply(`✅ Базовая награда ежедневного бонуса изменена на ${newBonus} Magnum Coins`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -12348,8 +12348,8 @@ bot.action('faq_bonus', async (ctx) => {
       `Бонус доступен каждые 24 часа. Если вы пропустите день, серия сбрасывается.\n\n` +
       `*❓ Что такое серия бонусов?*\n` +
       `Серия - это количество дней подряд, когда вы забирали бонус. Чем длиннее серия, тем больше награда.\n\n` +
-      `*❓ Сколько Stars в бонусе?*\n` +
-      `Базовый бонус составляет ${config.DAILY_BONUS_BASE || 10} Stars. С каждым днем серии награда увеличивается.\n\n` +
+      `*❓ Сколько Magnum Coins в бонусе?*\n` +
+      `Базовый бонус составляет ${config.DAILY_BONUS_BASE || 10} Magnum Coins. С каждым днем серии награда увеличивается.\n\n` +
       `*❓ Что происходит при пропуске дня?*\n` +
       `Если вы пропустите день, серия сбрасывается на 1, и награда возвращается к базовому значению.\n\n` +
       `*❓ Как посмотреть статистику бонусов?*\n` +
