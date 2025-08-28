@@ -2030,8 +2030,11 @@ function formatProfileMessage(user, rankProgress) {
     `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
     `📊 *Статистика:*\n` +
     `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
-    `├ Рефералы: \`${user.referralsCount}\`\n` +
-    `└ Достижения: \`${user.achievementsCount}\`\n\n` +
+    `└ Рефералы: \`${user.referralsCount}\`\n\n` +
+    `📱 *Полезные ссылки:*\n` +
+    `├ [📰 Новости](https://t.me/magnumstars_news)\n` +
+    `├ [💰 Выводы](https://t.me/magnumstars_withdrawals)\n` +
+    `└ [💬 Чат](https://t.me/magnumstars_chat)\n\n` +
     `⚠️ *Нашли ошибку?*\n` +
     `├ Сообщите в поддержку за вознаграждение!\n` +
     `├ FAQ и ответы на вопросы\n` +
@@ -2270,12 +2273,20 @@ async function showMainMenu(ctx, user) {
         Markup.button.callback('📈 Биржа', 'exchange')
       ],
       [
-        Markup.button.webApp('🎁 Бонус', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
-      ],
-      [
         Markup.button.callback('💰 Вывод', 'withdrawal')
       ]
     ];
+    
+    // Добавляем кнопку бонуса
+    if (isAdmin(user.id)) {
+      buttons.splice(3, 0, [
+        Markup.button.webApp('🎁 Бонус', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
+      ]);
+    } else {
+      buttons.splice(3, 0, [
+        Markup.button.callback('🎁 Бонус', 'bonus_user')
+      ]);
+    }
   
   // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
@@ -2322,27 +2333,35 @@ async function showMainMenuStart(ctx, user) {
   try {
     const rankProgress = await getRankProgress(user);
   
-  // Создаем базовые кнопки (рабочие функции)
-  const buttons = [
-    [
-      Markup.button.callback('⛏️ Майнер', 'miner'),
-      Markup.button.callback('👤 Профиль', 'profile')
-    ],
-    [
-      Markup.button.callback('🔑 Ключи', 'promocode'),
-      Markup.button.callback('👥 Рефералы', 'referrals')
-    ],
-    [
-      Markup.button.callback('🗺️ Роадмап', 'roadmap'),
-      Markup.button.callback('📈 Биржа', 'exchange')
-    ],
-    [
-      Markup.button.webApp('🎁 Бонус', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
-    ],
-    [
-      Markup.button.callback('💰 Вывод', 'withdrawal')
-    ]
-  ];
+      // Создаем базовые кнопки (рабочие функции)
+    const buttons = [
+      [
+        Markup.button.callback('⛏️ Майнер', 'miner'),
+        Markup.button.callback('👤 Профиль', 'profile')
+      ],
+      [
+        Markup.button.callback('🔑 Ключи', 'promocode'),
+        Markup.button.callback('👥 Рефералы', 'referrals')
+      ],
+      [
+        Markup.button.callback('🗺️ Роадмап', 'roadmap'),
+        Markup.button.callback('📈 Биржа', 'exchange')
+      ],
+      [
+        Markup.button.callback('💰 Вывод', 'withdrawal')
+      ]
+    ];
+    
+    // Добавляем кнопку бонуса
+    if (isAdmin(user.id)) {
+      buttons.splice(3, 0, [
+        Markup.button.webApp('🎁 Бонус', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
+      ]);
+    } else {
+      buttons.splice(3, 0, [
+        Markup.button.callback('🎁 Бонус', 'bonus_user')
+      ]);
+    }
   
   // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
@@ -13893,6 +13912,15 @@ bot.action('confirm_reset', async (ctx) => {
 
 
 
+
+// Бонус для обычных пользователей
+bot.action('bonus_user', async (ctx) => {
+  try {
+    await ctx.answerCbQuery('🚧 Скоро...');
+  } catch (error) {
+    logError(error, 'Бонус для пользователей');
+  }
+});
 
 bot.action('claim_bonus', async (ctx) => {
   try {
