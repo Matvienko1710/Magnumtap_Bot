@@ -2,6 +2,14 @@
 chcp 65001 >nul
 echo 🚀 Автоматический деплой Magnum Bot...
 
+REM Автоматическая приостановка старого деплоя на Render перед новым
+if defined RENDER_API_KEY if defined RENDER_SERVICE_ID (
+    echo ⏸️ Приостанавливаем текущий сервис на Render для плавного перехода...
+    powershell -Command "$headers = @{ 'Authorization' = 'Bearer ' + $env:RENDER_API_KEY; 'Content-Type' = 'application/json' }; try { $response = Invoke-WebRequest -Method Post -Uri https://api.render.com/v1/services/$($env:RENDER_SERVICE_ID)/suspend -Headers $headers -UseBasicParsing; if ($response.StatusCode -eq 200) { Write-Host '✅ Сервис успешно приостановлен' } else { Write-Host '⚠️ Не удалось приостановить сервис, продолжаем...' } } catch { Write-Host '⚠️ Ошибка приостановки сервиса, продолжаем...' }"
+    echo ⏳ Ждем 10 секунд для завершения процессов...
+    timeout /t 10 /nobreak >nul
+)
+
 REM Проверяем наличие package.json
 if not exist "package.json" (
     echo ❌ Не найден package.json. Убедитесь, что вы в корневой папке проекта.
@@ -38,6 +46,15 @@ if %errorlevel% equ 0 (
     echo ❌ Ошибка при пуше на GitHub
     pause
     exit /b 1
+)
+
+REM Автоматическое возобновление сервиса на Render после успешного деплоя
+if defined RENDER_API_KEY if defined RENDER_SERVICE_ID (
+    echo ▶️ Возобновляем сервис на Render после деплоя...
+    echo ⏳ Ждем завершения деплоя (30 секунд)...
+    timeout /t 30 /nobreak >nul
+
+    powershell -Command "$headers = @{ 'Authorization' = 'Bearer ' + $env:RENDER_API_KEY; 'Content-Type' = 'application/json' }; try { $response = Invoke-WebRequest -Method Post -Uri https://api.render.com/v1/services/$($env:RENDER_SERVICE_ID)/resume -Headers $headers -UseBasicParsing; if ($response.StatusCode -eq 200) { Write-Host '✅ Сервис успешно возобновлен' } else { Write-Host '⚠️ Не удалось возобновить сервис автоматически' } } catch { Write-Host '⚠️ Ошибка возобновления сервиса' }"
 )
 
 echo 🎉 Автоматический деплой завершен!

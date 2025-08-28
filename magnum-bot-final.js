@@ -474,6 +474,16 @@ const config = {
   EXCHANGE_RATE_MULTIPLIER: 1.0 // Множитель курса в зависимости от резерва
 };
 
+// Вспомогательная проверка прав администратора
+function isAdmin(userId) {
+  try {
+    const id = parseInt(userId);
+    return Array.isArray(config.ADMIN_IDS) && config.ADMIN_IDS.includes(id);
+  } catch (_) {
+    return false;
+  }
+}
+
 // API маршрут для проверки доступа к WebApp
 app.get('/api/webapp/check-access', async (req, res) => {
     try {
@@ -2010,14 +2020,17 @@ function getDisplayName(user) {
 }
 
 // Функция для формирования сообщения профиля
-function formatProfileMessage(user, rankProgress) {
+async function formatProfileMessage(user, rankProgress) {
   let rankInfo = `├ Ранг: ${rankProgress.current.name}\n`;
   if (!rankProgress.isMax) {
     rankInfo += `├ Прогресс: ${rankProgress.progress}% (${rankProgress.remaining} ур. до ${rankProgress.next.name})\n`;
   } else {
     rankInfo += `├ Прогресс: Максимальный ранг! 🎉\n`;
   }
-  
+
+  // Получаем глобальную статистику
+  const globalStats = await getGlobalStats();
+
   return `🌟 *Добро пожаловать в Magnum Stars!*\n\n` +
     `👤 *Профиль:*\n` +
     `├ ID: \`${user.id}\`\n` +
@@ -2028,9 +2041,11 @@ function formatProfileMessage(user, rankProgress) {
     `💎 *Баланс:*\n` +
     `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
     `└ 🪙 Stars: \`${formatNumber(user.magnuStarsoins)}\`\n\n` +
-    `📊 *Статистика:*\n` +
-    `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
-    `└ Рефералы: \`${user.referralsCount}\`\n\n` +
+    `📊 *Статистика сообщества:*\n` +
+    `├ 👥 Пользователей: \`${formatNumber(globalStats.totalUsers)}\`\n` +
+    `├ 💰 Выведено Stars: \`${formatNumber(globalStats.totalWithdrawnStars)}\`\n` +
+    `├ 💎 Заработано Magnum: \`${formatNumber(globalStats.totalEarnedMagnumCoins)}\`\n` +
+    `└ 📈 Активных майнеров: \`~${Math.floor(globalStats.totalUsers * 0.3)}\`\n\n` +
     `📱 *Полезные ссылки:*\n` +
     `├ [📰 Новости](https://t.me/magnumtap)\n` +
     `├ [💰 Выводы](https://t.me/magnumwithdraw)\n` +
@@ -2038,7 +2053,7 @@ function formatProfileMessage(user, rankProgress) {
     `⚠️ *Нашли ошибку?*\n` +
     `├ Сообщите в поддержку за вознаграждение!\n` +
     `├ FAQ и ответы на вопросы\n` +
-    `└ Перейдите в ⚙️ Настройки → 🆘 Поддержка\n\n` +
+    `└ Перейдите в 👤 Профиль → 🆘 Поддержка\n\n` +
     `🎯 Выберите действие:`;
 }
 
@@ -2126,6 +2141,66 @@ async function showSubscriptionMessage(ctx) {
     }
   }
 }
+
+// ==================== ГЛОБАЛЬНАЯ СТАТИСТИКА ====================
+// Функция для получения глобальной статистики бота
+async function getGlobalStats() {
+  try {
+    // Получаем общее количество пользователей
+    const totalUsers = await db.collection('users').countDocuments();
+
+    // Получаем статистику по валютам
+    const usersWithStats = await db.collection('users').find({}, {
+      projection: {
+        magnuStarsoins: 1,
+        stars: 1,
+        totalEarnedMagnuStarsoins: 1,
+        totalEarnedStars: 1,
+        totalWithdrawnMagnuStarsoins: 1,
+        totalWithdrawnStars: 1
+      }
+    }).toArray();
+
+    // Суммируем все валюты
+    let totalMagnumCoins = 0;
+    let totalStars = 0;
+    let totalEarnedMagnumCoins = 0;
+    let totalEarnedStars = 0;
+    let totalWithdrawnMagnumCoins = 0;
+    let totalWithdrawnStars = 0;
+
+    for (const user of usersWithStats) {
+      totalMagnumCoins += user.magnuStarsoins || 0;
+      totalStars += user.stars || 0;
+      totalEarnedMagnumCoins += user.totalEarnedMagnuStarsoins || 0;
+      totalEarnedStars += user.totalEarnedStars || 0;
+      totalWithdrawnMagnumCoins += user.totalWithdrawnMagnuStarsoins || 0;
+      totalWithdrawnStars += user.totalWithdrawnStars || 0;
+    }
+
+    return {
+      totalUsers,
+      totalMagnumCoins,
+      totalStars,
+      totalEarnedMagnumCoins,
+      totalEarnedStars,
+      totalWithdrawnMagnumCoins,
+      totalWithdrawnStars
+    };
+  } catch (error) {
+    console.error('❌ Ошибка получения глобальной статистики:', error);
+    return {
+      totalUsers: 0,
+      totalMagnumCoins: 0,
+      totalStars: 0,
+      totalEarnedMagnumCoins: 0,
+      totalEarnedStars: 0,
+      totalWithdrawnMagnumCoins: 0,
+      totalWithdrawnStars: 0
+    };
+  }
+}
+
 // ==================== РЕФЕРАЛЬНАЯ СИСТЕМА ====================
 async function handleReferral(userId, referrerId) {
   try {
@@ -2297,7 +2372,7 @@ async function showMainMenu(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
-  const message = formatProfileMessage(user, rankProgress);
+  const message = await formatProfileMessage(user, rankProgress);
   
   try {
     await ctx.editMessageText(message, {
@@ -2372,7 +2447,7 @@ async function showMainMenuStart(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard(buttons);
   
-  const message = formatProfileMessage(user, rankProgress);
+  const message = await formatProfileMessage(user, rankProgress);
   
   await ctx.reply(message, {
     parse_mode: 'Markdown',
@@ -11211,6 +11286,212 @@ async function handleAdminCreatePromoChest(ctx, user, text, chestType) {
   }
 }
 
+// ==================== ФУНКЦИИ СОЗДАНИЯ ПОСТОВ ====================
+// Функция для создания поста с кнопкой
+async function handleAdminCreatePostWithButton(ctx, user, text) {
+  try {
+    log(`📝 Админ ${user.id} создает пост с кнопкой: "${text}"`);
+
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+
+    // Парсим данные поста
+    const parts = text.split('---').map(part => part.trim());
+    if (parts.length !== 3) {
+      await ctx.reply(
+        `❌ Неверный формат! Используйте разделитель "---"\n\n` +
+        `📋 Правильный формат:\n` +
+        `├ Текст поста\n` +
+        `├ ---\n` +
+        `├ Текст кнопки\n` +
+        `├ ---\n` +
+        `└ URL кнопки\n\n` +
+        `💡 Пример:\n` +
+        `├ Добро пожаловать в Magnum Stars!\n` +
+        `├ ---\n` +
+        `├ Перейти в бота\n` +
+        `├ ---\n` +
+        `└ https://t.me/magnumtap_bot`
+      );
+      return;
+    }
+
+    const [postText, buttonText, buttonUrl] = parts;
+
+    // Валидация данных
+    if (!postText || postText.length < 10) {
+      await ctx.reply('❌ Текст поста должен содержать минимум 10 символов!');
+      return;
+    }
+
+    if (!buttonText || buttonText.length < 1) {
+      await ctx.reply('❌ Текст кнопки не может быть пустым!');
+      return;
+    }
+
+    if (!buttonUrl || !buttonUrl.match(/^https?:\/\/.+/)) {
+      await ctx.reply('❌ URL кнопки должен начинаться с http:// или https://!');
+      return;
+    }
+
+    // Проверяем канал
+    if (!config.REQUIRED_CHANNEL || !config.REQUIRED_CHANNEL.startsWith('@')) {
+      await ctx.reply('❌ Канал @magnumtap не настроен в конфигурации!');
+      return;
+    }
+
+    // Создаем клавиатуру для поста
+    const postKeyboard = Markup.inlineKeyboard([
+      [Markup.button.url(buttonText, buttonUrl)]
+    ]);
+
+    // Публикуем пост в канал
+    try {
+      const channelMessage = await ctx.telegram.sendMessage(
+        config.REQUIRED_CHANNEL,
+        postText,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: postKeyboard.reply_markup,
+          disable_web_page_preview: true
+        }
+      );
+
+      // Сохраняем информацию о посте в базу данных
+      await db.collection('adminPosts').insertOne({
+        type: 'with_button',
+        postText: postText,
+        buttonText: buttonText,
+        buttonUrl: buttonUrl,
+        channelId: config.REQUIRED_CHANNEL,
+        messageId: channelMessage.message_id,
+        createdBy: user.id,
+        createdAt: new Date()
+      });
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('📝 Создать еще', 'admin_create_post_with_button')],
+        [Markup.button.callback('🔙 В админ панель', 'admin')]
+      ]);
+
+      await ctx.reply(
+        `✅ *Пост с кнопкой успешно опубликован!*\n\n` +
+        `📝 Текст: ${postText.substring(0, 50)}${postText.length > 50 ? '...' : ''}\n` +
+        `🔘 Кнопка: ${buttonText}\n` +
+        `🔗 URL: ${buttonUrl}\n` +
+        `📢 Канал: ${config.REQUIRED_CHANNEL}\n` +
+        `🆔 ID сообщения: \`${channelMessage.message_id}\`\n\n` +
+        `🎯 Пост готов и опубликован!`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        }
+      );
+
+      log(`✅ Пост с кнопкой успешно опубликован админом ${user.id} в канал ${config.REQUIRED_CHANNEL}, ID: ${channelMessage.message_id}`);
+
+    } catch (channelError) {
+      logError(channelError, `Ошибка публикации поста в канал ${config.REQUIRED_CHANNEL}`);
+      await ctx.reply(
+        `❌ Ошибка публикации в канал ${config.REQUIRED_CHANNEL}!\n\n` +
+        `Проверьте:\n` +
+        `├ Бот добавлен в канал как администратор\n` +
+        `├ Бот имеет права на отправку сообщений\n` +
+        `└ Канал указан правильно в конфигурации`
+      );
+    }
+
+  } catch (error) {
+    logError(error, `Создание поста с кнопкой админом ${user.id}`);
+    await ctx.reply('❌ Ошибка создания поста. Попробуйте позже.');
+  }
+}
+
+// Функция для создания поста без кнопки
+async function handleAdminCreatePostNoButton(ctx, user, text) {
+  try {
+    log(`📝 Админ ${user.id} создает пост без кнопки: "${text}"`);
+
+    // Очищаем состояние пользователя
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $unset: { adminState: "" }, $set: { updatedAt: new Date() } }
+    );
+    userCache.delete(user.id);
+
+    // Валидация данных
+    if (!text || text.length < 10) {
+      await ctx.reply('❌ Текст поста должен содержать минимум 10 символов!');
+      return;
+    }
+
+    // Проверяем канал
+    if (!config.REQUIRED_CHANNEL || !config.REQUIRED_CHANNEL.startsWith('@')) {
+      await ctx.reply('❌ Канал @magnumtap не настроен в конфигурации!');
+      return;
+    }
+
+    // Публикуем пост в канал
+    try {
+      const channelMessage = await ctx.telegram.sendMessage(
+        config.REQUIRED_CHANNEL,
+        text,
+        {
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true
+        }
+      );
+
+      // Сохраняем информацию о посте в базу данных
+      await db.collection('adminPosts').insertOne({
+        type: 'no_button',
+        postText: text,
+        channelId: config.REQUIRED_CHANNEL,
+        messageId: channelMessage.message_id,
+        createdBy: user.id,
+        createdAt: new Date()
+      });
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('📝 Создать еще', 'admin_create_post_no_button')],
+        [Markup.button.callback('🔙 В админ панель', 'admin')]
+      ]);
+
+      await ctx.reply(
+        `✅ *Пост без кнопки успешно опубликован!*\n\n` +
+        `📝 Текст: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}\n` +
+        `📢 Канал: ${config.REQUIRED_CHANNEL}\n` +
+        `🆔 ID сообщения: \`${channelMessage.message_id}\`\n\n` +
+        `🎯 Пост готов и опубликован!`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        }
+      );
+
+      log(`✅ Пост без кнопки успешно опубликован админом ${user.id} в канал ${config.REQUIRED_CHANNEL}, ID: ${channelMessage.message_id}`);
+
+    } catch (channelError) {
+      logError(channelError, `Ошибка публикации поста в канал ${config.REQUIRED_CHANNEL}`);
+      await ctx.reply(
+        `❌ Ошибка публикации в канал ${config.REQUIRED_CHANNEL}!\n\n` +
+        `Проверьте:\n` +
+        `├ Бот добавлен в канал как администратор\n` +
+        `├ Бот имеет права на отправку сообщений\n` +
+        `└ Канал указан правильно в конфигурации`
+      );
+    }
+
+  } catch (error) {
+    logError(error, `Создание поста без кнопки админом ${user.id}`);
+    await ctx.reply('❌ Ошибка создания поста. Попробуйте позже.');
+  }
+}
+
 // ==================== СИСТЕМА СУНДУКОВ ====================
 // Генерация награды из сундука
 function generateChestReward() {
@@ -17336,6 +17617,91 @@ process.on('unhandledRejection', (reason, promise) => {
     uptime: process.uptime()
   });
   process.exit(1);
+});
+
+// Обработчики создания постов
+bot.action('admin_create_post_with_button', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_post_with_button', updatedAt: new Date() } }
+    );
+
+    userCache.delete(user.id);
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_posts')]
+    ]);
+
+    await ctx.editMessageText(
+      `📝 *Создание поста с кнопкой*\n\n` +
+      `Отправьте текст поста в следующем формате:\n\n` +
+      `📋 *Формат:*\n` +
+      `├ Текст поста\n` +
+      `├ ---\n` +
+      `├ Текст кнопки\n` +
+      `├ ---\n` +
+      `└ URL кнопки\n\n` +
+      `💡 *Пример:*\n` +
+      `├ Добро пожаловать в Magnum Stars!\n` +
+      `├ ---\n` +
+      `├ Перейти в бота\n` +
+      `├ ---\n` +
+      `└ https://t.me/magnumtap_bot\n\n` +
+      `⚠️ Пост будет опубликован в @magnumtap`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Создание поста с кнопкой');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+});
+
+bot.action('admin_create_post_no_button', async (ctx) => {
+  try {
+    const user = await getUser(ctx.from.id);
+    if (!user || !isAdmin(user.id)) {
+      await ctx.answerCbQuery('❌ Доступ запрещен');
+      return;
+    }
+
+    await db.collection('users').updateOne(
+      { id: user.id },
+      { $set: { adminState: 'creating_post_no_button', updatedAt: new Date() } }
+    );
+
+    userCache.delete(user.id);
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔙 Отмена', 'admin_posts')]
+    ]);
+
+    await ctx.editMessageText(
+      `📝 *Создание поста без кнопки*\n\n` +
+      `Отправьте текст поста.\n\n` +
+      `💡 *Пример:*\n` +
+      `├ Новости Magnum Stars\n` +
+      `├ Новая версия бота!\n` +
+      `└ Добавлены новые функции\n\n` +
+      `⚠️ Пост будет опубликован в @magnumtap`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      }
+    );
+  } catch (error) {
+    logError(error, 'Создание поста без кнопки');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
 });
 
 // Запускаем бота
