@@ -2956,11 +2956,11 @@ async function showMinerUpgrade(ctx, user) {
       `⬆️ *Улучшение майнера*\n\n` +
       `📊 *Текущий уровень:* ${currentLevel}\n` +
       `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
-      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency, user)) * 60)} Stars\n\n` +
+      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency, user)) * 60)} 🪙 Magnum Coins\n\n` +
       `📈 *После улучшения:*\n` +
       `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
-      `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Stars\n\n` +
-      `💎 *Стоимость улучшения:* ${formatNumber(upgradeCost)} Stars\n` +
+      `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} 🪙 Magnum Coins\n\n` +
+      `💎 *Стоимость улучшения:* ${formatNumber(upgradeCost)} 🪙 Magnum Coins\n` +
       `💎 *Ваш баланс:* ${formatNumber(user.magnuStarsoins)} 🪙 Magnum Coins\n\n` +
       `🎯 Выберите действие:`;
     
@@ -3884,11 +3884,12 @@ async function showWithdrawalMenu(ctx, user) {
   const message = 
     `💰 *Вывод средств*\n\n` +
     `💎 *Доступно для вывода:*\n` +
-    `├ Stars: ${formatNumber(user.magnuStarsoins)}\n` +
-    `└ Stars: ${formatNumber(user.stars)}\n\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(user.magnuStarsoins)}\n` +
+    `└ ⭐ Stars: ${formatNumber(user.stars)}\n\n` +
     `📊 *Статистика выводов:*\n` +
     `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
-    `└ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Stars\n\n` +
+    `├ Всего выведено MC: ${formatNumber(withdrawal.totalWithdrawn || 0)}\n` +
+    `└ Всего выведено Stars: ${formatNumber(withdrawal.totalWithdrawnStars || 0)}\n\n` +
     `💡 *Информация:*\n` +
     `├ 🚧 Вывод Stars: в разработке\n` +
           `├ Минимальная сумма Stars: 50 Stars\n` +
@@ -4075,12 +4076,12 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
         const message = 
           `🎁 *Ежедневный бонус*\n\n` +
           `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-          `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
-          `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
-          `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+          `💰 *Базовая награда:* ${formatNumber(baseReward)} 🪙 Magnum Coins\n` +
+          `🔥 *Бонус серии:* +${formatNumber(streakBonus)} 🪙 Magnum Coins\n` +
+          `💎 *Итого награда:* ${formatNumber(totalReward)} 🪙 Magnum Coins\n` +
           `🔥 *Текущая серия:* ${bonus.streak} дней\n` +
           `📊 *Всего получено:* ${bonus.totalClaimed || 0} бонусов\n` +
-          `💎 *Всего заработано:* ${formatNumber(bonus.totalEarned || 0)} Stars\n\n` +
+          `💎 *Всего заработано:* ${formatNumber(bonus.totalEarned || 0)} 🪙 Magnum Coins\n\n` +
           `🎯 Выберите действие:`;
         
         await ctx.editMessageText(message, {
@@ -4437,7 +4438,7 @@ async function showPromocodeMenu(ctx, user) {
       `🔑 *Ключи*\n\n` +
       `Введите ключ и получите ценные награды!\n` +
       `Каждый ключ открывает сундук случайного уровня:\n` +
-      `• 🟢 Обычные — Stars, Stars\n` +
+      `• 🟢 Обычные — 🪙 Magnum Coins, ⭐ Stars\n` +
       `• 🔵 Редкие — Майнеры, бустеры к майнингу\n` +
       `• 🟣 Эпические — Уникальные титулы, повышенные множители\n` +
       `• 🟡 Легендарные — Эксклюзивные наборы (Coins + Stars + Майнеры + Титул)\n\n` +
@@ -4501,9 +4502,9 @@ async function showBonusMenu(ctx, user) {
   const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
-    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} 🪙 Magnum Coins\n` +
+    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} 🪙 Magnum Coins\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} 🪙 Magnum Coins\n` +
     `📊 *Текущая серия:* ${bonus.streak} дней\n` +
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
@@ -4558,9 +4559,9 @@ async function updateBonusMenu(ctx, user) {
   const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
-    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} 🪙 Magnum Coins\n` +
+    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} 🪙 Magnum Coins\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} 🪙 Magnum Coins\n` +
     `📊 *Текущая серия:* ${bonus.streak} дней\n` +
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
@@ -4692,8 +4693,8 @@ async function showBonusStats(ctx, user) {
       `📊 *Статистика бонусов*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Получено бонусов: \`${claimedCount}\`\n` +
-      `├ Всего заработано: \`${formatNumber(totalEarned)}\` Stars\n` +
-      `├ Средняя награда: \`${formatNumber(averageReward)}\` Stars\n` +
+      `├ Всего заработано: \`${formatNumber(totalEarned)}\` 🪙 Magnum Coins\n` +
+      `├ Средняя награда: \`${formatNumber(averageReward)}\` 🪙 Magnum Coins\n` +
       `└ Максимальная серия: \`${maxStreak}\` дней\n\n` +
       `🔥 *Текущая серия:*\n` +
       `├ Активная серия: \`${currentStreak}\` дней\n` +
@@ -4995,8 +4996,8 @@ async function showAdminReserve(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('➕ Добавить Stars', 'admin_reserve_add_Stars'),
-        Markup.button.callback('➖ Убрать Stars', 'admin_reserve_remove_Stars')
+        Markup.button.callback('➕ Добавить MC', 'admin_reserve_add_Stars'),
+        Markup.button.callback('➖ Убрать MC', 'admin_reserve_remove_Stars')
       ],
       [
         Markup.button.callback('➕ Добавить Stars', 'admin_reserve_add_stars'),
@@ -5016,7 +5017,7 @@ async function showAdminReserve(ctx, user) {
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `💱 *Текущий курс обмена:*\n` +
       `├ 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ 100 Stars = ${(100 * exchangeRate).toFixed(4)} Stars\n` +
+      `├ 100 Stars = ${(100 * exchangeRate).toFixed(4)} Magnum Coins\n` +
       `└ Соотношение резервов: ${(magnuStarsoinsReserve / starsReserve).toFixed(4)}\n\n` +
       `🎯 Выберите действие:`;
     
@@ -6291,7 +6292,7 @@ async function showAdminReferralSettings(ctx, user) {
       `└ Бонус за 50 рефералов: \`500\` Stars\n\n` +
       `📊 *Статистика пользователя:*\n` +
       `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
-      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n` +
+      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` 🪙 Magnum Coins\n` +
       `├ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n` +
       `└ Реферальный код: \`${user.referralCode}\`\n\n` +
       `🎯 Выберите настройку для изменения:`;
@@ -6378,9 +6379,9 @@ async function showAdminTopUsers(ctx, user) {
       message += `${index + 1}. ID: \`${user.id}\` - Уровень: \`${user.level}\`\n`;
     });
     
-    message += `\n🪙 *Топ по Stars:*\n`;
+    message += `\n🪙 *Топ по Magnum Coins:*\n`;
     topByMagnuStarsoins.forEach((user, index) => {
-      message += `${index + 1}. ID: \`${user.id}\` - \`${formatNumber(user.magnuStarsoins)}\` Stars\n`;
+      message += `${index + 1}. ID: \`${user.id}\` - \`${formatNumber(user.magnuStarsoins)}\` 🪙 MC\n`;
     });
     
     message += `\n🎯 Выберите категорию для подробного просмотра:`;
@@ -6966,8 +6967,8 @@ async function showExchangeMenu(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🪙 Ввести сумму Stars → Stars', 'exchange_custom_Stars'),
-        Markup.button.callback('⭐ Ввести сумму Stars → Stars', 'exchange_custom_stars')
+        Markup.button.callback('🪙 Ввести сумму MC → Stars', 'exchange_custom_Stars'),
+        Markup.button.callback('⭐ Ввести сумму Stars → MC', 'exchange_custom_stars')
       ],
       [
         Markup.button.callback('📊 Статистика обменов', 'exchange_stats'),
@@ -7001,7 +7002,7 @@ async function showExchangeMenu(ctx, user) {
       `├ 🪙 Magnum Coins: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `📈 *Рыночные данные:*\n` +
-      `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` Stars\n` +
+      `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` 🪙 MC\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
       `└ Ликвидность: ${Math.min(100, ((magnuStarsoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
 
