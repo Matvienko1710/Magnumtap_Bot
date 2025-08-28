@@ -3112,7 +3112,7 @@ async function showMinerSeasonInfo(ctx, user) {
 // Функция для получения текущего сезона майнинга
 function getCurrentMiningSeason() {
   const now = new Date();
-  const seasonStart = new Date('2025-08-28T10:00:00Z'); // 28 августа 12:00 по Берлину (UTC+2)
+  const seasonStart = new Date('2025-08-28T00:00:00Z'); // 28 августа 00:00 UTC
   
   const daysSinceStart = Math.floor((now - seasonStart) / (1000 * 60 * 60 * 24));
   const currentSeason = Math.floor(daysSinceStart / config.MINING_SEASON_DURATION) + 1;
@@ -3126,7 +3126,7 @@ function getCurrentMiningSeason() {
   
   const daysUntilNextSeason = config.MINING_SEASON_DURATION - dayInSeason;
   
-  return {
+  const season = {
     season: currentSeason,
     dayInSeason: dayInSeason,
     daysUntilNextSeason: daysUntilNextSeason,
@@ -3135,6 +3135,18 @@ function getCurrentMiningSeason() {
     multiplier: 1 + (currentSeason - 1) * 0.1, // Увеличиваем множитель на 10% каждый сезон
     isActive: true
   };
+  
+  console.log('📅 Текущий сезон майнинга:', {
+    now: now.toISOString(),
+    seasonStart: seasonStart.toISOString(),
+    daysSinceStart,
+    currentSeason: season.season,
+    dayInSeason: season.dayInSeason,
+    multiplier: season.multiplier,
+    isActive: season.isActive
+  });
+  
+  return season;
 }
 
 // Функция для инициализации новой системы майнинга у пользователя
@@ -6244,6 +6256,8 @@ async function processMinerRewards() {
       ]
     }).toArray();
     
+    console.log(`📊 Найдено ${users.length} пользователей с майнерами`);
+    
     let processedCount = 0;
     
     for (const user of users) {
@@ -6251,15 +6265,35 @@ async function processMinerRewards() {
         const userWithMining = initializeNewMiningSystem(user);
         const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
+        console.log(`👤 Пользователь ${userWithMining.id}:`, {
+          miners: userWithMining.miners?.length || 0,
+          totalSpeedMC: totalSpeed.magnumCoins,
+          totalSpeedStars: totalSpeed.stars,
+          lastReward: userWithMining.miningStats?.lastReward
+        });
+        
         const totalSpeedSum = totalSpeed.magnumCoins + totalSpeed.stars;
         if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
           const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
           
+          console.log(`⏰ Время для пользователя ${userWithMining.id}:`, {
+            now: now.toISOString(),
+            lastReward: lastReward.toISOString(),
+            timeDiff,
+            requiredInterval: config.MINING_REWARD_INTERVAL
+          });
+          
           if (timeDiff >= config.MINING_REWARD_INTERVAL) {
             const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            
+            console.log(`💰 Награды для пользователя ${userWithMining.id}:`, {
+              rewardMC,
+              rewardStars,
+              multiplier: currentSeason.multiplier
+            });
             
             // Обновляем статистику
             await db.collection('users').updateOne(
@@ -6284,7 +6318,12 @@ async function processMinerRewards() {
             userCache.delete(userWithMining.id);
             
             processedCount++;
+            console.log(`✅ Награды начислены пользователю ${userWithMining.id}`);
+          } else {
+            console.log(`⏳ Пользователь ${userWithMining.id} еще не готов к награде`);
           }
+        } else {
+          console.log(`❌ Пользователь ${userWithMining.id} не имеет майнеров`);
         }
       } catch (error) {
         console.error(`❌ Ошибка обработки наград для пользователя ${user.id}:`, error);
