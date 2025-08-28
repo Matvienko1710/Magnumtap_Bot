@@ -392,39 +392,39 @@ const config = {
       id: 'basic',
       name: 'Базовый майнер',
       rarity: 'common',
-      baseSpeed: 0.01,
+      baseSpeed: 0.01, // ~7 дней окупаемости
       price: 100,
       currency: 'magnumCoins',
-      description: 'Простой майнер для начинающих'
+      description: 'Простой майнер для начинающих (окупаемость ~7 дней)'
     },
     advanced: {
       id: 'advanced',
       name: 'Продвинутый майнер',
       rarity: 'rare',
-      baseSpeed: 0.05,
+      baseSpeed: 0.025, // ~14 дней окупаемости
       price: 500,
       currency: 'magnumCoins',
-      description: 'Более мощный майнер'
+      description: 'Более мощный майнер (окупаемость ~14 дней)'
     },
     premium: {
       id: 'premium',
       name: 'Премиум майнер',
       rarity: 'epic',
-      baseSpeed: 0.15,
+      baseSpeed: 0.0017, // ~21 день окупаемости
       price: 50,
       currency: 'stars',
       miningCurrency: 'stars', // Добывает Stars
-      description: 'Мощный майнер за Stars, добывает Stars'
+      description: 'Мощный майнер за Stars, добывает Stars (окупаемость ~21 день)'
     },
     legendary: {
       id: 'legendary',
       name: 'Легендарный майнер',
       rarity: 'legendary',
-      baseSpeed: 0.5,
+      baseSpeed: 0.0045, // ~31 день окупаемости
       price: 200,
       currency: 'stars',
       miningCurrency: 'stars', // Добывает Stars
-      description: 'Самый мощный майнер, добывает Stars'
+      description: 'Самый мощный майнер, добывает Stars (окупаемость ~31 день)'
     }
   },
   
