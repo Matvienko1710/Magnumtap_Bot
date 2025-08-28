@@ -2270,7 +2270,7 @@ async function showMainMenu(ctx, user) {
         Markup.button.callback('📈 Биржа', 'exchange')
       ],
       [
-        Markup.button.callback('🎁 Бонус', 'bonus_webapp')
+        Markup.button.webApp('🎁 Бонус', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
       ],
       [
         Markup.button.callback('💰 Вывод', 'withdrawal')
@@ -2337,7 +2337,7 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('📈 Биржа', 'exchange')
     ],
     [
-      Markup.button.callback('🎁 Бонус', 'bonus_webapp')
+      Markup.button.webApp('🎁 Бонус', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
     ],
     [
       Markup.button.callback('💰 Вывод', 'withdrawal')
@@ -13892,33 +13892,7 @@ bot.action('confirm_reset', async (ctx) => {
 
 
 
-// Бонус (WebApp)
-bot.action('bonus_webapp', async (ctx) => {
-  try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    const webappUrl = `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`;
-    
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.webApp('🎁 Открыть бонус', webappUrl)],
-      [Markup.button.callback('🔙 Назад', 'main_menu')]
-    ]);
-    
-    await ctx.editMessageText(
-      `🎁 *Бонус*\n\n` +
-      `Нажмите кнопку ниже, чтобы открыть бонус в WebApp:\n\n` +
-      `💡 WebApp предоставляет интерактивный интерфейс для получения бонусов.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard.reply_markup
-      }
-    );
-  } catch (error) {
-    logError(error, 'Бонус WebApp');
-    await ctx.answerCbQuery('❌ Ошибка открытия бонуса');
-  }
-});
+
 
 bot.action('claim_bonus', async (ctx) => {
   try {
