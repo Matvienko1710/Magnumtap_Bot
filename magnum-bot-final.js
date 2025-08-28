@@ -2803,6 +2803,8 @@ async function showMinerMenu(ctx, user) {
   const totalSpeed = calculateTotalMiningSpeed(userWithMining);
   const rewardPerMinuteStars = totalSpeed.stars * currentSeason.multiplier;
   const rewardPerHourStars = rewardPerMinuteStars * 60;
+  const rewardPerMinuteMagnumCoins = totalSpeed.magnuStarsoins * currentSeason.multiplier;
+  const rewardPerHourMagnumCoins = rewardPerMinuteMagnumCoins * 60;
   
   // Подсчитываем общее количество майнеров
   const totalMiners = userWithMining.miners.reduce((sum, miner) => sum + miner.count, 0);
@@ -2826,17 +2828,22 @@ async function showMinerMenu(ctx, user) {
   const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
   const titleBonusText = titleBonus > 1.0 ? ` (+${((titleBonus - 1) * 100).toFixed(0)}%)` : '';
 
-  const message = 
+  const message =
     `⛏️ *Новая система майнинга*${seasonInfo}\n\n` +
     `💎 *Ваши майнеры:* ${totalMiners} шт.\n` +
-    `⚡ *Скорость добычи Stars:* ${formatNumber(totalSpeed.stars)} Stars/мин\n\n` +
+    `⚡ *Скорость добычи:*\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(totalSpeed.magnuStarsoins)} MC/мин\n` +
+    `└ ⭐ Stars: ${formatNumber(totalSpeed.stars)} Stars/мин\n\n` +
     `💰 *Награды:*\n` +
-    `└ Stars: ${formatNumber(rewardPerMinuteStars)} Stars/мин • ${formatNumber(rewardPerHourStars)} Stars/час\n\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(rewardPerMinuteMagnumCoins)} MC/мин • ${formatNumber(rewardPerHourMagnumCoins)} MC/час\n` +
+    `└ ⭐ Stars: ${formatNumber(rewardPerMinuteStars)} Stars/мин • ${formatNumber(rewardPerHourStars)} Stars/час\n\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n\n` +
     `📊 *Всего добыто:*\n` +
-    `└ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} Stars\n\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(userWithMining.miningStats?.totalMinedMagnumCoins || 0)} MC\n` +
+    `└ ⭐ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} Stars\n\n` +
     `📊 *Сезонная добыча:*\n` +
-    `└ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} Stars\n\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(userWithMining.miningStats?.seasonMinedMagnumCoins || 0)} MC\n` +
+    `└ ⭐ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} Stars\n\n` +
     `🎯 Выберите действие ниже.`;
   
   await ctx.editMessageText(message, {
@@ -3013,9 +3020,15 @@ async function showMinerStats(ctx, user) {
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
       `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
       `📊 *Статус:* ${statusText}\n` +
-      `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Stars\n` +
-      `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
-      `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Stars\n` +
+      `💰 *Награда/минуту:*\n` +
+      `├ 🪙 Magnum Coins: ${formatNumber(rewardPerMinute)} MC/мин\n` +
+      `└ ⭐ Stars: ${formatNumber(rewardPerMinute)} Stars/мин\n` +
+      `💰 *Награда/час:*\n` +
+      `├ 🪙 Magnum Coins: ${formatNumber(rewardPerHour)} MC/час\n` +
+      `└ ⭐ Stars: ${formatNumber(rewardPerHour)} Stars/час\n` +
+      `💎 *Всего добыто:*\n` +
+      `├ 🪙 Magnum Coins: ${formatNumber(miner.totalMined || 0)} MC\n` +
+      `└ ⭐ Stars: ${formatNumber(miner.totalMined || 0)} Stars\n` +
       `⏰ *Последняя награда:* ${miner.lastReward ? miner.lastReward.toLocaleString('ru-RU') : 'Нет'}\n` +
       `${nextRewardText}\n\n` +
       `📈 *Информация:*\n` +
@@ -3301,9 +3314,9 @@ function initializeNewMiningSystem(user) {
   
   if (!user.miningStats) {
     user.miningStats = {
+      totalMinedMagnumCoins: 0,
       totalMinedStars: 0,
-      totalMinedStars: 0,
-      seasonMinedStars: 0,
+      seasonMinedMagnumCoins: 0,
       seasonMinedStars: 0,
       lastReward: null,
       activeClickCount: 0,
@@ -3385,14 +3398,18 @@ async function processMiningRewards() {
           
           if (timeDiff >= config.MINING_REWARD_INTERVAL) {
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
-            
+            const rewardMagnumCoins = totalSpeed.magnuStarsoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+
             // Обновляем статистику
             await db.collection('users').updateOne(
               { id: userWithMining.id },
               {
                 $inc: {
+                  magnuStarsoins: rewardMagnumCoins,
                   stars: rewardStars,
+                  'miningStats.totalMinedMagnumCoins': rewardMagnumCoins,
                   'miningStats.totalMinedStars': rewardStars,
+                  'miningStats.seasonMinedMagnumCoins': rewardMagnumCoins,
                   'miningStats.seasonMinedStars': rewardStars,
                   'miningStats.passiveRewards': rewardStars
                 },
@@ -3961,9 +3978,15 @@ async function updateMinerMenu(ctx, user) {
     `📈 *Уровень:* ${miner.level || 1}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
-    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Stars\n` +
-    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
-    `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Stars${lastRewardText}\n\n` +
+    `💰 *Награда/минуту:*\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(rewardPerMinute)} MC/мин\n` +
+    `└ ⭐ Stars: ${formatNumber(rewardPerMinute)} Stars/мин\n` +
+    `💰 *Награда/час:*\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(rewardPerHour)} MC/час\n` +
+    `└ ⭐ Stars: ${formatNumber(rewardPerHour)} Stars/час\n` +
+    `💎 *Всего добыто:*\n` +
+    `├ 🪙 Magnum Coins: ${formatNumber(miner.totalMined || 0)} MC\n` +
+    `└ ⭐ Stars: ${formatNumber(miner.totalMined || 0)} Stars${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
   
     log(`📝 Отправка обновленного меню майнера для пользователя ${user.id}`);
@@ -6226,7 +6249,8 @@ async function showAdminMinerSettings(ctx, user) {
       `├ Уровень майнера: \`${user.miner?.level || 1}\`\n` +
       `├ Эффективность: \`${user.miner?.efficiency || 1.0}\`\n` +
       `├ Статус: ${user.miner?.active ? '🟢 Активен' : '🔴 Неактивен'}\n` +
-      `├ Всего добыто: \`${formatNumber(user.miner?.totalMined || 0)}\` Stars\n` +
+      `├ Всего добыто MC: \`${formatNumber(user.miner?.totalMined || 0)}\` 🪙\n` +
+      `├ Всего добыто Stars: \`${formatNumber(user.miner?.totalMined || 0)}\` ⭐\n` +
       `└ Последняя награда: ${user.miner?.lastReward ? user.miner.lastReward.toLocaleString() : 'Никогда'}\n\n` +
       `🎯 Выберите настройку для изменения:`;
     
