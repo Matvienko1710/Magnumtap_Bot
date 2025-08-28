@@ -2234,25 +2234,21 @@ async function showMainMenu(ctx, user) {
     const rankProgress = await getRankProgress(user);
     log(`🏠 Получен прогресс ранга для пользователя ${user.id}`);
     
-    // Создаем базовые кнопки
+    // Создаем базовые кнопки (рабочие функции)
     const buttons = [
       [
         Markup.button.callback('⛏️ Майнер', 'miner'),
-        Markup.button.callback('📈 Биржа', 'exchange')
+        Markup.button.callback('💰 Вывод', 'withdrawal')
       ],
       [
-        Markup.button.callback('💰 Вывод', 'withdrawal'),
-        Markup.button.callback('🎁 Бонус', 'bonus')
+        Markup.button.callback('🎁 Бонус', 'bonus'),
+        Markup.button.callback('👥 Рефералы', 'referrals')
       ],
       [
-        Markup.button.callback('🏆 Достижения', 'achievements')
+        Markup.button.callback('🎫 Промокод', 'promocode'),
+        Markup.button.callback('🗺️ Роадмап', 'roadmap')
       ],
       [
-        Markup.button.callback('👥 Рефералы', 'referrals'),
-        Markup.button.callback('🎫 Промокод', 'promocode')
-      ],
-      [
-        Markup.button.callback('🗺️ Роадмап', 'roadmap'),
         Markup.button.callback('⚙️ Настройки', 'settings')
       ]
     ];
@@ -2263,15 +2259,11 @@ async function showMainMenu(ctx, user) {
       Markup.button.callback('👨‍💼 Админ панель', 'admin'),
       Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
     ]);
-  }
-  
-  // Добавляем админ кнопки если нужно
-  if (isAdmin(user.id)) {
+    // Добавляем кнопки только для админов (функции в разработке)
     buttons.push([
-      Markup.button.callback('👨‍💼 Админ панель', 'admin'),
-      Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
+      Markup.button.callback('📈 Биржа', 'exchange'),
+      Markup.button.callback('🏆 Достижения', 'achievements')
     ]);
-    // Добавляем кнопки только для админов
     buttons.push([
       Markup.button.callback('📋 Задания', 'tasks'),
       Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
@@ -2316,25 +2308,21 @@ async function showMainMenuStart(ctx, user) {
   try {
     const rankProgress = await getRankProgress(user);
   
-  // Создаем базовые кнопки
+  // Создаем базовые кнопки (рабочие функции)
   const buttons = [
     [
       Markup.button.callback('⛏️ Майнер', 'miner'),
-      Markup.button.callback('📈 Биржа', 'exchange')
+      Markup.button.callback('💰 Вывод', 'withdrawal')
     ],
     [
-      Markup.button.callback('💰 Вывод', 'withdrawal'),
-      Markup.button.callback('🎁 Бонус', 'bonus')
+      Markup.button.callback('🎁 Бонус', 'bonus'),
+      Markup.button.callback('👥 Рефералы', 'referrals')
     ],
     [
-      Markup.button.callback('🏆 Достижения', 'achievements')
+      Markup.button.callback('🎫 Промокод', 'promocode'),
+      Markup.button.callback('🗺️ Роадмап', 'roadmap')
     ],
     [
-      Markup.button.callback('👥 Рефералы', 'referrals'),
-      Markup.button.callback('🎫 Промокод', 'promocode')
-    ],
-    [
-      Markup.button.callback('🗺️ Роадмап', 'roadmap'),
       Markup.button.callback('⚙️ Настройки', 'settings')
     ]
   ];
@@ -2345,7 +2333,11 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('👨‍💼 Админ панель', 'admin'),
       Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
     ]);
-    // Добавляем кнопки только для админов
+    // Добавляем кнопки только для админов (функции в разработке)
+    buttons.push([
+      Markup.button.callback('📈 Биржа', 'exchange'),
+      Markup.button.callback('🏆 Достижения', 'achievements')
+    ]);
     buttons.push([
       Markup.button.callback('📋 Задания', 'tasks'),
       Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
@@ -12451,12 +12443,18 @@ bot.action('insufficient_funds', async (ctx) => {
 // Обмен
 bot.action('exchange', async (ctx) => {
   try {
+    const user = await getUser(ctx.from.id);
+    if (!user) return;
+    
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
+    
     // Очищаем кеш для получения свежих данных
     userCache.delete(ctx.from.id);
     statsCache.delete('reserve');
-    
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
     
     await showExchangeMenu(ctx, user);
   } catch (error) {
@@ -12965,6 +12963,12 @@ bot.action('achievements', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
+    
     await showAchievementsMenu(ctx, user);
   } catch (error) {
     logError(error, 'Меню достижений');
@@ -12976,6 +12980,12 @@ bot.action('achievements_progress', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
+    
     await showAchievementsProgress(ctx, user);
   } catch (error) {
     logError(error, 'Прогресс достижений');
@@ -12986,6 +12996,12 @@ bot.action('achievements_rewards', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
+    
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
     
     await showAchievementsRewards(ctx, user);
   } catch (error) {
