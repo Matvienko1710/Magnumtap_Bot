@@ -3209,7 +3209,10 @@ async function processMiningRewards() {
     }
     
     const users = await db.collection('users').find({
-      'miningStats.lastReward': { $exists: true }
+      $or: [
+        { 'miningStats.lastReward': { $exists: true } },
+        { 'miners': { $exists: true, $ne: [] } }
+      ]
     }).toArray();
     
     let processedCount = 0;
@@ -6235,7 +6238,10 @@ async function processMinerRewards() {
     }
     
     const users = await db.collection('users').find({
-      'miningStats.lastReward': { $exists: true }
+      $or: [
+        { 'miningStats.lastReward': { $exists: true } },
+        { 'miners': { $exists: true, $ne: [] } }
+      ]
     }).toArray();
     
     let processedCount = 0;
