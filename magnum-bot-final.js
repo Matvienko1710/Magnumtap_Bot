@@ -2954,7 +2954,7 @@ async function showMinerUpgrade(ctx, user) {
       `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
       `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Stars\n\n` +
       `💎 *Стоимость улучшения:* ${formatNumber(upgradeCost)} Stars\n` +
-      `💎 *Ваш баланс:* ${formatNumber(user.magnuStarsoins)} Stars\n\n` +
+      `💎 *Ваш баланс:* ${formatNumber(user.magnuStarsoins)} 🪙 Magnum Coins\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -3602,13 +3602,13 @@ async function showMinerShop(ctx, user, minerIndex = 0) {
     
     // Формируем сообщение
     const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
-    const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'Stars';
-    const priceSymbol = minerConfig.currency === 'magnuStarsoins' ? 'Stars' : '⭐';
+    const currencySymbol = miningCurrency === 'stars' ? '⭐' : '🪙';
+    const priceSymbol = minerConfig.currency === 'magnuStarsoins' ? '🪙' : '⭐';
     
     let message = `🛒 *Магазин майнеров*\n\n`;
     message += `💰 *Ваш баланс:*\n`;
-    message += `├ Stars: ${formatNumber(userWithMining.magnuStarsoins)}\n`;
-    message += `└ Stars: ${formatNumber(userWithMining.stars)}\n\n`;
+    message += `├ 🪙 Magnum Coins: ${formatNumber(userWithMining.magnuStarsoins)}\n`;
+    message += `└ ⭐ Stars: ${formatNumber(userWithMining.stars)}\n\n`;
     
     message += `📦 *${minerConfig.name}*\n`;
     message += `├ Скорость: ${formatNumber(minerConfig.baseSpeed)} ${currencySymbol}/мин\n`;
@@ -3646,7 +3646,7 @@ async function showMinerUpgrades(ctx, user) {
     ];
     
     let message = `⬆️ *Апгрейды майнеров*\n\n`;
-    message += `💰 Ваш баланс: ${formatNumber(userWithMining.magnuStarsoins)} Stars\n\n`;
+    message += `💰 Ваш баланс: ${formatNumber(userWithMining.magnuStarsoins)} 🪙 Magnum Coins\n\n`;
     
     if (userWithMining.miners.length === 0) {
       message += `❌ У вас нет майнеров для апгрейда\n\n`;
@@ -3661,7 +3661,7 @@ async function showMinerUpgrades(ctx, user) {
           const nextLevelSpeed = minerConfig.baseSpeed * (1 + miner.level * 0.2);
           const upgradeCost = miner.level * 50;
           const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
-          const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'Stars';
+          const currencySymbol = miningCurrency === 'stars' ? '⭐' : '🪙';
           
           message += `🔸 *${minerConfig.name}*\n`;
           message += `├ Уровень: ${miner.level}\n`;
@@ -13702,9 +13702,9 @@ bot.action('exchange_custom_Stars', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `🪙 *Ввод суммы обмена Stars → Stars*\n\n` +
-      `💰 Ваш баланс: \`${formatNumber(user.magnuStarsoins)}\` Stars\n\n` +
-      `💡 Введите сумму Stars для обмена на Stars:`,
+      `🪙 *Ввод суммы обмена Magnum Coins → Stars*\n\n` +
+      `💰 Ваш баланс: \`${formatNumber(user.magnuStarsoins)}\` 🪙 Magnum Coins\n\n` +
+      `💡 Введите сумму Magnum Coins для обмена на Stars:`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
@@ -13736,10 +13736,10 @@ bot.action('exchange_custom_stars', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `⭐ *Ввод суммы обмена Stars → Stars*\n\n` +
-      `💰 Ваш баланс: \`${formatNumber(user.stars)}\` Stars\n` +
-      `📊 Текущий курс: 1 Stars = \`${exchangeRate.toFixed(6)}\` Stars\n\n` +
-      `💡 Введите сумму Stars для обмена на Stars:`,
+      `⭐ *Ввод суммы обмена Stars → Magnum Coins*\n\n` +
+      `💰 Ваш баланс: \`${formatNumber(user.stars)}\` ⭐ Stars\n` +
+      `📊 Текущий курс: 1 Stars = \`${exchangeRate.toFixed(6)}\` 🪙 Magnum Coins\n\n` +
+      `💡 Введите сумму Stars для обмена на Magnum Coins:`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
@@ -17422,9 +17422,9 @@ bot.action(/^approve_(.+)$/, async (ctx) => {
         withdrawalRequest.userId,
         `✅ *Заявка на вывод одобрена!*\n\n` +
         `💰 *Детали заявки:*\n` +
-        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
-        `├ Комиссия: ${formatNumber(withdrawalRequest.amount * 0.05)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
-        `├ К выплате: ${formatNumber(withdrawalRequest.amount * 0.95)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
+        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(withdrawalRequest.amount * 0.05)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ К выплате: ${formatNumber(withdrawalRequest.amount * 0.95)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
         `└ Статус: ✅ Одобрено\n\n` +
         `📅 *Дата одобрения:* ${new Date().toLocaleString('ru-RU')}\n` +
         `🆔 *Номер заявки:* #${requestId}\n\n` +
@@ -17608,9 +17608,9 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
         withdrawalRequest.userId,
         `❌ *Заявка на вывод отклонена*\n\n` +
         `${withdrawalRequest.currency === 'magnum_coins' ? '💰' : '⭐'} *Детали заявки:*\n` +
-        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
-        `├ Комиссия: ${formatNumber(commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
-        `├ К получению: ${formatNumber(amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
+        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ К получению: ${formatNumber(amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
         `└ Статус: ❌ Отклонено\n\n` +
         `🚫 *Причина отклонения:* ${reasonText}\n` +
         `📅 *Дата отклонения:* ${new Date().toLocaleString('ru-RU')}\n` +
