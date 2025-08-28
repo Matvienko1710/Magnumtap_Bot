@@ -403,7 +403,7 @@ const config = {
   FARMIK_BOT_LINK: process.env.FARMIK_BOT_LINK || 'https://t.me/farmikstars_bot?start=6587897295',
   BASKET_BOT_LINK: process.env.BASKET_BOT_LINK || 'https://t.me/basket_gift_bot?start=6587897295',
   PRIVATE_CHANNEL_LINK: process.env.PRIVATE_CHANNEL_LINK || 'https://t.me/+4BUF9S_rLZw3NDQ6',
-  PROMO_NOTIFICATIONS_CHAT: process.env.PROMO_NOTIFICATIONS_CHAT,
+  PROMO_NOTIFICATIONS_CHAT: process.env.PROMO_NOTIFICATIONS_CHAT || '@magnumtapchat',
   BOT_PHOTO_URL: process.env.BOT_PHOTO_URL,
   
   // Игровые настройки
@@ -491,11 +491,11 @@ const config = {
   RATE_LIMIT_MAX_REQUESTS: 30,
   
   // Резерв биржи
-  INITIAL_RESERVE_STARS: 0,
-  INITIAL_RESERVE_MAGNUM_COINS: 0,
+  INITIAL_RESERVE_STARS: 1000000, // Минимальный резерв Stars
+  INITIAL_RESERVE_MAGNUM_COINS: 1000, // Минимальный резерв Magnum Coins
   
   // Курс обмена (базовый)
-  BASE_EXCHANGE_RATE: 0.000001, // 1 Magnum Coin = 0.000001 Star
+  BASE_EXCHANGE_RATE: 0.0000001, // 1 Magnum Coin = 0.0000001 Star
   EXCHANGE_RATE_MULTIPLIER: 1.0 // Множитель курса в зависимости от резерва
 };
 
@@ -791,14 +791,14 @@ app.post('/api/webapp/exchange', async (req, res) => {
 
         let received = 0;
         if (from === 'Stars') {
-            if (user.magnuStarsoins < amount) return res.status(400).json({ error: 'Insufficient Stars' });
+            if (user.magnuStarsoins < amount) return res.status(400).json({ error: 'Недостаточно Magnum Coins' });
             const starsOut = amount * rate * (1 - commission);
             inc.magnuStarsoins -= amount;
             inc.stars += starsOut;
             reserveInc.magnuStarsoins += amount * commission;
             received = starsOut;
         } else if (from === 'stars') {
-            if ((user.stars || 0) < amount) return res.status(400).json({ error: 'Insufficient Stars' });
+            if ((user.stars || 0) < amount) return res.status(400).json({ error: 'Недостаточно Stars' });
             const StarsOut = (amount / rate) * (1 - commission);
             inc.stars -= amount;
             inc.magnuStarsoins += StarsOut;
@@ -5830,8 +5830,8 @@ async function handleAdminSetCommission(ctx, user, text) {
   try {
     const commission = parseFloat(text);
     
-    if (isNaN(commission) || commission < 0 || commission > 10) {
-      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 10.');
+    if (isNaN(commission) || commission < 0 || commission > 50) {
+      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 50.');
       return;
     }
     
@@ -5876,8 +5876,8 @@ async function handleAdminSetWithdrawalCommission(ctx, user, text) {
   try {
     const commission = parseFloat(text);
 
-    if (isNaN(commission) || commission < 0 || commission > 15) {
-      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 15.');
+    if (isNaN(commission) || commission < 0 || commission > 50) {
+      await ctx.reply('❌ Некорректная комиссия. Введите число от 0 до 50.');
       return;
     }
 
