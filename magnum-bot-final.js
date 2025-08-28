@@ -466,11 +466,11 @@ const config = {
   RATE_LIMIT_MAX_REQUESTS: 30,
   
   // Резерв биржи
-  INITIAL_RESERVE_STARS: 1000000,
-  INITIAL_RESERVE_MAGNUM_COINS: 1000000,
+  INITIAL_RESERVE_STARS: 0,
+  INITIAL_RESERVE_MAGNUM_COINS: 0,
   
   // Курс обмена (базовый)
-  BASE_EXCHANGE_RATE: 0.001, // 100 Magnum Coins = 0.001 Star
+  BASE_EXCHANGE_RATE: 0.000001, // 1 Magnum Coin = 0.000001 Star
   EXCHANGE_RATE_MULTIPLIER: 1.0 // Множитель курса в зависимости от резерва
 };
 
@@ -6840,22 +6840,22 @@ async function showExchangeMenu(ctx, user) {
         Markup.button.callback('⭐ Ввести сумму Stars → MC', 'exchange_custom_stars')
       ],
       [
-        Markup.button.callback('🪙 Все Magnum Coins', 'exchange_all'),
-        Markup.button.callback('📊 Статистика обменов', 'exchange_stats')
-      ],
-      [
-        Markup.button.callback('📈 График курса', 'exchange_chart'),
+        Markup.button.callback('📊 Статистика обменов', 'exchange_stats'),
         Markup.button.callback('📋 История обменов', 'exchange_history')
       ],
       [
-        Markup.button.callback('⚙️ Настройки биржи', 'exchange_settings'),
         Markup.button.callback('📰 Новости биржи', 'exchange_news')
-      ],
-      [
-        Markup.button.callback('🔄 Обновить', 'exchange_refresh')
       ],
       [Markup.button.callback('🔙 Назад', 'main_menu')]
     ]);
+    
+    // Добавляем админские кнопки только для админов
+    if (isAdmin(user.id)) {
+      keyboard.reply_markup.inline_keyboard.splice(2, 0, [
+        Markup.button.callback('📈 График курса', 'exchange_chart'),
+        Markup.button.callback('⚙️ Настройки биржи', 'exchange_settings')
+      ]);
+    }
     
     const message = 
       `📈 *Magnum Exchange*\n\n` +
