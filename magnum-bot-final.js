@@ -168,7 +168,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
         { id: parseInt(userId) },
         { 
           $inc: { 
-            magnumCoins: reward,
+            magnuStarsoins: reward,
             'miningStats.activeClicks': 1,
             'miningStats.activeRewards': reward
           },
@@ -179,7 +179,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
       res.json({ 
         success: true, 
         reward: reward.toFixed(2),
-        message: `+${reward.toFixed(2)} MC за активный клик!`
+        message: `+${reward.toFixed(2)} Stars за активный клик!`
       });
 
     } catch (error) {
@@ -210,8 +210,8 @@ if (process.env.WEBAPP_ENABLED === 'true') {
         { id: parseInt(userId) },
         { 
           $inc: { 
-            magnumCoins: reward,
-            'miningStats.totalMinedMC': reward
+            magnuStarsoins: reward,
+            'miningStats.totalMinedStars': reward
           },
           $set: { lastActivity: new Date() }
         }
@@ -220,7 +220,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
       res.json({ 
         success: true, 
         reward: reward.toFixed(2),
-        message: `+${reward.toFixed(2)} MC за фарм!`
+        message: `+${reward.toFixed(2)} Stars за фарм!`
       });
 
     } catch (error) {
@@ -268,7 +268,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
           reward: 25,
           icon: '🌾',
           type: 'farm',
-          progress: Math.min((user.miningStats?.farmCount || 0), 3),
+          progress: Math.min((user.miningStats?.farStarsount || 0), 3),
           target: 3
         }
       ];
@@ -286,8 +286,8 @@ if (process.env.WEBAPP_ENABLED === 'true') {
 
   app.post('/api/webapp/exchange', async (req, res) => {
     try {
-      const { userId, fromCurrency, toCurrency, amount } = req.body;
-      if (!userId || !fromCurrency || !toCurrency || !amount) {
+      const { userId, froStarsurrency, toCurrency, amount } = req.body;
+      if (!userId || !froStarsurrency || !toCurrency || !amount) {
         return res.status(400).json({ success: false, message: 'Missing required parameters' });
       }
 
@@ -297,19 +297,19 @@ if (process.env.WEBAPP_ENABLED === 'true') {
       }
 
       // Проверяем баланс
-      const userBalance = fromCurrency === 'magnumCoins' ? user.magnumCoins : user.stars;
+      const userBalance = froStarsurrency === 'magnuStarsoins' ? user.magnuStarsoins : user.stars;
       if (userBalance < amount) {
         return res.json({ success: false, message: 'Недостаточно средств' });
       }
 
       // Рассчитываем курс обмена
-      const baseRate = 0.001; // 1 MC = 0.001 Stars
-      const exchangeRate = fromCurrency === 'magnumCoins' ? baseRate : 1 / baseRate;
+      const baseRate = 0.001; // 1 Stars = 0.001 Stars
+      const exchangeRate = froStarsurrency === 'magnuStarsoins' ? baseRate : 1 / baseRate;
       const convertedAmount = amount * exchangeRate;
 
       // Обновляем баланс
       const updateData = {};
-      updateData[fromCurrency] = -amount;
+      updateData[froStarsurrency] = -amount;
       updateData[toCurrency] = convertedAmount;
 
       await db.collection('users').updateOne(
@@ -323,7 +323,7 @@ if (process.env.WEBAPP_ENABLED === 'true') {
       res.json({ 
         success: true, 
         convertedAmount: convertedAmount.toFixed(4),
-        message: `Обмен выполнен: ${amount} ${fromCurrency} → ${convertedAmount.toFixed(4)} ${toCurrency}`
+        message: `Обмен выполнен: ${amount} ${froStarsurrency} → ${convertedAmount.toFixed(4)} ${toCurrency}`
       });
 
     } catch (error) {
@@ -404,7 +404,7 @@ const config = {
       rarity: 'common',
       baseSpeed: 0.01, // ~7 дней окупаемости
       price: 100,
-      currency: 'magnumCoins',
+      currency: 'magnuStarsoins',
       description: 'Простой майнер для начинающих (окупаемость ~7 дней)'
     },
     advanced: {
@@ -413,7 +413,7 @@ const config = {
       rarity: 'rare',
       baseSpeed: 0.025, // ~14 дней окупаемости
       price: 500,
-      currency: 'magnumCoins',
+      currency: 'magnuStarsoins',
       description: 'Более мощный майнер (окупаемость ~14 дней)'
     },
     premium: {
@@ -440,9 +440,9 @@ const config = {
   
   // Награды за сезоны (только топ-10)
   SEASON_REWARDS: {
-    top1: { magnumCoins: 10000, stars: 100, title: '🏆 Чемпион сезона' },
-    top3: { magnumCoins: 5000, stars: 50, title: '🥇 Топ-3 сезона' },
-    top10: { magnumCoins: 2000, stars: 20, title: '🥈 Топ-10 сезона' }
+    top1: { magnuStarsoins: 10000, stars: 100, title: '🏆 Чемпион сезона' },
+    top3: { magnuStarsoins: 5000, stars: 50, title: '🥇 Топ-3 сезона' },
+    top10: { magnuStarsoins: 2000, stars: 20, title: '🥈 Топ-10 сезона' }
   },
   
   EXCHANGE_COMMISSION: 2.5,
@@ -453,7 +453,7 @@ const config = {
   // Система сезонов майнинга
   MINING_SEASON_DURATION: 7, // дней
   MINING_SEASON_START_DATE: new Date('2025-11-22'), // Дата начала первого сезона
-  MINING_TOTAL_MAGNUM_COINS: 1000000, // Общее количество MC для всех пользователей
+  MINING_TOTAL_MAGNUM_COINS: 1000000, // Общее количество Stars для всех пользователей
   MINING_TOTAL_STARS: 100, // Общее количество Stars для всех пользователей
   MINING_SEASON_MULTIPLIER: 1.2, // Множитель увеличения наград каждый сезон
   
@@ -517,7 +517,7 @@ app.get('/api/webapp/user-data', async (req, res) => {
         if (!webappUser) {
             webappUser = {
                 userId: parseInt(userId),
-                magnumCoins: 1000,
+                magnuStarsoins: 1000,
                 stars: 0,
                 level: 1,
                 experience: 0,
@@ -539,12 +539,12 @@ app.get('/api/webapp/user-data', async (req, res) => {
                 tasks: {
                     daily: [
                         { id: 'click_100', name: 'Кликер', description: 'Сделайте 100 кликов', target: 100, progress: 0, reward: 50, completed: false },
-                        { id: 'earn_1000', name: 'Заработок', description: 'Заработайте 1000 MC', target: 1000, progress: 0, reward: 100, completed: false },
+                        { id: 'earn_1000', name: 'Заработок', description: 'Заработайте 1000 Stars', target: 1000, progress: 0, reward: 100, completed: false },
                         { id: 'farm_5', name: 'Фармер', description: 'Используйте фарм 5 раз', target: 5, progress: 0, reward: 75, completed: false }
                     ],
                     achievements: [
                         { id: 'first_click', name: 'Первый клик', description: 'Сделайте первый клик', target: 1, progress: 0, reward: 25, completed: false },
-                        { id: 'rich_player', name: 'Богач', description: 'Накопите 10000 MC', target: 10000, progress: 0, reward: 500, completed: false },
+                        { id: 'rich_player', name: 'Богач', description: 'Накопите 10000 Stars', target: 10000, progress: 0, reward: 500, completed: false },
                         { id: 'click_master', name: 'Мастер кликов', description: 'Сделайте 1000 кликов', target: 1000, progress: 0, reward: 200, completed: false }
                     ]
                 },
@@ -573,18 +573,18 @@ app.get('/api/webapp/user-data', async (req, res) => {
                 const passiveEarn = perMinute * minutesPassed;
                 await db.collection('webappUsers').updateOne(
                     { userId: parseInt(userId) },
-                    { $inc: { magnumCoins: passiveEarn }, $set: { updatedAt: new Date() } }
+                    { $inc: { magnuStarsoins: passiveEarn }, $set: { updatedAt: new Date() } }
                 );
-                webappUser.magnumCoins += passiveEarn;
+                webappUser.magnuStarsoins += passiveEarn;
             }
         }
 
-        const farmCooldownMs = (parseInt(process.env.WEBAPP_FARM_COOLDOWN_SEC || '5') || 5) * 1000;
+        const farStarsooldownMs = (parseInt(process.env.WEBAPP_FARM_COOLDOWN_SEC || '5') || 5) * 1000;
 
         res.json({
             success: true,
             data: {
-                magnumCoins: webappUser.magnumCoins || 0,
+                magnuStarsoins: webappUser.magnuStarsoins || 0,
                 stars: webappUser.stars || 0,
                 level: webappUser.level || 1,
                 experience: webappUser.experience || 0,
@@ -606,12 +606,12 @@ app.get('/api/webapp/user-data', async (req, res) => {
                 tasks: webappUser.tasks || {
                     daily: [
                         { id: 'click_100', name: 'Кликер', description: 'Сделайте 100 кликов', target: 100, progress: 0, reward: 50, completed: false },
-                        { id: 'earn_1000', name: 'Заработок', description: 'Заработайте 1000 MC', target: 1000, progress: 0, reward: 100, completed: false },
+                        { id: 'earn_1000', name: 'Заработок', description: 'Заработайте 1000 Stars', target: 1000, progress: 0, reward: 100, completed: false },
                         { id: 'farm_5', name: 'Фармер', description: 'Используйте фарм 5 раз', target: 5, progress: 0, reward: 75, completed: false }
                     ],
                     achievements: [
                         { id: 'first_click', name: 'Первый клик', description: 'Сделайте первый клик', target: 1, progress: 0, reward: 25, completed: false },
-                        { id: 'rich_player', name: 'Богач', description: 'Накопите 10000 MC', target: 10000, progress: 0, reward: 500, completed: false },
+                        { id: 'rich_player', name: 'Богач', description: 'Накопите 10000 Stars', target: 10000, progress: 0, reward: 500, completed: false },
                         { id: 'click_master', name: 'Мастер кликов', description: 'Сделайте 1000 кликов', target: 1000, progress: 0, reward: 200, completed: false }
                     ]
                 },
@@ -621,7 +621,7 @@ app.get('/api/webapp/user-data', async (req, res) => {
                     autoSave: true
                 },
                 lastFarmAt: webappUser.lastFarmAt || null,
-                farmCooldownMs
+                farStarsooldownMs
             }
         });
     } catch (error) {
@@ -633,7 +633,7 @@ app.get('/api/webapp/user-data', async (req, res) => {
 // API маршрут для обновления данных пользователя
 app.post('/api/webapp/update-data', async (req, res) => {
     try {
-        const { userId, magnumCoins, stars, level, experience, clickCount, upgrades, minerUpgrades, tasks, settings, cps, minerActive, lastFarmAt } = req.body;
+        const { userId, magnuStarsoins, stars, level, experience, clickCount, upgrades, minerUpgrades, tasks, settings, cps, minerActive, lastFarmAt } = req.body;
         
         if (!userId) {
             return res.status(400).json({ error: 'User ID required' });
@@ -641,7 +641,7 @@ app.post('/api/webapp/update-data', async (req, res) => {
 
         // Белый список полей и валидация
         const updateData = { updatedAt: new Date() };
-        if (typeof magnumCoins === 'number' && isFinite(magnumCoins) && magnumCoins >= 0) updateData.magnumCoins = magnumCoins;
+        if (typeof magnuStarsoins === 'number' && isFinite(magnuStarsoins) && magnuStarsoins >= 0) updateData.magnuStarsoins = magnuStarsoins;
         if (typeof stars === 'number' && isFinite(stars) && stars >= 0) updateData.stars = stars;
         if (typeof level === 'number' && isFinite(level) && level >= 1) updateData.level = Math.floor(level);
         if (typeof experience === 'number' && isFinite(experience) && experience >= 0) updateData.experience = Math.floor(experience);
@@ -678,7 +678,7 @@ app.post('/api/webapp/farm', async (req, res) => {
             return res.status(400).json({ error: 'User ID required' });
         }
 
-        const farmCooldownMs = (parseInt(process.env.WEBAPP_FARM_COOLDOWN_SEC || '5') || 5) * 1000;
+        const farStarsooldownMs = (parseInt(process.env.WEBAPP_FARM_COOLDOWN_SEC || '5') || 5) * 1000;
         const now = Date.now();
 
         let webappUser = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
@@ -688,31 +688,31 @@ app.post('/api/webapp/farm', async (req, res) => {
 
         const lastFarmAt = webappUser.lastFarmAt ? new Date(webappUser.lastFarmAt).getTime() : 0;
         const elapsed = now - lastFarmAt;
-        const remainingMs = farmCooldownMs - elapsed;
+        const remainingMs = farStarsooldownMs - elapsed;
         if (remainingMs > 0) {
             return res.status(429).json({
                 error: 'Cooldown',
                 remainingMs,
                 nextAvailableAt: now + remainingMs,
-                farmCooldownMs
+                farStarsooldownMs
             });
         }
 
         const reward = Math.max(1, webappUser.cps || 1);
         const updates = {
-            $inc: { magnumCoins: reward, clickCount: 1, experience: 1 },
+            $inc: { magnuStarsoins: reward, clickCount: 1, experience: 1 },
             $set: { lastFarmAt: new Date(now), updatedAt: new Date(now) }
         };
         await db.collection('webappUsers').updateOne({ userId: parseInt(userId) }, updates);
 
-        const newBalance = (webappUser.magnumCoins || 0) + reward;
+        const newBalance = (webappUser.magnuStarsoins || 0) + reward;
 
         return res.json({
             success: true,
             reward,
-            magnumCoins: newBalance,
-            nextAvailableAt: now + farmCooldownMs,
-            farmCooldownMs
+            magnuStarsoins: newBalance,
+            nextAvailableAt: now + farStarsooldownMs,
+            farStarsooldownMs
         });
     } catch (error) {
         console.error('WebApp farm error:', error);
@@ -738,7 +738,7 @@ app.post('/api/webapp/miner/toggle', async (req, res) => {
     }
 });
 
-// API для обмена валют (MC <-> Stars)
+// API для обмена валют (Stars <-> Stars)
 app.post('/api/webapp/exchange', async (req, res) => {
     try {
         const { userId, from, amount } = req.body;
@@ -751,24 +751,24 @@ app.post('/api/webapp/exchange', async (req, res) => {
         const rate = await calculateExchangeRate();
         const commission = (config.EXCHANGE_COMMISSION || 2.5) / 100;
 
-        let inc = { magnumCoins: 0, stars: 0 };
-        let reserveInc = { magnumCoins: 0, stars: 0 };
+        let inc = { magnuStarsoins: 0, stars: 0 };
+        let reserveInc = { magnuStarsoins: 0, stars: 0 };
 
         let received = 0;
-        if (from === 'mc') {
-            if (user.magnumCoins < amount) return res.status(400).json({ error: 'Insufficient MC' });
+        if (from === 'Stars') {
+            if (user.magnuStarsoins < amount) return res.status(400).json({ error: 'Insufficient Stars' });
             const starsOut = amount * rate * (1 - commission);
-            inc.magnumCoins -= amount;
+            inc.magnuStarsoins -= amount;
             inc.stars += starsOut;
-            reserveInc.magnumCoins += amount * commission;
+            reserveInc.magnuStarsoins += amount * commission;
             received = starsOut;
         } else if (from === 'stars') {
             if ((user.stars || 0) < amount) return res.status(400).json({ error: 'Insufficient Stars' });
-            const mcOut = (amount / rate) * (1 - commission);
+            const StarsOut = (amount / rate) * (1 - commission);
             inc.stars -= amount;
-            inc.magnumCoins += mcOut;
+            inc.magnuStarsoins += StarsOut;
             reserveInc.stars += amount * commission;
-            received = mcOut;
+            received = StarsOut;
         } else {
             return res.status(400).json({ error: 'Unknown from' });
         }
@@ -789,7 +789,7 @@ app.post('/api/webapp/exchange', async (req, res) => {
         });
 
         const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
-        res.json({ success: true, rate, magnumCoins: updated.magnumCoins, stars: updated.stars });
+        res.json({ success: true, rate, magnuStarsoins: updated.magnuStarsoins, stars: updated.stars });
     } catch (error) {
         console.error('WebApp exchange error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -814,10 +814,10 @@ app.post('/api/webapp/bonus', async (req, res) => {
         const reward = base * (1 + Math.min(streak, 40) * 0.1);
         await db.collection('webappUsers').updateOne(
             { userId: parseInt(userId) },
-            { $inc: { magnumCoins: Math.floor(reward) }, $set: { lastBonusAt: new Date(now), bonusStreak: streak, updatedAt: new Date(now) } }
+            { $inc: { magnuStarsoins: Math.floor(reward) }, $set: { lastBonusAt: new Date(now), bonusStreak: streak, updatedAt: new Date(now) } }
         );
         const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
-        res.json({ success: true, reward: Math.floor(reward), magnumCoins: updated.magnumCoins, bonusStreak: streak });
+        res.json({ success: true, reward: Math.floor(reward), magnuStarsoins: updated.magnuStarsoins, bonusStreak: streak });
     } catch (error) {
         console.error('WebApp bonus error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -836,14 +836,14 @@ app.post('/api/webapp/promocode', async (req, res) => {
 
         await db.collection('webappUsers').updateOne(
             { userId: parseInt(userId) },
-            { $inc: { magnumCoins: promo.reward || 0 }, $set: { updatedAt: new Date() } }
+            { $inc: { magnuStarsoins: promo.reward || 0 }, $set: { updatedAt: new Date() } }
         );
         await db.collection('promocodes').updateOne(
             { _id: promo._id },
             { $inc: { activations: 1 } }
         );
         const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
-        res.json({ success: true, reward: promo.reward || 0, magnumCoins: updated.magnumCoins });
+        res.json({ success: true, reward: promo.reward || 0, magnuStarsoins: updated.magnuStarsoins });
     } catch (error) {
         console.error('WebApp promocode error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -928,19 +928,19 @@ async function calculateExchangeRate() {
       return config.BASE_EXCHANGE_RATE;
     }
     
-    const magnumCoinsReserve = reserve.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const magnuStarsoinsReserve = reserve.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     const starsReserve = reserve.stars || config.INITIAL_RESERVE_STARS;
     
     // Расчет множителя на основе соотношения резервов
-    const ratio = magnumCoinsReserve / starsReserve;
+    const ratio = magnuStarsoinsReserve / starsReserve;
     
     // Используем логарифмическую шкалу для более чувствительного курса
     let multiplier;
     if (ratio <= 1) {
-      // Если MC меньше или равно Stars, используем линейную шкалу
+      // Если Stars меньше или равно Stars, используем линейную шкалу
       multiplier = Math.max(0.001, ratio);
     } else {
-      // Если MC больше Stars, используем логарифмическую шкалу без ограничений
+      // Если Stars больше Stars, используем логарифмическую шкалу без ограничений
       const logRatio = Math.log(ratio) / Math.log(10); // log10
       multiplier = Math.max(0.001, 1 + logRatio * 2);
     }
@@ -973,7 +973,7 @@ async function calculateExchangeRate() {
     }
     
     console.log(`💱 Расчет курса обмена:`, {
-      magnumCoinsReserve: formatNumber(magnumCoinsReserve),
+      magnuStarsoinsReserve: formatNumber(magnuStarsoinsReserve),
       starsReserve: formatNumber(starsReserve),
       ratio: ratio.toFixed(4),
       logRatio: ratio > 1 ? (Math.log(ratio) / Math.log(10)).toFixed(4) : 'N/A',
@@ -1121,7 +1121,7 @@ async function initializeReserve() {
       reserve = {
         currency: 'main',
         stars: config.INITIAL_RESERVE_STARS,
-        magnumCoins: config.INITIAL_RESERVE_MAGNUM_COINS,
+        magnuStarsoins: config.INITIAL_RESERVE_MAGNUM_COINS,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1230,8 +1230,8 @@ function getCachedUser(id) {
   const cached = userCache.get(id);
   if (cached && (Date.now() - cached.timestamp) < config.USER_CACHE_TTL) {
     // Проверяем валидность данных пользователя
-    if (cached.user && typeof cached.user.magnumCoins === 'number' && typeof cached.user.stars === 'number' &&
-        !isNaN(cached.user.magnumCoins) && !isNaN(cached.user.stars)) {
+    if (cached.user && typeof cached.user.magnuStarsoins === 'number' && typeof cached.user.stars === 'number' &&
+        !isNaN(cached.user.magnuStarsoins) && !isNaN(cached.user.stars)) {
       return cached.user;
     } else {
       // Если данные невалидны, удаляем из кеша
@@ -1245,16 +1245,16 @@ function getCachedUser(id) {
 
 function setCachedUser(id, user) {
   // Проверяем валидность данных пользователя перед сохранением в кеш
-  if (user && typeof user.magnumCoins === 'number' && typeof user.stars === 'number' &&
-      !isNaN(user.magnumCoins) && !isNaN(user.stars)) {
+  if (user && typeof user.magnuStarsoins === 'number' && typeof user.stars === 'number' &&
+      !isNaN(user.magnuStarsoins) && !isNaN(user.stars)) {
     userCache.set(id, { user, timestamp: Date.now() });
   } else {
     // Если данные невалидны, не сохраняем в кеш и логируем ошибку
     console.warn(`⚠️ Попытка сохранения невалидных данных пользователя ${id} в кеш:`, {
-      magnumCoins: user?.magnumCoins,
+      magnuStarsoins: user?.magnuStarsoins,
       stars: user?.stars,
-      type: typeof user?.magnumCoins,
-      isNaN_magnumCoins: isNaN(user?.magnumCoins),
+      type: typeof user?.magnuStarsoins,
+      isNaN_magnuStarsoins: isNaN(user?.magnuStarsoins),
       isNaN_stars: isNaN(user?.stars)
     });
   }
@@ -1280,8 +1280,8 @@ function cleanupInvalidCache() {
   for (const [id, cached] of userCache.entries()) {
     if (cached && cached.user) {
       // Проверяем валидность данных
-      if (typeof cached.user.magnumCoins !== 'number' || typeof cached.user.stars !== 'number' ||
-          isNaN(cached.user.magnumCoins) || isNaN(cached.user.stars)) {
+      if (typeof cached.user.magnuStarsoins !== 'number' || typeof cached.user.stars !== 'number' ||
+          isNaN(cached.user.magnuStarsoins) || isNaN(cached.user.stars)) {
         userCache.delete(id);
         cleanedCount++;
         console.log(`🧹 Удален невалидный кеш пользователя ${id} (NaN или невалидные значения)`);
@@ -1655,7 +1655,7 @@ function ensureUserFields(user) {
   if (!user.farm) {
     user.farm = {
       lastFarm: null,
-      farmCount: 0,
+      farStarsount: 0,
       totalFarmEarnings: 0
     };
   }
@@ -1773,8 +1773,8 @@ function ensureUserFields(user) {
     user.totalEarnedStars = user.stars || 0;
   }
   
-  if (!user.totalEarnedMagnumCoins) {
-    user.totalEarnedMagnumCoins = user.magnumCoins || 0;
+  if (!user.totalEarnedMagnuStarsoins) {
+    user.totalEarnedMagnuStarsoins = user.magnuStarsoins || 0;
   }
   
   if (!user.level) {
@@ -1834,9 +1834,9 @@ async function getUser(id, ctx = null) {
         firstName: ctx?.from?.first_name || null,
         lastName: ctx?.from?.last_name || null,
         stars: config.INITIAL_STARS,
-        magnumCoins: config.INITIAL_MAGNUM_COINS,
+        magnuStarsoins: config.INITIAL_MAGNUM_COINS,
         totalEarnedStars: config.INITIAL_STARS,
-        totalEarnedMagnumCoins: config.INITIAL_MAGNUM_COINS,
+        totalEarnedMagnuStarsoins: config.INITIAL_MAGNUM_COINS,
         level: 1,
         experience: 0,
         experienceToNextLevel: 100,
@@ -1853,7 +1853,7 @@ async function getUser(id, ctx = null) {
         totalReferralEarnings: 0,
         farm: {
           lastFarm: null,
-          farmCount: 0,
+          farStarsount: 0,
           totalFarmEarnings: 0
         },
         miner: {
@@ -1952,17 +1952,17 @@ async function getUser(id, ctx = null) {
     }
     
     // Проверяем валидность данных пользователя перед возвратом
-    if (typeof user.magnumCoins !== 'number' || typeof user.stars !== 'number' || 
-        isNaN(user.magnumCoins) || isNaN(user.stars)) {
+    if (typeof user.magnuStarsoins !== 'number' || typeof user.stars !== 'number' || 
+        isNaN(user.magnuStarsoins) || isNaN(user.stars)) {
       console.error(`❌ Невалидные данные пользователя ${id}:`, {
-        magnumCoins: user.magnumCoins,
+        magnuStarsoins: user.magnuStarsoins,
         stars: user.stars,
-        type: typeof user.magnumCoins,
-        isNaN_magnumCoins: isNaN(user.magnumCoins),
+        type: typeof user.magnuStarsoins,
+        isNaN_magnuStarsoins: isNaN(user.magnuStarsoins),
         isNaN_stars: isNaN(user.stars)
       });
       // Исправляем невалидные данные
-      user.magnumCoins = (typeof user.magnumCoins === 'number' && !isNaN(user.magnumCoins)) ? user.magnumCoins : config.INITIAL_MAGNUM_COINS;
+      user.magnuStarsoins = (typeof user.magnuStarsoins === 'number' && !isNaN(user.magnuStarsoins)) ? user.magnuStarsoins : config.INITIAL_MAGNUM_COINS;
       user.stars = (typeof user.stars === 'number' && !isNaN(user.stars)) ? user.stars : config.INITIAL_STARS;
       
       // Очищаем кеш пользователя
@@ -1973,7 +1973,7 @@ async function getUser(id, ctx = null) {
         { id: id },
         { 
           $set: { 
-            magnumCoins: user.magnumCoins,
+            magnuStarsoins: user.magnuStarsoins,
             stars: user.stars,
             updatedAt: new Date()
           }
@@ -2027,7 +2027,7 @@ function formatProfileMessage(user, rankProgress) {
     `└ Титул: ${user.mainTitle}\n\n` +
     `💎 *Баланс:*\n` +
     `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
-    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
+    `└ 🪙 Stars: \`${formatNumber(user.magnuStarsoins)}\`\n\n` +
     `📊 *Статистика:*\n` +
     `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
     `└ Рефералы: \`${user.referralsCount}\`\n\n` +
@@ -2187,7 +2187,7 @@ async function handleReferral(userId, referrerId) {
           referralsCount: 1,
           totalReferralEarnings: referralReward,
           referralsEarnings: referralReward, // Добавляем оба поля для совместимости
-          stars: referralReward, // Начисляем Stars вместо Magnum Coins
+          stars: referralReward, // Начисляем Stars вместо Stars
           totalEarnedStars: referralReward
         },
         $push: { referrals: userId },
@@ -2200,7 +2200,7 @@ async function handleReferral(userId, referrerId) {
     userCache.delete(referrerId);
     
     console.log(`✅ База данных обновлена для реферала ${userId} -> ${referrerId}`);
-    console.log(`💰 Награда выдана: ${referralReward} MC`);
+    console.log(`💰 Награда выдана: ${referralReward} Stars`);
     
     // Отправляем уведомление рефереру
     try {
@@ -2230,7 +2230,7 @@ async function handleReferral(userId, referrerId) {
         `🎉 *Добро пожаловать в Magnum Stars!*\n\n` +
         `👥 Вы присоединились по реферальной ссылке\n` +
         `👤 Пригласил: ${referrer.firstName || 'Неизвестно'}\n` +
-        `💰 Вы получили: +${formatNumber(config.INITIAL_MAGNUM_COINS)} Magnum Coins\n\n` +
+        `💰 Вы получили: +${formatNumber(config.INITIAL_MAGNUM_COINS)} Stars\n\n` +
         `🎮 Начните играть прямо сейчас!`;
       
       await bot.telegram.sendMessage(userId, welcomeMessage, {
@@ -2243,7 +2243,7 @@ async function handleReferral(userId, referrerId) {
     }
     
     console.log(`✅ Реферал успешно обработан: ${userId} -> ${referrerId}`);
-    console.log(`💰 Награда выдана: ${referralReward} MC`);
+    console.log(`💰 Награда выдана: ${referralReward} Stars`);
     
   } catch (error) {
     console.error('❌ Ошибка обработки реферала:', error);
@@ -2678,8 +2678,8 @@ async function showMinerMenu(ctx, user) {
   
   // Рассчитываем общую скорость майнинга
   const totalSpeed = calculateTotalMiningSpeed(userWithMining);
-  const rewardPerMinuteMC = totalSpeed.magnumCoins * currentSeason.multiplier;
-  const rewardPerHourMC = rewardPerMinuteMC * 60;
+  const rewardPerMinuteStars = totalSpeed.magnuStarsoins * currentSeason.multiplier;
+  const rewardPerHourStars = rewardPerMinuteStars * 60;
   const rewardPerMinuteStars = totalSpeed.stars * currentSeason.multiplier;
   const rewardPerHourStars = rewardPerMinuteStars * 60;
   
@@ -2708,17 +2708,17 @@ async function showMinerMenu(ctx, user) {
   const message = 
     `⛏️ *Новая система майнинга*${seasonInfo}\n\n` +
     `💎 *Ваши майнеры:* ${totalMiners} шт.\n` +
-    `⚡ *Скорость добычи MC:* ${formatNumber(totalSpeed.magnumCoins)} MC/мин\n` +
+    `⚡ *Скорость добычи Stars:* ${formatNumber(totalSpeed.magnuStarsoins)} Stars/мин\n` +
     `⭐ *Скорость добычи Stars:* ${formatNumber(totalSpeed.stars)} ⭐/мин\n\n` +
     `💰 *Награды:*\n` +
-    `└ MC: ${formatNumber(rewardPerMinuteMC)} MC/мин • ${formatNumber(rewardPerHourMC)} MC/час\n` +
+    `└ Stars: ${formatNumber(rewardPerMinuteStars)} Stars/мин • ${formatNumber(rewardPerHourStars)} Stars/час\n` +
     `└ Stars: ${formatNumber(rewardPerMinuteStars)} ⭐/мин • ${formatNumber(rewardPerHourStars)} ⭐/час\n\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n\n` +
     `📊 *Всего добыто:*\n` +
-    `└ MC: ${formatNumber(userWithMining.miningStats?.totalMinedMC || 0)} MC\n` +
+    `└ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} Stars\n` +
     `└ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} ⭐\n\n` +
     `📊 *Сезонная добыча:*\n` +
-    `└ MC: ${formatNumber(userWithMining.miningStats?.seasonMinedMC || 0)} MC\n` +
+    `└ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} Stars\n` +
     `└ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} ⭐\n\n` +
     `🎯 Выберите действие ниже.`;
   
@@ -2753,7 +2753,7 @@ async function startMiner(ctx, user) {
     userCache.delete(user.id);
     
     log(`✅ Майнер успешно запущен для пользователя ${user.id}`);
-    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Magnum Coins каждую минуту.');
+    await ctx.answerCbQuery('✅ Майнер запущен! Теперь вы будете получать Stars каждую минуту.');
     
     log(`🔄 Обновление меню майнера для пользователя ${user.id}`);
     // Обновляем меню майнера
@@ -2809,19 +2809,19 @@ async function showMinerUpgrade(ctx, user) {
     const currentEfficiency = miner.efficiency || 1;
     
     // Расчет стоимости улучшения
-    const upgradeCost = currentLevel * 100; // 100 Magnum Coins за уровень
+    const upgradeCost = currentLevel * 100; // 100 Stars за уровень
     const newEfficiency = currentEfficiency + 0.2;
     
     // Рассчитываем новую награду с учетом курса, количества майнеров и титула
     const newRewardPerMinute = await calculateMinerReward(newEfficiency, user);
     const newRewardPerHour = newRewardPerMinute * 60;
     
-    const canUpgrade = user.magnumCoins >= upgradeCost;
+    const canUpgrade = user.magnuStarsoins >= upgradeCost;
     
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          canUpgrade ? `⬆️ Улучшить (${formatNumber(upgradeCost)} MC)` : `❌ Недостаточно MC (${formatNumber(upgradeCost)})`,
+          canUpgrade ? `⬆️ Улучшить (${formatNumber(upgradeCost)} Stars)` : `❌ Недостаточно Stars (${formatNumber(upgradeCost)})`,
           canUpgrade ? 'confirm_miner_upgrade' : 'insufficient_funds'
         )
       ],
@@ -2832,12 +2832,12 @@ async function showMinerUpgrade(ctx, user) {
       `⬆️ *Улучшение майнера*\n\n` +
       `📊 *Текущий уровень:* ${currentLevel}\n` +
       `⚡ *Текущая эффективность:* ${currentEfficiency.toFixed(1)}x\n` +
-      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency, user)) * 60)} Magnum Coins\n\n` +
+      `💰 *Текущая награда/час:* ${formatNumber((await calculateMinerReward(currentEfficiency, user)) * 60)} Stars\n\n` +
       `📈 *После улучшения:*\n` +
       `⚡ *Новая эффективность:* ${newEfficiency.toFixed(1)}x\n` +
-      `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Magnum Coins\n\n` +
-      `💎 *Стоимость улучшения:* ${formatNumber(upgradeCost)} Magnum Coins\n` +
-      `💎 *Ваш баланс:* ${formatNumber(user.magnumCoins)} Magnum Coins\n\n` +
+      `💰 *Новая награда/час:* ${formatNumber(newRewardPerHour)} Stars\n\n` +
+      `💎 *Стоимость улучшения:* ${formatNumber(upgradeCost)} Stars\n` +
+      `💎 *Ваш баланс:* ${formatNumber(user.magnuStarsoins)} Stars\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -2896,9 +2896,9 @@ async function showMinerStats(ctx, user) {
       `⚡ *Эффективность:* ${efficiency.toFixed(1)}x\n` +
       `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
       `📊 *Статус:* ${statusText}\n` +
-      `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
-      `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
-      `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins\n` +
+      `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Stars\n` +
+      `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
+      `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Stars\n` +
       `⏰ *Последняя награда:* ${miner.lastReward ? miner.lastReward.toLocaleString('ru-RU') : 'Нет'}\n` +
       `${nextRewardText}\n\n` +
       `📈 *Информация:*\n` +
@@ -2906,7 +2906,7 @@ async function showMinerStats(ctx, user) {
       `• Награды выдаются каждую минуту\n` +
       `• Награда зависит от курса обмена, количества майнеров и титула\n` +
       `• Эффективность увеличивается с улучшениями\n` +
-      `• Можно улучшать за Magnum Coins`;
+      `• Можно улучшать за Stars`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -2929,9 +2929,9 @@ async function upgradeMiner(ctx, user) {
     const upgradeCost = currentLevel * 100;
     
     // Проверяем, достаточно ли средств
-    if (user.magnumCoins < upgradeCost) {
+    if (user.magnuStarsoins < upgradeCost) {
       log(`❌ Недостаточно средств для улучшения майнера пользователя ${user.id}`);
-      await ctx.answerCbQuery('❌ Недостаточно Magnum Coins!');
+      await ctx.answerCbQuery('❌ Недостаточно Stars!');
       return;
     }
     
@@ -2944,8 +2944,8 @@ async function upgradeMiner(ctx, user) {
       { id: user.id },
       { 
         $inc: { 
-          magnumCoins: -upgradeCost,
-          totalEarnedMagnumCoins: -upgradeCost
+          magnuStarsoins: -upgradeCost,
+          totalEarnedMagnuStarsoins: -upgradeCost
         },
         $set: { 
           'miner.level': newLevel,
@@ -3002,12 +3002,12 @@ function getCurrentMiningSeason() {
 
 // Получение лимитов сезона
 function getSeasonLimits(season) {
-  const baseMCLimit = config.MINING_TOTAL_MAGNUM_COINS;
+  const baseStarsLimit = config.MINING_TOTAL_MAGNUM_COINS;
   const baseStarsLimit = config.MINING_TOTAL_STARS;
   const multiplier = Math.pow(config.MINING_SEASON_MULTIPLIER, season - 1);
   
   return {
-    magnumCoins: Math.floor(baseMCLimit * multiplier),
+    magnuStarsoins: Math.floor(baseStarsLimit * multiplier),
     stars: Math.floor(baseStarsLimit * multiplier)
   };
 }
@@ -3022,7 +3022,7 @@ async function getSeasonStats(season) {
   if (!stats) {
     return {
       season: season,
-      totalMinedMC: 0,
+      totalMinedStars: 0,
       totalMinedStars: 0,
       activeMiners: 0,
       startDate: startDate,
@@ -3038,12 +3038,12 @@ async function getSeasonStats(season) {
 }
 
 // Обновление статистики сезона
-async function updateSeasonStats(season, minedMC, minedStars) {
+async function updateSeasonStats(season, minedStars, minedStars) {
   await db.collection('miningSeasonStats').updateOne(
     { season: season },
     { 
       $inc: { 
-        totalMinedMC: minedMC,
+        totalMinedStars: minedStars,
         totalMinedStars: minedStars
       },
       $set: { 
@@ -3055,17 +3055,17 @@ async function updateSeasonStats(season, minedMC, minedStars) {
 }
 
 // Проверка лимитов сезона
-async function checkSeasonLimits(season, minedMC, minedStars) {
+async function checkSeasonLimits(season, minedStars, minedStars) {
   const limits = getSeasonLimits(season);
   const stats = await getSeasonStats(season);
   
-  const canMineMC = stats.totalMinedMC + minedMC <= limits.magnumCoins;
+  const canMineStars = stats.totalMinedStars + minedStars <= limits.magnuStarsoins;
   const canMineStars = stats.totalMinedStars + minedStars <= limits.stars;
   
   return {
-    canMineMC,
     canMineStars,
-    remainingMC: Math.max(0, limits.magnumCoins - stats.totalMinedMC),
+    canMineStars,
+    remainingStars: Math.max(0, limits.magnuStarsoins - stats.totalMinedStars),
     remainingStars: Math.max(0, limits.stars - stats.totalMinedStars)
   };
 }
@@ -3112,12 +3112,12 @@ async function showMinerSeasonInfo(ctx, user) {
       `📈 *Множитель сезона:* ${currentSeason.multiplier.toFixed(2)}x\n` +
       `📊 *Прогресс сезона:* ${((currentSeason.dayInSeason / config.MINING_SEASON_DURATION) * 100).toFixed(1)}%\n\n` +
       `💰 *Лимиты сезона:*\n` +
-      `├ Magnum Coins: ${formatNumber(limits.magnumCoins)}\n` +
+      `├ Stars: ${formatNumber(limits.magnuStarsoins)}\n` +
       `└ Stars: ${formatNumber(limits.stars)}\n\n` +
       `📊 *Статистика сезона:*\n` +
-      `├ Добыто MC: ${formatNumber(stats.totalMinedMC)} / ${formatNumber(limits.magnumCoins)}\n` +
+      `├ Добыто Stars: ${formatNumber(stats.totalMinedStars)} / ${formatNumber(limits.magnuStarsoins)}\n` +
       `├ Добыто Stars: ${formatNumber(stats.totalMinedStars)} / ${formatNumber(limits.stars)}\n` +
-      `├ Осталось MC: ${formatNumber(limitsCheck.remainingMC)}\n` +
+      `├ Осталось Stars: ${formatNumber(limitsCheck.remainingStars)}\n` +
       `└ Осталось Stars: ${formatNumber(limitsCheck.remainingStars)}\n\n` +
       `📅 *Даты сезона:*\n` +
       `├ Начало: ${currentSeason.startDate.toLocaleDateString('ru-RU')}\n` +
@@ -3190,9 +3190,9 @@ function initializeNewMiningSystem(user) {
   
   if (!user.miningStats) {
     user.miningStats = {
-      totalMinedMC: 0,
       totalMinedStars: 0,
-      seasonMinedMC: 0,
+      totalMinedStars: 0,
+      seasonMinedStars: 0,
       seasonMinedStars: 0,
       lastReward: null,
       activeClickCount: 0,
@@ -3209,7 +3209,7 @@ function initializeNewMiningSystem(user) {
 
 // Функция для расчета общей скорости майнинга пользователя
 function calculateTotalMiningSpeed(user) {
-  let totalSpeedMC = 0;
+  let totalSpeedStars = 0;
   let totalSpeedStars = 0;
   
   if (user.miners && user.miners.length > 0) {
@@ -3220,11 +3220,11 @@ function calculateTotalMiningSpeed(user) {
         const minerSpeed = minerConfig.baseSpeed * levelMultiplier * miner.count;
         
         // Определяем валюту майнинга
-        const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
+        const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
         if (miningCurrency === 'stars') {
           totalSpeedStars += minerSpeed;
         } else {
-          totalSpeedMC += minerSpeed;
+          totalSpeedStars += minerSpeed;
         }
       }
     }
@@ -3237,7 +3237,7 @@ function calculateTotalMiningSpeed(user) {
   const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
   
   return {
-    magnumCoins: totalSpeedMC * titleBonus,
+    magnuStarsoins: totalSpeedStars * titleBonus,
     stars: totalSpeedStars * titleBonus
   };
 }
@@ -3267,14 +3267,14 @@ async function processMiningRewards() {
         const userWithMining = initializeNewMiningSystem(user);
         const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
-        const totalSpeedSum = totalSpeed.magnumCoins + totalSpeed.stars;
+        const totalSpeedSum = totalSpeed.magnuStarsoins + totalSpeed.stars;
         if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
           const timeDiff = (now - lastReward) / (1000 * 60); // в минутах
           
           if (timeDiff >= config.MINING_REWARD_INTERVAL) {
-            const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.magnuStarsoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             // Обновляем статистику
@@ -3282,13 +3282,13 @@ async function processMiningRewards() {
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnumCoins: rewardMC,
+                  magnuStarsoins: rewardStars,
                   stars: rewardStars,
-                  'miningStats.totalMinedMC': rewardMC,
                   'miningStats.totalMinedStars': rewardStars,
-                  'miningStats.seasonMinedMC': rewardMC,
+                  'miningStats.totalMinedStars': rewardStars,
                   'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.passiveRewards': rewardMC + rewardStars
+                  'miningStats.seasonMinedStars': rewardStars,
+                  'miningStats.passiveRewards': rewardStars + rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -3330,7 +3330,7 @@ async function buyMiner(user, minerType) {
     if (userBalance < minerConfig.price) {
       return { 
         success: false, 
-        message: `❌ Недостаточно ${minerConfig.currency === 'magnumCoins' ? 'Magnum Coins' : 'Stars'}` 
+        message: `❌ Недостаточно ${minerConfig.currency === 'magnuStarsoins' ? 'Stars' : 'Stars'}` 
       };
     }
     
@@ -3382,7 +3382,7 @@ async function buyMiner(user, minerType) {
     
     return { 
       success: true, 
-      message: `✅ Куплен ${minerConfig.name} за ${minerConfig.price} ${minerConfig.currency === 'magnumCoins' ? 'MC' : 'Stars'}!` 
+      message: `✅ Куплен ${minerConfig.name} за ${minerConfig.price} ${minerConfig.currency === 'magnuStarsoins' ? 'Stars' : 'Stars'}!` 
     };
   } catch (error) {
     console.error('❌ Ошибка покупки майнера:', error);
@@ -3402,8 +3402,8 @@ async function upgradeMiner(user, minerType) {
     
     const upgradeCost = miner.level * 50; // Стоимость апгрейда растет с уровнем
     
-    if (userWithMining.magnumCoins < upgradeCost) {
-      return { success: false, message: '❌ Недостаточно Magnum Coins для апгрейда' };
+    if (userWithMining.magnuStarsoins < upgradeCost) {
+      return { success: false, message: '❌ Недостаточно Stars для апгрейда' };
     }
     
     // Апгрейдим майнер
@@ -3411,7 +3411,7 @@ async function upgradeMiner(user, minerType) {
       { id: userWithMining.id },
       {
         $inc: {
-          magnumCoins: -upgradeCost,
+          magnuStarsoins: -upgradeCost,
           'miners.$.level': 1
         }
       },
@@ -3481,7 +3481,7 @@ async function showMinerShop(ctx, user, minerIndex = 0) {
     
     // Кнопка покупки
     if (canBuy) {
-      const currencySymbol = minerConfig.currency === 'magnumCoins' ? 'MC' : '⭐';
+      const currencySymbol = minerConfig.currency === 'magnuStarsoins' ? 'Stars' : '⭐';
       keyboard.push([
         Markup.button.callback(`🛒 Купить ${minerConfig.name} (${minerConfig.price} ${currencySymbol})`, `buy_miner_${currentMinerType}`)
       ]);
@@ -3495,13 +3495,13 @@ async function showMinerShop(ctx, user, minerIndex = 0) {
     keyboard.push([Markup.button.callback('🔙 Назад', 'miner')]);
     
     // Формируем сообщение
-    const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
-    const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'MC';
-    const priceSymbol = minerConfig.currency === 'magnumCoins' ? 'MC' : '⭐';
+    const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
+    const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'Stars';
+    const priceSymbol = minerConfig.currency === 'magnuStarsoins' ? 'Stars' : '⭐';
     
     let message = `🛒 *Магазин майнеров*\n\n`;
     message += `💰 *Ваш баланс:*\n`;
-    message += `├ Magnum Coins: ${formatNumber(userWithMining.magnumCoins)}\n`;
+    message += `├ Stars: ${formatNumber(userWithMining.magnuStarsoins)}\n`;
     message += `└ Stars: ${formatNumber(userWithMining.stars)}\n\n`;
     
     message += `📦 *${minerConfig.name}*\n`;
@@ -3540,7 +3540,7 @@ async function showMinerUpgrades(ctx, user) {
     ];
     
     let message = `⬆️ *Апгрейды майнеров*\n\n`;
-    message += `💰 Ваш баланс: ${formatNumber(userWithMining.magnumCoins)} MC\n\n`;
+    message += `💰 Ваш баланс: ${formatNumber(userWithMining.magnuStarsoins)} Stars\n\n`;
     
     if (userWithMining.miners.length === 0) {
       message += `❌ У вас нет майнеров для апгрейда\n\n`;
@@ -3554,20 +3554,20 @@ async function showMinerUpgrades(ctx, user) {
           const currentSpeed = minerConfig.baseSpeed * (1 + (miner.level - 1) * 0.2);
           const nextLevelSpeed = minerConfig.baseSpeed * (1 + miner.level * 0.2);
           const upgradeCost = miner.level * 50;
-          const miningCurrency = minerConfig.miningCurrency || 'magnumCoins';
-          const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'MC';
+          const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
+          const currencySymbol = miningCurrency === 'stars' ? '⭐' : 'Stars';
           
           message += `🔸 *${minerConfig.name}*\n`;
           message += `├ Уровень: ${miner.level}\n`;
           message += `├ Количество: ${miner.count} шт.\n`;
           message += `├ Текущая скорость: ${formatNumber(currentSpeed)} ${currencySymbol}/мин\n`;
           message += `├ Скорость после апгрейда: ${formatNumber(nextLevelSpeed)} ${currencySymbol}/мин\n`;
-          message += `├ Стоимость апгрейда: ${upgradeCost} MC\n`;
+          message += `├ Стоимость апгрейда: ${upgradeCost} Stars\n`;
           
-          if (userWithMining.magnumCoins >= upgradeCost) {
+          if (userWithMining.magnuStarsoins >= upgradeCost) {
             message += `└ [Улучшить](buy_miner_${miner.type})\n\n`;
             keyboardButtons.unshift([
-              Markup.button.callback(`⬆️ ${minerConfig.name} (${upgradeCost} MC)`, `upgrade_miner_${miner.type}`)
+              Markup.button.callback(`⬆️ ${minerConfig.name} (${upgradeCost} Stars)`, `upgrade_miner_${miner.type}`)
             ]);
           } else {
             message += `└ ❌ Недостаточно средств\n\n`;
@@ -3611,15 +3611,15 @@ async function showMinerLeaderboard(ctx, user) {
     
     // Получаем топ-10 игроков по общему майнингу
     const topTotal = await db.collection('users')
-      .find({ 'miningStats.totalMinedMC': { $exists: true } })
-      .sort({ 'miningStats.totalMinedMC': -1 })
+      .find({ 'miningStats.totalMinedStars': { $exists: true } })
+      .sort({ 'miningStats.totalMinedStars': -1 })
       .limit(10)
       .toArray();
     
     // Получаем топ-10 игроков по сезонному майнингу
     const topSeason = await db.collection('users')
-      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
-      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .find({ 'miningStats.seasonMinedStars': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(10)
       .toArray();
     
@@ -3628,7 +3628,7 @@ async function showMinerLeaderboard(ctx, user) {
       const player = topTotal[i];
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
-      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.totalMinedMC || 0)} MC\n`;
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.totalMinedStars || 0)} Stars\n`;
     }
     
     message += `\n📅 *Топ-5 сезона ${currentSeason.season}:*\n`;
@@ -3636,13 +3636,13 @@ async function showMinerLeaderboard(ctx, user) {
       const player = topSeason[i];
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
-      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedMC || 0)} MC\n`;
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedStars || 0)} Stars\n`;
     }
     
     message += `\n💡 *Награды за сезон:*\n`;
-    message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnumCoins)} MC + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
-    message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnumCoins)} MC + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
-    message += `└ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐`;
+    message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnuStarsoins)} Stars + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
+    message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnuStarsoins)} Stars + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
+    message += `└ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnuStarsoins)} Stars + ${config.SEASON_REWARDS.top10.stars} ⭐`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -3663,8 +3663,8 @@ async function showMinerLeaderboardTotal(ctx, user) {
     
     // Получаем топ-20 игроков по общему майнингу
     const topTotal = await db.collection('users')
-      .find({ 'miningStats.totalMinedMC': { $exists: true } })
-      .sort({ 'miningStats.totalMinedMC': -1 })
+      .find({ 'miningStats.totalMinedStars': { $exists: true } })
+      .sort({ 'miningStats.totalMinedStars': -1 })
       .limit(20)
       .toArray();
     
@@ -3674,10 +3674,10 @@ async function showMinerLeaderboardTotal(ctx, user) {
       const player = topTotal[i];
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
-      const totalMC = player.miningStats?.totalMinedMC || 0;
+      const totalStars = player.miningStats?.totalMinedStars || 0;
       const totalStars = player.miningStats?.totalMinedStars || 0;
       message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
-      message += `   💎 ${formatNumber(totalMC)} MC | ⭐ ${formatNumber(totalStars)} Stars\n`;
+      message += `   💎 ${formatNumber(totalStars)} Stars | ⭐ ${formatNumber(totalStars)} Stars\n`;
     }
     
     await ctx.editMessageText(message, {
@@ -3700,8 +3700,8 @@ async function showMinerLeaderboardSeason(ctx, user) {
     
     // Получаем топ-20 игроков по сезонному майнингу
     const topSeason = await db.collection('users')
-      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
-      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .find({ 'miningStats.seasonMinedStars': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(20)
       .toArray();
     
@@ -3712,16 +3712,16 @@ async function showMinerLeaderboardSeason(ctx, user) {
       const player = topSeason[i];
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
-      const seasonMC = player.miningStats?.seasonMinedMC || 0;
+      const seasonStars = player.miningStats?.seasonMinedStars || 0;
       const seasonStars = player.miningStats?.seasonMinedStars || 0;
       message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
-      message += `   💎 ${formatNumber(seasonMC)} MC | ⭐ ${formatNumber(seasonStars)} Stars\n`;
+      message += `   💎 ${formatNumber(seasonStars)} Stars | ⭐ ${formatNumber(seasonStars)} Stars\n`;
     }
     
     message += `\n💡 *Награды за сезон:*\n`;
-    message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnumCoins)} MC + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
-    message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnumCoins)} MC + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
-    message += `└ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnumCoins)} MC + ${config.SEASON_REWARDS.top10.stars} ⭐`;
+    message += `├ 🥇 1 место: ${formatNumber(config.SEASON_REWARDS.top1.magnuStarsoins)} Stars + ${config.SEASON_REWARDS.top1.stars} ⭐\n`;
+    message += `├ 🥈 2-3 место: ${formatNumber(config.SEASON_REWARDS.top3.magnuStarsoins)} Stars + ${config.SEASON_REWARDS.top3.stars} ⭐\n`;
+    message += `└ 🥉 4-10 место: ${formatNumber(config.SEASON_REWARDS.top10.magnuStarsoins)} Stars + ${config.SEASON_REWARDS.top10.stars} ⭐`;
     
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
@@ -3750,7 +3750,7 @@ async function showWithdrawalMenu(ctx, user) {
   
   const keyboard = Markup.inlineKeyboard([
     [
-      Markup.button.callback('💰 Вывести Magnum Coins', 'withdrawal_mc'),
+      Markup.button.callback('💰 Вывести Stars', 'withdrawal_Stars'),
       Markup.button.callback('⭐ Вывести Stars', 'withdrawal_stars')
     ],
     [
@@ -3763,13 +3763,13 @@ async function showWithdrawalMenu(ctx, user) {
   const message = 
     `💰 *Вывод средств*\n\n` +
     `💎 *Доступно для вывода:*\n` +
-    `├ Magnum Coins: ${formatNumber(user.magnumCoins)}\n` +
+    `├ Stars: ${formatNumber(user.magnuStarsoins)}\n` +
     `└ Stars: ${formatNumber(user.stars)}\n\n` +
     `📊 *Статистика выводов:*\n` +
     `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
-    `└ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Magnum Coins\n\n` +
+    `└ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Stars\n\n` +
     `💡 *Информация:*\n` +
-    `├ 🚧 Вывод MC: в разработке\n` +
+    `├ 🚧 Вывод Stars: в разработке\n` +
           `├ Минимальная сумма Stars: 50 Stars\n` +
     `├ Комиссия: 5%\n` +
     `└ Обработка: до 24 часов\n\n` +
@@ -3857,9 +3857,9 @@ async function updateMinerMenu(ctx, user) {
     `📈 *Уровень:* ${miner.level || 1}\n` +
     `⚡ *Эффективность:* ${efficiency}x\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
-    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Magnum Coins\n` +
-    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Magnum Coins\n` +
-    `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Magnum Coins${lastRewardText}\n\n` +
+    `💰 *Награда/минуту:* ${formatNumber(rewardPerMinute)} Stars\n` +
+    `💰 *Награда/час:* ${formatNumber(rewardPerHour)} Stars\n` +
+    `💎 *Всего добыто:* ${formatNumber(miner.totalMined || 0)} Stars${lastRewardText}\n\n` +
     `🎯 Выберите действие:`;
   
     log(`📝 Отправка обновленного меню майнера для пользователя ${user.id}`);
@@ -3948,12 +3948,12 @@ function startBonusCountdown(ctx, user, remainingSeconds) {
         const message = 
           `🎁 *Ежедневный бонус*\n\n` +
           `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-          `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
-          `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Magnum Coins\n` +
-          `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
+          `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
+          `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
+          `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
           `🔥 *Текущая серия:* ${bonus.streak} дней\n` +
           `📊 *Всего получено:* ${bonus.totalClaimed || 0} бонусов\n` +
-          `💎 *Всего заработано:* ${formatNumber(bonus.totalEarned || 0)} Magnum Coins\n\n` +
+          `💎 *Всего заработано:* ${formatNumber(bonus.totalEarned || 0)} Stars\n\n` +
           `🎯 Выберите действие:`;
         
         await ctx.editMessageText(message, {
@@ -4310,7 +4310,7 @@ async function showPromocodeMenu(ctx, user) {
       `🔑 *Ключи*\n\n` +
       `Введите ключ и получите ценные награды!\n` +
       `Каждый ключ открывает сундук случайного уровня:\n` +
-      `• 🟢 Обычные — Magnum Coins, Stars\n` +
+      `• 🟢 Обычные — Stars, Stars\n` +
       `• 🔵 Редкие — Майнеры, бустеры к майнингу\n` +
       `• 🟣 Эпические — Уникальные титулы, повышенные множители\n` +
       `• 🟡 Легендарные — Эксклюзивные наборы (Coins + Stars + Майнеры + Титул)\n\n` +
@@ -4374,9 +4374,9 @@ async function showBonusMenu(ctx, user) {
   const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
-    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Magnum Coins\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
+    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
     `📊 *Текущая серия:* ${bonus.streak} дней\n` +
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
@@ -4431,9 +4431,9 @@ async function updateBonusMenu(ctx, user) {
   const message = 
     `🎁 *Ежедневный бонус*\n\n` +
     `⏰ *Статус:* ${canClaim ? '🟢 Доступен' : '🔴 Кулдаун'}\n` +
-    `💰 *Базовая награда:* ${formatNumber(baseReward)} Magnum Coins\n` +
-    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Magnum Coins\n` +
-    `💎 *Итого награда:* ${formatNumber(totalReward)} Magnum Coins\n` +
+    `💰 *Базовая награда:* ${formatNumber(baseReward)} Stars\n` +
+    `🔥 *Бонус серии:* +${formatNumber(streakBonus)} Stars\n` +
+    `💎 *Итого награда:* ${formatNumber(totalReward)} Stars\n` +
     `📊 *Текущая серия:* ${bonus.streak} дней\n` +
     `🏆 *Максимальная серия:* ${bonus.maxStreak} дней\n\n` +
     `🎯 Выберите действие:`;
@@ -4565,8 +4565,8 @@ async function showBonusStats(ctx, user) {
       `📊 *Статистика бонусов*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Получено бонусов: \`${claimedCount}\`\n` +
-      `├ Всего заработано: \`${formatNumber(totalEarned)}\` Magnum Coins\n` +
-      `├ Средняя награда: \`${formatNumber(averageReward)}\` Magnum Coins\n` +
+      `├ Всего заработано: \`${formatNumber(totalEarned)}\` Stars\n` +
+      `├ Средняя награда: \`${formatNumber(averageReward)}\` Stars\n` +
       `└ Максимальная серия: \`${maxStreak}\` дней\n\n` +
       `🔥 *Текущая серия:*\n` +
       `├ Активная серия: \`${currentStreak}\` дней\n` +
@@ -4733,15 +4733,15 @@ async function showAdminStats(ctx, user) {
     });
     
     // Статистика по валютам
-    const totalMagnumCoins = await db.collection('users').aggregate([
-      { $group: { _id: null, total: { $sum: '$magnumCoins' } } }
+    const totalMagnuStarsoins = await db.collection('users').aggregate([
+      { $group: { _id: null, total: { $sum: '$magnuStarsoins' } } }
     ]).toArray();
     
     const totalStars = await db.collection('users').aggregate([
       { $group: { _id: null, total: { $sum: '$stars' } } }
     ]).toArray();
     
-    const totalMagnum = totalMagnumCoins.length > 0 ? totalMagnumCoins[0].total : 0;
+    const totalMagnum = totalMagnuStarsoins.length > 0 ? totalMagnuStarsoins[0].total : 0;
     const totalStarsAmount = totalStars.length > 0 ? totalStars[0].total : 0;
     
     const keyboard = Markup.inlineKeyboard([
@@ -4755,7 +4755,7 @@ async function showAdminStats(ctx, user) {
       `├ Активных за неделю: \`${activeUsers}\`\n` +
       `└ Новых за день: \`${newUsersToday}\`\n\n` +
       `💰 *Экономика:*\n` +
-      `├ Всего Magnum Coins: \`${formatNumber(totalMagnum)}\`\n` +
+      `├ Всего Stars: \`${formatNumber(totalMagnum)}\`\n` +
       `└ Всего Stars: \`${formatNumber(totalStarsAmount)}\`\n\n` +
       `📈 *Активность:*\n` +
       `├ Средняя активность: \`${Math.round((activeUsers / totalUsers) * 100)}%\`\n` +
@@ -4816,8 +4816,8 @@ async function showAdminBalance(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('➕ Добавить Magnum Coins', 'admin_add_magnum'),
-        Markup.button.callback('➖ Убрать Magnum Coins', 'admin_remove_magnum')
+        Markup.button.callback('➕ Добавить Stars', 'admin_add_magnum'),
+        Markup.button.callback('➖ Убрать Stars', 'admin_remove_magnum')
       ],
       [
         Markup.button.callback('➕ Добавить Stars', 'admin_add_stars'),
@@ -4833,8 +4833,8 @@ async function showAdminBalance(ctx, user) {
     const message = 
       `💰 *Управление балансами*\n\n` +
       `🔧 *Доступные действия:*\n` +
-      `├ ➕ Добавить Magnum Coins - пополнить баланс\n` +
-      `├ ➖ Убрать Magnum Coins - списать средства\n` +
+      `├ ➕ Добавить Stars - пополнить баланс\n` +
+      `├ ➖ Убрать Stars - списать средства\n` +
       `├ ➕ Добавить Stars - выдать звезды\n` +
       `├ ➖ Убрать Stars - списать звезды\n` +
       `├ 💰 Массовая выдача - всем пользователям\n` +
@@ -4860,7 +4860,7 @@ async function showAdminReserve(ctx, user) {
     
     // Получаем текущий резерв
     const reserve = await db.collection('reserve').findOne({ currency: 'main' });
-    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
     // Получаем текущий курс обмена
@@ -4868,8 +4868,8 @@ async function showAdminReserve(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('➕ Добавить Magnum Coins', 'admin_reserve_add_mc'),
-        Markup.button.callback('➖ Убрать Magnum Coins', 'admin_reserve_remove_mc')
+        Markup.button.callback('➕ Добавить Stars', 'admin_reserve_add_Stars'),
+        Markup.button.callback('➖ Убрать Stars', 'admin_reserve_remove_Stars')
       ],
       [
         Markup.button.callback('➕ Добавить Stars', 'admin_reserve_add_stars'),
@@ -4885,12 +4885,12 @@ async function showAdminReserve(ctx, user) {
     const message = 
       `🏦 *Управление резервом биржи*\n\n` +
       `💰 *Текущий резерв:*\n` +
-      `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
+      `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `💱 *Текущий курс обмена:*\n` +
       `├ 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
-      `├ 100 Magnum Coins = ${(100 * exchangeRate).toFixed(4)} Stars\n` +
-      `└ Соотношение резервов: ${(magnumCoinsReserve / starsReserve).toFixed(4)}\n\n` +
+      `├ 100 Stars = ${(100 * exchangeRate).toFixed(4)} Stars\n` +
+      `└ Соотношение резервов: ${(magnuStarsoinsReserve / starsReserve).toFixed(4)}\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -5417,7 +5417,7 @@ async function showAdminAddExperience(ctx, user) {
 }
 
 // Функции обработки управления резервом
-async function handleAdminAddReserveMC(ctx, user, text) {
+async function handleAdminAddReserveStars(ctx, user, text) {
   try {
     const amount = parseFloat(text);
     
@@ -5430,7 +5430,7 @@ async function handleAdminAddReserveMC(ctx, user, text) {
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
-        $inc: { magnumCoins: amount },
+        $inc: { magnuStarsoins: amount },
         $set: { updatedAt: new Date() }
       },
       { upsert: true }
@@ -5448,11 +5448,11 @@ async function handleAdminAddReserveMC(ctx, user, text) {
       type: 'rate_update',
       rate: newRate,
       timestamp: new Date(),
-      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      magnuStarsoinsReserve: updatedReserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS,
       starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
       reason: 'admin_reserve_change',
       adminId: user.id,
-      changeType: 'add_mc',
+      changeType: 'add_Stars',
       changeAmount: amount
     });
     
@@ -5469,9 +5469,9 @@ async function handleAdminAddReserveMC(ctx, user, text) {
     ]);
     
     await ctx.reply(
-      `✅ *Magnum Coins добавлены в резерв!*\n\n` +
-      `💰 Добавлено: \`${formatNumber(amount)}\` Magnum Coins\n` +
-      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
+      `✅ *Stars добавлены в резерв!*\n\n` +
+      `💰 Добавлено: \`${formatNumber(amount)}\` Stars\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 Stars\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -5479,13 +5479,13 @@ async function handleAdminAddReserveMC(ctx, user, text) {
       }
     );
     
-    console.log(`✅ Админ ${user.id} добавил ${amount} Magnum Coins в резерв`);
+    console.log(`✅ Админ ${user.id} добавил ${amount} Stars в резерв`);
   } catch (error) {
-    logError(error, `Добавление Magnum Coins в резерв админом ${user.id}`);
-    await ctx.reply('❌ Ошибка добавления Magnum Coins в резерв.');
+    logError(error, `Добавление Stars в резерв админом ${user.id}`);
+    await ctx.reply('❌ Ошибка добавления Stars в резерв.');
   }
 }
-async function handleAdminRemoveReserveMC(ctx, user, text) {
+async function handleAdminRemoveReserveStars(ctx, user, text) {
   try {
     const amount = parseFloat(text);
     
@@ -5496,10 +5496,10 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
     
     // Проверяем текущий резерв
     const reserve = await db.collection('reserve').findOne({ currency: 'main' });
-    const currentReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const currentReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     
     if (amount > currentReserve) {
-      await ctx.reply(`❌ Недостаточно Magnum Coins в резерве. Доступно: ${formatNumber(currentReserve)}`);
+      await ctx.reply(`❌ Недостаточно Stars в резерве. Доступно: ${formatNumber(currentReserve)}`);
       return;
     }
     
@@ -5507,7 +5507,7 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
-        $inc: { magnumCoins: -amount },
+        $inc: { magnuStarsoins: -amount },
         $set: { updatedAt: new Date() }
       }
     );
@@ -5516,7 +5516,7 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
     await db.collection('systemStats').updateOne(
       { type: 'global' },
       { 
-        $inc: { totalMagnumCoinsSpent: amount },
+        $inc: { totalMagnuStarsoinsSpent: amount },
         $set: { updatedAt: new Date() }
       },
       { upsert: true }
@@ -5534,11 +5534,11 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
       type: 'rate_update',
       rate: newRate,
       timestamp: new Date(),
-      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      magnuStarsoinsReserve: updatedReserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS,
       starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
       reason: 'admin_reserve_change',
       adminId: user.id,
-      changeType: 'remove_mc',
+      changeType: 'remove_Stars',
       changeAmount: amount
     });
     
@@ -5555,9 +5555,9 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
     ]);
     
     await ctx.reply(
-      `✅ *Magnum Coins удалены из резерва!*\n\n` +
-      `💰 Удалено: \`${formatNumber(amount)}\` Magnum Coins\n` +
-      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
+      `✅ *Stars удалены из резерва!*\n\n` +
+      `💰 Удалено: \`${formatNumber(amount)}\` Stars\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 Stars\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -5565,10 +5565,10 @@ async function handleAdminRemoveReserveMC(ctx, user, text) {
       }
     );
     
-    console.log(`✅ Админ ${user.id} удалил ${amount} Magnum Coins из резерва`);
+    console.log(`✅ Админ ${user.id} удалил ${amount} Stars из резерва`);
   } catch (error) {
-    logError(error, `Удаление Magnum Coins из резерва админом ${user.id}`);
-    await ctx.reply('❌ Ошибка удаления Magnum Coins из резерва.');
+    logError(error, `Удаление Stars из резерва админом ${user.id}`);
+    await ctx.reply('❌ Ошибка удаления Stars из резерва.');
   }
 }
 
@@ -5603,7 +5603,7 @@ async function handleAdminAddReserveStars(ctx, user, text) {
       type: 'rate_update',
       rate: newRate,
       timestamp: new Date(),
-      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      magnuStarsoinsReserve: updatedReserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS,
       starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
       reason: 'admin_reserve_change',
       adminId: user.id,
@@ -5626,7 +5626,7 @@ async function handleAdminAddReserveStars(ctx, user, text) {
     await ctx.reply(
       `✅ *Stars добавлены в резерв!*\n\n` +
       `⭐ Добавлено: \`${formatNumber(amount)}\` Stars\n` +
-      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 Stars\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -5679,7 +5679,7 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
       type: 'rate_update',
       rate: newRate,
       timestamp: new Date(),
-      magnumCoinsReserve: updatedReserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      magnuStarsoinsReserve: updatedReserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS,
       starsReserve: updatedReserve?.stars || config.INITIAL_RESERVE_STARS,
       reason: 'admin_reserve_change',
       adminId: user.id,
@@ -5702,7 +5702,7 @@ async function handleAdminRemoveReserveStars(ctx, user, text) {
     await ctx.reply(
       `✅ *Stars удалены из резерва!*\n\n` +
       `⭐ Удалено: \`${formatNumber(amount)}\` Stars\n` +
-      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 MC\n\n` +
+      `📊 Новый курс: \`${newRate.toFixed(6)}\` Stars за 1 Stars\n\n` +
       `💱 Курс обмена автоматически пересчитан.`,
       {
         parse_mode: 'Markdown',
@@ -5746,9 +5746,9 @@ async function handleAdminSetCommission(ctx, user, text) {
       `✅ *Комиссия обмена обновлена!*\n\n` +
       `💸 Новая комиссия: \`${commission}%\`\n\n` +
       `📊 *Примеры обмена:*\n` +
-      `├ 100 MC → ${((100 - (100 * commission / 100)) * 0.001).toFixed(4)} Stars\n` +
-      `├ 500 MC → ${((500 - (500 * commission / 100)) * 0.001).toFixed(4)} Stars\n` +
-      `└ 1000 MC → ${((1000 - (1000 * commission / 100)) * 0.001).toFixed(4)} Stars\n\n` +
+      `├ 100 Stars → ${((100 - (100 * commission / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `├ 500 Stars → ${((500 - (500 * commission / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `└ 1000 Stars → ${((1000 - (1000 * commission / 100)) * 0.001).toFixed(4)} Stars\n\n` +
       `💡 Комиссия будет применяться ко всем новым обменам.`,
       {
         parse_mode: 'Markdown',
@@ -5836,8 +5836,8 @@ async function showAdminSettings(ctx, user) {
       `⚙️ *Настройки бота*\n\n` +
       `🔧 *Текущие настройки:*\n` +
 
-      `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
-      `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins/мин\n` +
+      `├ 🎁 Базовый бонус: \`${config.DAILY_BONUS_BASE}\` Stars\n` +
+      `├ ⛏️ Награда майнера: \`${config.MINER_REWARD_PER_MINUTE}\` Stars/мин\n` +
       `├ 👥 Реферальная награда: \`${config.REFERRAL_REWARD}\` Stars\n` +
       `├ 💸 Комиссия обмена: \`${config.EXCHANGE_COMMISSION}%\`\n` +
       `└ 📢 Обязательный канал: \`${config.REQUIRED_CHANNEL || 'Не настроен'}\`\n\n` +
@@ -5877,15 +5877,15 @@ async function showAdminExchangeCommission(ctx, user) {
       `💸 *Комиссия обмена*\n\n` +
       `💰 *Текущие настройки:*\n` +
       `├ Текущая комиссия: \`${config.EXCHANGE_COMMISSION}%\`\n` +
-      `├ Комиссия с 100 MC: \`${(100 * config.EXCHANGE_COMMISSION / 100).toFixed(2)}\` Magnum Coins\n` +
-      `└ Комиссия с 1000 MC: \`${(1000 * config.EXCHANGE_COMMISSION / 100).toFixed(2)}\` Magnum Coins\n\n` +
+      `├ Комиссия с 100 Stars: \`${(100 * config.EXCHANGE_COMMISSION / 100).toFixed(2)}\` Stars\n` +
+      `└ Комиссия с 1000 Stars: \`${(1000 * config.EXCHANGE_COMMISSION / 100).toFixed(2)}\` Stars\n\n` +
       `📊 *Примеры обмена:*\n` +
-      `├ 100 MC → ${((100 - (100 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n` +
-      `├ 500 MC → ${((500 - (500 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n` +
-      `└ 1000 MC → ${((1000 - (1000 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n\n` +
+      `├ 100 Stars → ${((100 - (100 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `├ 500 Stars → ${((500 - (500 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n` +
+      `└ 1000 Stars → ${((1000 - (1000 * config.EXCHANGE_COMMISSION / 100)) * 0.001).toFixed(4)} Stars\n\n` +
       `💡 *Информация:*\n` +
       `├ Комиссия взимается с каждой операции обмена\n` +
-      `├ Комиссия остается в резерве Magnum Coins\n` +
+      `├ Комиссия остается в резерве Stars\n` +
       `└ Комиссия влияет на курс обмена для пользователей\n\n` +
       `🎯 Выберите действие:`;
     
@@ -6015,15 +6015,15 @@ async function showAdminDailyBonus(ctx, user) {
     const message = 
       `🎁 *Ежедневный бонус*\n\n` +
       `💰 *Текущие настройки:*\n` +
-      `├ Базовая награда: \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n` +
-      `├ Бонус за серию: \`+0.5\` Magnum Coins за день\n` +
-      `├ Максимальный бонус серии: \`5\` Magnum Coins\n` +
-      `└ Максимальная награда: \`${config.DAILY_BONUS_BASE + 5}\` Magnum Coins\n\n` +
+      `├ Базовая награда: \`${config.DAILY_BONUS_BASE}\` Stars\n` +
+      `├ Бонус за серию: \`+0.5\` Stars за день\n` +
+      `├ Максимальный бонус серии: \`5\` Stars\n` +
+      `└ Максимальная награда: \`${config.DAILY_BONUS_BASE + 5}\` Stars\n\n` +
       `📊 *Статистика пользователя:*\n` +
       `├ Текущая серия: \`${user.dailyBonus?.streak || 0}\` дней\n` +
       `├ Максимальная серия: \`${user.dailyBonus?.maxStreak || 0}\` дней\n` +
       `├ Получено бонусов: \`${user.dailyBonus?.claimedCount || 0}\`\n` +
-      `└ Заработано бонусами: \`${formatNumber(user.dailyBonus?.totalEarned || 0)}\` Magnum Coins\n\n` +
+      `└ Заработано бонусами: \`${formatNumber(user.dailyBonus?.totalEarned || 0)}\` Stars\n\n` +
       `🎯 Выберите настройку для изменения:`;
     
     await ctx.editMessageText(message, {
@@ -6105,15 +6105,15 @@ async function showAdminMinerSettings(ctx, user) {
     const message = 
       `⛏️ *Настройки майнера*\n\n` +
       `💰 *Текущие настройки:*\n` +
-      `├ Базовая награда за минуту: \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins\n` +
+      `├ Базовая награда за минуту: \`${config.MINER_REWARD_PER_MINUTE}\` Stars\n` +
       `├ Базовая эффективность: \`1.0\`\n` +
       `├ Максимальная эффективность: \`5.0\`\n` +
-      `└ Максимальная базовая награда: \`${config.MINER_REWARD_PER_MINUTE * 5}\` Magnum Coins/мин\n\n` +
+      `└ Максимальная базовая награда: \`${config.MINER_REWARD_PER_MINUTE * 5}\` Stars/мин\n\n` +
       `📊 *Статистика пользователя:*\n` +
       `├ Уровень майнера: \`${user.miner?.level || 1}\`\n` +
       `├ Эффективность: \`${user.miner?.efficiency || 1.0}\`\n` +
       `├ Статус: ${user.miner?.active ? '🟢 Активен' : '🔴 Неактивен'}\n` +
-      `├ Всего добыто: \`${formatNumber(user.miner?.totalMined || 0)}\` Magnum Coins\n` +
+      `├ Всего добыто: \`${formatNumber(user.miner?.totalMined || 0)}\` Stars\n` +
       `└ Последняя награда: ${user.miner?.lastReward ? user.miner.lastReward.toLocaleString() : 'Никогда'}\n\n` +
       `🎯 Выберите настройку для изменения:`;
     
@@ -6148,13 +6148,13 @@ async function showAdminReferralSettings(ctx, user) {
       `👥 *Реферальная система*\n\n` +
       `💰 *Текущие настройки:*\n` +
       `├ Награда за реферала: \`${config.REFERRAL_REWARD}\` Stars\n` +
-      `├ Бонус за 5 рефералов: \`50\` Magnum Coins\n` +
-      `├ Бонус за 10 рефералов: \`100\` Magnum Coins\n` +
-      `├ Бонус за 25 рефералов: \`250\` Magnum Coins\n` +
-      `└ Бонус за 50 рефералов: \`500\` Magnum Coins\n\n` +
+      `├ Бонус за 5 рефералов: \`50\` Stars\n` +
+      `├ Бонус за 10 рефералов: \`100\` Stars\n` +
+      `├ Бонус за 25 рефералов: \`250\` Stars\n` +
+      `└ Бонус за 50 рефералов: \`500\` Stars\n\n` +
       `📊 *Статистика пользователя:*\n` +
       `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
-      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Magnum Coins\n` +
+      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n` +
       `├ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n` +
       `└ Реферальный код: \`${user.referralCode}\`\n\n` +
       `🎯 Выберите настройку для изменения:`;
@@ -6217,14 +6217,14 @@ async function showAdminTopUsers(ctx, user) {
     
     // Получаем топ пользователей по разным критериям
     const topByLevel = await db.collection('users').find().sort({ level: -1 }).limit(10).toArray();
-    const topByMagnumCoins = await db.collection('users').find().sort({ magnumCoins: -1 }).limit(10).toArray();
+    const topByMagnuStarsoins = await db.collection('users').find().sort({ magnuStarsoins: -1 }).limit(10).toArray();
     const topByStars = await db.collection('users').find().sort({ stars: -1 }).limit(10).toArray();
     const topByReferrals = await db.collection('users').find().sort({ referralsCount: -1 }).limit(10).toArray();
     
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback('⭐ По уровню', 'admin_top_level'),
-        Markup.button.callback('🪙 По Magnum Coins', 'admin_top_magnum')
+        Markup.button.callback('🪙 По Stars', 'admin_top_magnum')
       ],
       [
         Markup.button.callback('💎 По Stars', 'admin_top_stars'),
@@ -6241,9 +6241,9 @@ async function showAdminTopUsers(ctx, user) {
       message += `${index + 1}. ID: \`${user.id}\` - Уровень: \`${user.level}\`\n`;
     });
     
-    message += `\n🪙 *Топ по Magnum Coins:*\n`;
-    topByMagnumCoins.forEach((user, index) => {
-      message += `${index + 1}. ID: \`${user.id}\` - \`${formatNumber(user.magnumCoins)}\` MC\n`;
+    message += `\n🪙 *Топ по Stars:*\n`;
+    topByMagnuStarsoins.forEach((user, index) => {
+      message += `${index + 1}. ID: \`${user.id}\` - \`${formatNumber(user.magnuStarsoins)}\` Stars\n`;
     });
     
     message += `\n🎯 Выберите категорию для подробного просмотра:`;
@@ -6437,12 +6437,12 @@ async function processMinerRewards() {
         
         console.log(`👤 Пользователь ${userWithMining.id}:`, {
           miners: userWithMining.miners?.length || 0,
-          totalSpeedMC: totalSpeed.magnumCoins,
+          totalSpeedStars: totalSpeed.magnuStarsoins,
           totalSpeedStars: totalSpeed.stars,
           lastReward: userWithMining.miningStats?.lastReward
         });
         
-        const totalSpeedSum = totalSpeed.magnumCoins + totalSpeed.stars;
+        const totalSpeedSum = totalSpeed.magnuStarsoins + totalSpeed.stars;
         if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
@@ -6458,11 +6458,11 @@ async function processMinerRewards() {
           // Если у пользователя нет lastReward, устанавливаем его и начисляем награду
           if (!userWithMining.miningStats.lastReward) {
             console.log(`🆕 Первая награда для пользователя ${userWithMining.id}`);
-            const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.magnuStarsoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             console.log(`💰 Первые награды для пользователя ${userWithMining.id}:`, {
-              rewardMC,
+              rewardStars,
               rewardStars,
               multiplier: currentSeason.multiplier
             });
@@ -6472,13 +6472,13 @@ async function processMinerRewards() {
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnumCoins: rewardMC,
+                  magnuStarsoins: rewardStars,
                   stars: rewardStars,
-                  'miningStats.totalMinedMC': rewardMC,
                   'miningStats.totalMinedStars': rewardStars,
-                  'miningStats.seasonMinedMC': rewardMC,
+                  'miningStats.totalMinedStars': rewardStars,
                   'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.passiveRewards': rewardMC + rewardStars
+                  'miningStats.seasonMinedStars': rewardStars,
+                  'miningStats.passiveRewards': rewardStars + rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -6498,11 +6498,11 @@ async function processMinerRewards() {
             processedCount++;
             console.log(`✅ Первые награды начислены пользователю ${userWithMining.id}`);
           } else if (timeDiff >= config.MINING_REWARD_INTERVAL) {
-            const rewardMC = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
+            const rewardStars = totalSpeed.magnuStarsoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             console.log(`💰 Награды для пользователя ${userWithMining.id}:`, {
-              rewardMC,
+              rewardStars,
               rewardStars,
               multiplier: currentSeason.multiplier
             });
@@ -6512,13 +6512,13 @@ async function processMinerRewards() {
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnumCoins: rewardMC,
+                  magnuStarsoins: rewardStars,
                   stars: rewardStars,
-                  'miningStats.totalMinedMC': rewardMC,
                   'miningStats.totalMinedStars': rewardStars,
-                  'miningStats.seasonMinedMC': rewardMC,
+                  'miningStats.totalMinedStars': rewardStars,
                   'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.passiveRewards': rewardMC + rewardStars
+                  'miningStats.seasonMinedStars': rewardStars,
+                  'miningStats.passiveRewards': rewardStars + rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -6639,7 +6639,7 @@ async function getServerMinerStats() {
 async function forceSaveUser(user) {
   try {
     const updateData = {
-      magnumCoins: user.magnumCoins,
+      magnuStarsoins: user.magnuStarsoins,
       stars: user.stars,
       level: user.level,
       experience: user.experience,
@@ -6796,11 +6796,11 @@ async function showExchangeMenu(ctx, user) {
     
     // Получаем текущий курс обмена
     const exchangeRate = await calculateExchangeRate();
-    const maxExchange = Math.floor(user.magnumCoins);
+    const maxExchange = Math.floor(user.magnuStarsoins);
     
     // Получаем информацию о резерве
     const reserve = await db.collection('reserve').findOne({ currency: 'main' });
-    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
 
@@ -6836,8 +6836,8 @@ async function showExchangeMenu(ctx, user) {
     
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🪙 Ввести сумму MC → Stars', 'exchange_custom_mc'),
-        Markup.button.callback('⭐ Ввести сумму Stars → MC', 'exchange_custom_stars')
+        Markup.button.callback('🪙 Ввести сумму Stars → Stars', 'exchange_custom_Stars'),
+        Markup.button.callback('⭐ Ввести сумму Stars → Stars', 'exchange_custom_stars')
       ],
       [
         Markup.button.callback('📊 Статистика обменов', 'exchange_stats'),
@@ -6860,7 +6860,7 @@ async function showExchangeMenu(ctx, user) {
     const message = 
       `📈 *Magnum Exchange*\n\n` +
       `💰 *Ваши балансы:*\n` +
-      `├ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n` +
+      `├ 🪙 Stars: \`${formatNumber(user.magnuStarsoins)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `📊 *Текущий курс:*\n` +
       `├ ${priceChangeIcon} 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
@@ -6868,12 +6868,12 @@ async function showExchangeMenu(ctx, user) {
       `├ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n` +
       `└ 📅 Обновлено: ${new Date().toLocaleTimeString('ru-RU')}\n\n` +
       `🏦 *Резерв биржи:*\n` +
-      `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
+      `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `📈 *Рыночные данные:*\n` +
-      `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` MC\n` +
+      `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` Stars\n` +
       `├ Всего обменов: \`${user.exchange?.totalExchanges || 0}\`\n` +
-      `└ Ликвидность: ${Math.min(100, ((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
+      `└ Ликвидность: ${Math.min(100, ((magnuStarsoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100)).toFixed(1)}%\n\n` +
 
       `🎯 Выберите сумму для обмена или действие:`;
     
@@ -7012,27 +7012,27 @@ async function showExchangeHistory(ctx, user) {
       
       userHistory.forEach((exchange, index) => {
         const date = new Date(exchange.timestamp || new Date()).toLocaleString('ru-RU');
-        const magnumCoinsAmount = exchange.magnumCoinsAmount || 0;
+        const magnuStarsoinsAmount = exchange.magnuStarsoinsAmount || 0;
         const starsReceived = exchange.starsReceived || 0;
         const commission = exchange.commission || 0;
-        const profit = starsReceived - (magnumCoinsAmount * 0.001); // Примерная прибыль
+        const profit = starsReceived - (magnuStarsoinsAmount * 0.001); // Примерная прибыль
         const profitIcon = profit >= 0 ? '📈' : '📉';
         
         message += `${index + 1}. ${date}\n`;
-        message += `├ 💱 ${magnumCoinsAmount} MC → ${starsReceived.toFixed(6)} Stars\n`;
-        message += `├ 💸 Комиссия: ${commission.toFixed(2)} MC\n`;
+        message += `├ 💱 ${magnuStarsoinsAmount} Stars → ${starsReceived.toFixed(6)} Stars\n`;
+        message += `├ 💸 Комиссия: ${commission.toFixed(2)} Stars\n`;
         message += `└ ${profitIcon} Прибыль: ${profit >= 0 ? '+' : ''}${profit.toFixed(6)} Stars\n\n`;
       });
       
       // Общая статистика
-      const totalExchanged = userHistory.reduce((sum, h) => sum + (h.magnumCoinsAmount || 0), 0);
+      const totalExchanged = userHistory.reduce((sum, h) => sum + (h.magnuStarsoinsAmount || 0), 0);
       const totalStars = userHistory.reduce((sum, h) => sum + (h.starsReceived || 0), 0);
       const totalCommission = userHistory.reduce((sum, h) => sum + (h.commission || 0), 0);
       
       message += `📊 *Общая статистика:*\n`;
-      message += `├ 💱 Всего обменено: \`${formatNumber(totalExchanged)}\` MC\n`;
+      message += `├ 💱 Всего обменено: \`${formatNumber(totalExchanged)}\` Stars\n`;
       message += `├ ⭐ Получено Stars: \`${formatNumber(totalStars)}\`\n`;
-      message += `└ 💸 Уплачено комиссий: \`${formatNumber(totalCommission)}\` MC\n`;
+      message += `└ 💸 Уплачено комиссий: \`${formatNumber(totalCommission)}\` Stars\n`;
     } else {
       message += `❌ У вас пока нет истории обменов\n`;
       message += `💡 Совершите первый обмен, чтобы увидеть статистику!`;
@@ -7073,12 +7073,12 @@ async function showExchangeSettings(ctx, user) {
       `└ Ошибки обмена: ${user.exchangeSettings?.errorAlerts ? '✅' : '❌'}\n\n` +
       `📊 *Автообмен:*\n` +
       `├ Автоматический обмен: ${user.exchangeSettings?.autoExchange ? '✅' : '❌'}\n` +
-      `├ Лимит автобмена: \`${user.exchangeSettings?.autoLimit || 0}\` MC\n` +
+      `├ Лимит автобмена: \`${user.exchangeSettings?.autoLimit || 0}\` Stars\n` +
       `└ Целевой курс: \`${user.exchangeSettings?.targetRate || 0}\` Stars\n\n` +
       `🎯 *Лимиты:*\n` +
-      `├ Максимум за раз: \`${user.exchangeSettings?.maxAmount || 'Не ограничено'}\` MC\n` +
-      `├ Минимум за раз: \`${user.exchangeSettings?.minAmount || 1}\` MC\n` +
-      `└ Дневной лимит: \`${user.exchangeSettings?.dailyLimit || 'Не ограничено'}\` MC\n\n` +
+      `├ Максимум за раз: \`${user.exchangeSettings?.maxAmount || 'Не ограничено'}\` Stars\n` +
+      `├ Минимум за раз: \`${user.exchangeSettings?.minAmount || 1}\` Stars\n` +
+      `└ Дневной лимит: \`${user.exchangeSettings?.dailyLimit || 'Не ограничено'}\` Stars\n\n` +
       `🔒 *Безопасность:*\n` +
       `├ Подтверждение обменов: ${user.exchangeSettings?.confirmExchanges ? '✅' : '❌'}\n` +
       `├ 2FA для обменов: ${user.exchangeSettings?.require2FA ? '✅' : '❌'}\n` +
@@ -7114,15 +7114,15 @@ async function showExchangeNews(ctx, user) {
     
     const currentRate = await calculateExchangeRate();
     const reserve = await db.collection('reserve').findOne({ currency: 'main' });
-    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     
     const message = 
       `📰 *Новости Magnum Exchange*\n\n` +
       `📅 *${new Date().toLocaleDateString('ru-RU')}*\n\n` +
       `📈 *Рыночные новости:*\n` +
       `├ Курс Magnum Coin стабилен\n` +
-      `├ Резерв биржи: \`${formatNumber(magnumCoinsReserve)}\` MC\n` +
-      `└ Ликвидность: ${((magnumCoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100).toFixed(1)}%\n\n` +
+      `├ Резерв биржи: \`${formatNumber(magnuStarsoinsReserve)}\` Stars\n` +
+      `└ Ликвидность: ${((magnuStarsoinsReserve / config.INITIAL_RESERVE_MAGNUM_COINS) * 100).toFixed(1)}%\n\n` +
       `🔔 *Последние обновления:*\n` +
       `├ ✅ Улучшена система безопасности\n` +
       `├ ✅ Добавлены новые функции аналитики\n` +
@@ -7146,11 +7146,11 @@ async function showExchangeNews(ctx, user) {
 
 async function performExchange(ctx, user, amount) {
   try {
-    log(`💱 Попытка обмена ${amount} Magnum Coins для пользователя ${user.id}`);
+    log(`💱 Попытка обмена ${amount} Stars для пользователя ${user.id}`);
     
-    if (amount > user.magnumCoins) {
-      log(`❌ Недостаточно Magnum Coins для пользователя ${user.id}`);
-      await ctx.reply('❌ Недостаточно Magnum Coins для обмена!');
+    if (amount > user.magnuStarsoins) {
+      log(`❌ Недостаточно Stars для пользователя ${user.id}`);
+      await ctx.reply('❌ Недостаточно Stars для обмена!');
       return;
     }
     
@@ -7186,7 +7186,7 @@ async function performExchange(ctx, user, amount) {
       { id: user.id },
       { 
         $inc: { 
-          magnumCoins: -amount,
+          magnuStarsoins: -amount,
           stars: starsToReceive,
           'exchange.totalExchanges': 1,
           'exchange.totalExchanged': amount,
@@ -7199,12 +7199,12 @@ async function performExchange(ctx, user, amount) {
     );
     
     // Обновляем резерв
-    // Комиссия остается в резерве Magnum Coins, а обменная сумма уходит на покупку Stars
+    // Комиссия остается в резерве Stars, а обменная сумма уходит на покупку Stars
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
         $inc: { 
-          magnumCoins: commission, // Только комиссия остается в резерве MC
+          magnuStarsoins: commission, // Только комиссия остается в резерве Stars
           stars: -starsToReceive    // Stars уходят пользователю
         },
         $set: { 
@@ -7216,7 +7216,7 @@ async function performExchange(ctx, user, amount) {
     // Сохраняем историю обмена
     await db.collection('exchangeHistory').insertOne({
       userId: user.id,
-      magnumCoinsAmount: amount,
+      magnuStarsoinsAmount: amount,
       starsReceived: starsToReceive,
       exchangeRate: exchangeRate,
       commission: commission,
@@ -7230,7 +7230,7 @@ async function performExchange(ctx, user, amount) {
       type: 'rate_update',
       rate: exchangeRate,
       timestamp: new Date(),
-      magnumCoinsReserve: reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      magnuStarsoinsReserve: reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS,
       starsReserve: reserve?.stars || config.INITIAL_RESERVE_STARS
     });
     
@@ -7240,10 +7240,10 @@ async function performExchange(ctx, user, amount) {
     // Обновляем прогресс ежедневного задания "Трейдер дня"
     await updateDailyTaskProgress(user, 'daily_exchange', 1);
     
-    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Magnum Coins → ${starsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission})`);
-    log(`💰 Комиссия ${commission} MC добавлена в резерв биржи`);
+    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${amount} Stars → ${starsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission})`);
+    log(`💰 Комиссия ${commission} Stars добавлена в резерв биржи`);
     await ctx.reply(
-      `✅ Обмен выполнен! ${formatNumber(amount)} Magnum Coins → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Magnum Coins (${config.EXCHANGE_COMMISSION}%)`
+      `✅ Обмен выполнен! ${formatNumber(amount)} Stars → ${formatNumber(starsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
     );
     
     // Автоматически обновляем меню биржи после успешного обмена
@@ -7252,14 +7252,14 @@ async function performExchange(ctx, user, amount) {
       await showExchangeMenu(ctx, updatedUser);
     }
   } catch (error) {
-    logError(error, 'Обмен Magnum Coins на Stars');
+    logError(error, 'Обмен Stars на Stars');
     await ctx.reply('❌ Ошибка обмена');
   }
 }
-// Функция для обмена Stars на Magnum Coins
-async function performStarsToMCExchange(ctx, user, starsAmount) {
+// Функция для обмена Stars на Stars
+async function performStarsToStarsExchange(ctx, user, starsAmount) {
   try {
-    log(`💱 Попытка обмена ${starsAmount} Stars на Magnum Coins для пользователя ${user.id}`);
+    log(`💱 Попытка обмена ${starsAmount} Stars на Stars для пользователя ${user.id}`);
     
     if (starsAmount > user.stars) {
       log(`❌ Недостаточно Stars для пользователя ${user.id}`);
@@ -7279,15 +7279,15 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     // Рассчитываем комиссию в Stars
     const commission = (starsAmount * config.EXCHANGE_COMMISSION) / 100;
     const starsAfterCommission = starsAmount - commission;
-    const mcToReceive = starsAfterCommission / exchangeRate;
+    const StarsToReceive = starsAfterCommission / exchangeRate;
     
-    // Проверяем резерв Magnum Coins
+    // Проверяем резерв Stars
     const reserve = await db.collection('reserve').findOne({ currency: 'main' });
-    const availableMC = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const availableStars = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     
-    if (mcToReceive > availableMC) {
-      log(`❌ Недостаточно Magnum Coins в резерве для пользователя ${user.id}`);
-      await ctx.reply('❌ Недостаточно Magnum Coins в резерве для обмена!');
+    if (StarsToReceive > availableStars) {
+      log(`❌ Недостаточно Stars в резерве для пользователя ${user.id}`);
+      await ctx.reply('❌ Недостаточно Stars в резерве для обмена!');
       return;
     }
     
@@ -7298,9 +7298,9 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       { 
         $inc: { 
           stars: -starsAmount,
-          magnumCoins: mcToReceive,
+          magnuStarsoins: StarsToReceive,
           'exchange.totalExchanges': 1,
-          'exchange.totalExchanged': mcToReceive,
+          'exchange.totalExchanged': StarsToReceive,
           'statistics.totalActions': 1
         },
         $set: { 
@@ -7310,13 +7310,13 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     );
     
     // Обновляем резерв
-    // Комиссия остается в резерве Stars, а обменная сумма уходит на покупку Magnum Coins
+    // Комиссия остается в резерве Stars, а обменная сумма уходит на покупку Stars
     await db.collection('reserve').updateOne(
       { currency: 'main' },
       { 
         $inc: { 
           stars: commission, // Только комиссия остается в резерве Stars
-          magnumCoins: -mcToReceive    // Magnum Coins уходят пользователю
+          magnuStarsoins: -StarsToReceive    // Stars уходят пользователю
         },
         $set: { 
           updatedAt: new Date()
@@ -7328,7 +7328,7 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     await db.collection('exchangeHistory').insertOne({
       userId: user.id,
       starsAmount: starsAmount,
-      magnumCoinsReceived: mcToReceive,
+      magnuStarsoinsReceived: StarsToReceive,
       exchangeRate: exchangeRate,
       commission: commission,
       commissionType: 'stars',
@@ -7342,7 +7342,7 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
       type: 'rate_update',
       rate: exchangeRate,
       timestamp: new Date(),
-      magnumCoinsReserve: reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      magnuStarsoinsReserve: reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS,
       starsReserve: reserve?.stars || config.INITIAL_RESERVE_STARS
     });
     
@@ -7352,10 +7352,10 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
     // Обновляем прогресс ежедневного задания "Трейдер дня"
     await updateDailyTaskProgress(user, 'daily_exchange', 1);
     
-    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${starsAmount} Stars → ${mcToReceive} Magnum Coins (курс: ${exchangeRate}, комиссия: ${commission} Stars)`);
+    log(`✅ Обмен успешно выполнен для пользователя ${user.id}: ${starsAmount} Stars → ${StarsToReceive} Stars (курс: ${exchangeRate}, комиссия: ${commission} Stars)`);
     log(`💰 Комиссия ${commission} Stars добавлена в резерв биржи`);
     await ctx.reply(
-      `✅ Обмен выполнен! ${formatNumber(starsAmount)} Stars → ${formatNumber(mcToReceive)} Magnum Coins\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
+      `✅ Обмен выполнен! ${formatNumber(starsAmount)} Stars → ${formatNumber(StarsToReceive)} Stars\n💸 Комиссия: ${formatNumber(commission)} Stars (${config.EXCHANGE_COMMISSION}%)`
     );
     
     // Автоматически обновляем меню биржи после успешного обмена
@@ -7369,10 +7369,10 @@ async function performStarsToMCExchange(ctx, user, starsAmount) {
   }
 }
 
-// Функция для обработки ввода суммы MC для обмена
-async function handleExchangeCustomMC(ctx, user, text) {
+// Функция для обработки ввода суммы Stars для обмена
+async function handleExchangeCustomStars(ctx, user, text) {
   try {
-    log(`🪙 Пользователь ${user.id} вводит сумму MC для обмена: "${text}"`);
+    log(`🪙 Пользователь ${user.id} вводит сумму Stars для обмена: "${text}"`);
     
     const amount = parseFloat(text);
     
@@ -7382,8 +7382,8 @@ async function handleExchangeCustomMC(ctx, user, text) {
       return;
     }
     
-    if (amount > user.magnumCoins) {
-      await ctx.reply(`❌ Недостаточно Magnum Coins! У вас: ${formatNumber(user.magnumCoins)} MC`);
+    if (amount > user.magnuStarsoins) {
+      await ctx.reply(`❌ Недостаточно Stars! У вас: ${formatNumber(user.magnuStarsoins)} Stars`);
       return;
     }
     
@@ -7398,7 +7398,7 @@ async function handleExchangeCustomMC(ctx, user, text) {
     await performExchange(ctx, user, amount);
     
   } catch (error) {
-    logError(error, `Обработка ввода суммы MC для обмена пользователем ${user.id}`);
+    logError(error, `Обработка ввода суммы Stars для обмена пользователем ${user.id}`);
     await ctx.reply('❌ Ошибка обработки суммы. Попробуйте позже.');
   }
 }
@@ -7429,7 +7429,7 @@ async function handleExchangeCustomStars(ctx, user, text) {
     userCache.delete(user.id);
     
     // Выполняем обмен
-    await performStarsToMCExchange(ctx, user, amount);
+    await performStarsToStarsExchange(ctx, user, amount);
     
   } catch (error) {
     logError(error, `Обработка ввода суммы Stars для обмена пользователем ${user.id}`);
@@ -7441,8 +7441,8 @@ async function handleExchangeCustomStars(ctx, user, text) {
 // Функции достижений удалены
 function getAchievementsList(user) {
   // Убеждаемся, что все необходимые поля существуют
-  const farmCount = user.farm?.farmCount || 0;
-  const magnumCoins = user.magnumCoins || 0;
+  const farStarsount = user.farm?.farStarsount || 0;
+  const magnuStarsoins = user.magnuStarsoins || 0;
   const level = user.level || 1;
   const referralsCount = user.referralsCount || 0;
   const dailyStreak = user.dailyBonus?.streak || 0;
@@ -7453,28 +7453,28 @@ function getAchievementsList(user) {
       id: 'first_farm',
       title: '🌾 Первый фарм',
       description: 'Выполните первый фарм',
-      condition: farmCount >= 1,
-      progress: farmCount,
+      condition: farStarsount >= 1,
+      progress: farStarsount,
       target: 1,
-      reward: '10 Magnum Coins'
+      reward: '10 Stars'
     },
     {
       id: 'farm_master',
       title: '👑 Мастер фарма',
       description: 'Выполните 100 фармов',
-      condition: farmCount >= 100,
-      progress: farmCount,
+      condition: farStarsount >= 100,
+      progress: farStarsount,
       target: 100,
-      reward: '500 Magnum Coins'
+      reward: '500 Stars'
     },
     {
       id: 'magnum_collector',
       title: '🪙 Коллекционер Magnum',
-      description: 'Накопите 1000 Magnum Coins',
-      condition: magnumCoins >= 1000,
-      progress: magnumCoins,
+      description: 'Накопите 1000 Stars',
+      condition: magnuStarsoins >= 1000,
+      progress: magnuStarsoins,
       target: 1000,
-      reward: '200 Magnum Coins'
+      reward: '200 Stars'
     },
     {
       id: 'exchange_trader',
@@ -7483,7 +7483,7 @@ function getAchievementsList(user) {
       condition: totalExchanges >= 50,
       progress: totalExchanges,
       target: 50,
-      reward: '300 Magnum Coins'
+      reward: '300 Stars'
     },
     {
       id: 'level_10',
@@ -7492,7 +7492,7 @@ function getAchievementsList(user) {
       condition: level >= 10,
       progress: level,
       target: 10,
-      reward: '100 Magnum Coins'
+      reward: '100 Stars'
     },
     {
       id: 'level_50',
@@ -7501,7 +7501,7 @@ function getAchievementsList(user) {
       condition: level >= 50,
       progress: level,
       target: 50,
-      reward: '1000 Magnum Coins'
+      reward: '1000 Stars'
     },
     {
       id: 'referral_king',
@@ -7510,7 +7510,7 @@ function getAchievementsList(user) {
       condition: referralsCount >= 10,
       progress: referralsCount,
       target: 10,
-      reward: '400 Magnum Coins'
+      reward: '400 Stars'
     },
     {
       id: 'daily_streak',
@@ -7519,7 +7519,7 @@ function getAchievementsList(user) {
       condition: dailyStreak >= 7,
       progress: dailyStreak,
       target: 7,
-      reward: '150 Magnum Coins'
+      reward: '150 Stars'
     }
   ];
 }
@@ -7564,8 +7564,8 @@ async function checkAndUpdateAchievements(user) {
         { id: user.id },
         { 
           $inc: { 
-            magnumCoins: totalReward,
-            totalEarnedMagnumCoins: totalReward,
+            magnuStarsoins: totalReward,
+            totalEarnedMagnuStarsoins: totalReward,
             experience: Math.floor(totalReward * 5),
             achievementsCount: newAchievements.length
           },
@@ -7582,7 +7582,7 @@ async function checkAndUpdateAchievements(user) {
       // Очищаем кеш
       userCache.delete(user.id);
       
-      log(`✅ Пользователь ${user.id} получил ${newAchievements.length} новых достижений, награда: ${totalReward} MC`);
+      log(`✅ Пользователь ${user.id} получил ${newAchievements.length} новых достижений, награда: ${totalReward} Stars`);
       
       return {
         newAchievements,
@@ -7666,15 +7666,15 @@ async function showAchievementsRewards(ctx, user) {
     let message = `🎁 *Награды достижений*\n\n`;
     message += `💰 *Общая статистика:*\n`;
     message += `├ Выполнено достижений: \`${completedAchievements.length}\`\n`;
-    message += `├ Всего наград: \`${totalRewards} Magnum Coins\`\n`;
-    message += `└ Средняя награда: \`${completedAchievements.length > 0 ? Math.round(totalRewards / completedAchievements.length) : 0} Magnum Coins\`\n\n`;
+    message += `├ Всего наград: \`${totalRewards} Stars\`\n`;
+    message += `└ Средняя награда: \`${completedAchievements.length > 0 ? Math.round(totalRewards / completedAchievements.length) : 0} Stars\`\n\n`;
     
     // Показываем награды по категориям
     message += `🏆 *Награды по категориям:*\n\n`;
     
     const categories = {
       '🌾 Фарм': achievements.filter(a => a.id.includes('farm')),
-      '🪙 Magnum Coins': achievements.filter(a => a.id.includes('magnum')),
+      '🪙 Stars': achievements.filter(a => a.id.includes('magnum')),
       '💱 Обмен': achievements.filter(a => a.id.includes('exchange')),
       '⭐ Уровни': achievements.filter(a => a.id.includes('level')),
       '👥 Рефералы': achievements.filter(a => a.id.includes('referral')),
@@ -7691,7 +7691,7 @@ async function showAchievementsRewards(ctx, user) {
         
         message += `*${category}:*\n`;
         message += `├ Выполнено: \`${completed.length}/${categoryAchievements.length}\`\n`;
-        message += `└ Награды: \`${totalReward} Magnum Coins\`\n\n`;
+        message += `└ Награды: \`${totalReward} Stars\`\n\n`;
       }
     });
     
@@ -7751,12 +7751,12 @@ async function showReferralsMenu(ctx, user) {
       `👥 *Реферальная система*\n\n` +
       `📊 *Ваша статистика:*\n` +
       `├ Рефералов: \`${user.referralsCount || 0}\`\n` +
-      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Magnum Coins\n` +
+      `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n` +
       `└ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n\n` +
       `💰 *Награды за рефералов:*\n` +
-      `├ За каждого реферала: \`${config.REFERRAL_REWARD || 10}\` Magnum Coins\n` +
-      `├ Бонус за 5 рефералов: \`50\` Magnum Coins\n` +
-      `└ Бонус за 10 рефералов: \`100\` Magnum Coins\n\n` +
+      `├ За каждого реферала: \`${config.REFERRAL_REWARD || 10}\` Stars\n` +
+      `├ Бонус за 5 рефералов: \`50\` Stars\n` +
+      `└ Бонус за 10 рефералов: \`100\` Stars\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -7792,7 +7792,7 @@ async function showReferralLink(ctx, user) {
       `├ Отправьте эту ссылку друзьям\n` +
       `├ При переходе по ссылке они автоматически станут вашими рефералами\n` +
       `└ Вы получите награду за каждого нового реферала\n\n` +
-      `💰 *Награда:* \`${config.REFERRAL_REWARD || 10}\` Magnum Coins за каждого реферала\n\n` +
+      `💰 *Награда:* \`${config.REFERRAL_REWARD || 10}\` Stars за каждого реферала\n\n` +
       `🎯 Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -7823,7 +7823,7 @@ async function showReferralStats(ctx, user) {
     // Общая статистика
     message += `📈 *Общая статистика:*\n`;
     message += `├ Всего рефералов: \`${user.referralsCount || 0}\`\n`;
-    message += `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Magnum Coins\n`;
+    message += `├ Заработано: \`${formatNumber(user.referralsEarnings || 0)}\` Stars\n`;
     message += `├ Уровень: \`${getReferralLevel(user.referralsCount || 0)}\`\n`;
     message += `└ Средний уровень рефералов: \`${referrals.length > 0 ? Math.round(referrals.reduce((sum, r) => sum + (r.level || 1), 0) / referrals.length) : 0}\`\n\n`;
     
@@ -7871,16 +7871,16 @@ async function showReferralRewards(ctx, user) {
     
     // Текущие награды
     message += `💰 *Текущие награды:*\n`;
-    message += `├ За каждого реферала: \`${referralReward}\` Magnum Coins\n`;
-    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
-    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Magnum Coins\n\n`;
+    message += `├ За каждого реферала: \`${referralReward}\` Stars\n`;
+    message += `├ Всего заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
+    message += `└ Средняя награда: \`${referralsCount > 0 ? Math.round(totalEarnings / referralsCount) : 0}\` Stars\n\n`;
     
     // Система бонусов
     message += `🏆 *Система бонусов:*\n`;
-    message += `├ 5 рефералов: \`50\` Magnum Coins (бонус)\n`;
-    message += `├ 10 рефералов: \`100\` Magnum Coins (бонус)\n`;
-    message += `├ 25 рефералов: \`250\` Magnum Coins (бонус)\n`;
-    message += `└ 50 рефералов: \`500\` Magnum Coins (бонус)\n\n`;
+    message += `├ 5 рефералов: \`50\` Stars (бонус)\n`;
+    message += `├ 10 рефералов: \`100\` Stars (бонус)\n`;
+    message += `├ 25 рефералов: \`250\` Stars (бонус)\n`;
+    message += `└ 50 рефералов: \`500\` Stars (бонус)\n\n`;
     
     // Прогресс к бонусам
     message += `📊 *Ваш прогресс:*\n`;
@@ -7897,7 +7897,7 @@ async function showReferralRewards(ctx, user) {
         `Выполнено!` : 
         `Осталось: ${bonus.count - referralsCount} рефералов`;
       
-      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Magnum Coins\n`;
+      message += `${status} ${bonus.count} рефералов - \`${bonus.reward}\` Stars\n`;
       message += `└ ${progress}\n\n`;
     });
     
@@ -7936,7 +7936,7 @@ async function showReferralList(ctx, user) {
           level: 1, 
           createdAt: 1,
           stars: 1,
-          magnumCoins: 1
+          magnuStarsoins: 1
         },
         sort: { createdAt: -1 }
       }
@@ -7969,7 +7969,7 @@ async function showReferralList(ctx, user) {
         message += `├ ID: \`${referral.id}\`\n`;
         message += `├ Уровень: \`${referral.level || 1}\`\n`;
         message += `├ Баланс: \`${formatNumber(referral.stars || 0)}\` Stars\n`;
-        message += `├ Magnum Coins: \`${formatNumber(referral.magnumCoins || 0)}\`\n`;
+        message += `├ Stars: \`${formatNumber(referral.magnuStarsoins || 0)}\`\n`;
         message += `└ Присоединился: ${timeText}\n\n`;
       });
       
@@ -7980,12 +7980,12 @@ async function showReferralList(ctx, user) {
       // Статистика активности рефералов
       const activeReferrals = referrals.filter(r => r.level > 1);
       const totalReferralStars = referrals.reduce((sum, r) => sum + (r.stars || 0), 0);
-      const totalReferralMagnum = referrals.reduce((sum, r) => sum + (r.magnumCoins || 0), 0);
+      const totalReferralMagnum = referrals.reduce((sum, r) => sum + (r.magnuStarsoins || 0), 0);
       
       message += `📈 *Статистика рефералов:*\n`;
       message += `├ Активных: \`${activeReferrals.length}\`\n`;
       message += `├ Всего Stars у рефералов: \`${formatNumber(totalReferralStars)}\`\n`;
-      message += `└ Всего Magnum Coins у рефералов: \`${formatNumber(totalReferralMagnum)}\`\n\n`;
+      message += `└ Всего Stars у рефералов: \`${formatNumber(totalReferralMagnum)}\`\n\n`;
     }
     
     message += `🎯 Выберите действие:`;
@@ -8080,9 +8080,9 @@ async function showProfileMenu(ctx, user) {
       `├ Опыт: ${formatNumber(user.experience || 0)}/${formatNumber(getRequiredExperience(user.level || 1))}\n` +
       `└ Дата регистрации: ${user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : 'Неизвестно'}\n\n` +
       `💰 *Балансы:*\n` +
-      `├ Magnum Coins: ${formatNumber(user.magnumCoins || 0)}\n` +
+      `├ Stars: ${formatNumber(user.magnuStarsoins || 0)}\n` +
       `├ Stars: ${formatNumber(user.stars || 0)}\n` +
-      `└ Всего заработано: ${formatNumber((user.totalEarnedMagnumCoins || 0) + (user.totalEarnedStars || 0))}\n\n` +
+      `└ Всего заработано: ${formatNumber((user.totalEarnedMagnuStarsoins || 0) + (user.totalEarnedStars || 0))}\n\n` +
       `🎯 *Статистика:*\n` +
       `├ Рефералов: ${user.referralsCount || 0}\n` +
       `├ Достижений: ${user.achievementsCompleted || 0}\n` +
@@ -8248,7 +8248,7 @@ async function showResetSettings(ctx, user) {
       `└ Другие пользовательские настройки\n\n` +
       `✅ *Что НЕ будет затронуто:*\n` +
       `├ Ваш прогресс в игре\n` +
-      `├ Балансы (Stars, Magnum Coins)\n` +
+      `├ Балансы (Stars, Stars)\n` +
       `├ Достижения и рефералы\n` +
       `└ Статистика и уровень\n\n` +
       `💡 *После сброса:*\n` +
@@ -8525,7 +8525,7 @@ async function showSponsorTasks(ctx, user) {
         const userTask = userTasks[task.id];
         // Показываем только те офферы, которые существуют в userTasks и завершены
         if (userTask && userTask.completed && userTask.claimed) {
-          const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+          const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
           message += `✅ *${escapeMarkdown(task.title)}*\n`;
           message += `├ Награда: \`${escapeMarkdown(rewardText)}\` ✅ Получена\n`;
           message += `└ Сложность: ${escapeMarkdown(task.difficulty)}\n\n`;
@@ -8577,7 +8577,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
-      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
       
       let message = `✅ *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8602,7 +8602,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
-      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
       
       let message = `🎁 *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8627,7 +8627,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
-      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
       
       let message = `📸 *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8673,7 +8673,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     const keyboard = Markup.inlineKeyboard(keyboardButtons);
     
-    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
     
     let message = `🔄 *${escapeMarkdown(task.title)}*\n\n`;
     message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8794,7 +8794,7 @@ async function verifySponsorTask(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
-    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
     log(`✅ RichAds оффер ${taskId} выполнен пользователем ${user.id}`);
     await ctx.answerCbQuery(`✅ Оффер выполнен! Награда: ${rewardText}`);
     
@@ -8860,8 +8860,8 @@ async function claimSponsorTask(ctx, user, taskId) {
       updateData.$inc.stars = task.reward;
       updateData.$inc.totalEarnedStars = task.reward;
     } else {
-      updateData.$inc.magnumCoins = task.reward;
-      updateData.$inc.totalEarnedMagnumCoins = task.reward;
+      updateData.$inc.magnuStarsoins = task.reward;
+      updateData.$inc.totalEarnedMagnuStarsoins = task.reward;
     }
     
     await db.collection('users').updateOne(
@@ -8881,7 +8881,7 @@ async function claimSponsorTask(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
-    const rewardText = rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Magnum Coins`;
+    const rewardText = rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
     log(`🎁 Награда RichAds оффера ${taskId} получена пользователем ${user.id}: ${rewardText}`);
     await ctx.answerCbQuery(`🎁 Награда получена! +${rewardText}`);
     
@@ -8932,7 +8932,7 @@ async function showDailyTasks(ctx, user) {
       message += `${status} *${task.title}*\n`;
       message += `├ ${task.description}\n`;
       message += `├ Прогресс: \`${progress}/${task.target}\`\n`;
-      message += `├ Награда: \`${task.reward}\` Magnum Coins\n`;
+      message += `├ Награда: \`${task.reward}\` Stars\n`;
       message += `└ ${isCompleted ? (isClaimed ? '✅ Выполнено и получено' : '🎁 Готово к получению!') : '🔄 В процессе'}\n\n`;
     });
     
@@ -9070,7 +9070,7 @@ async function handleScreenshotUpload(ctx, user, taskId) {
         `👤 *Пользователь:* ${escapeMarkdown(getDisplayName(user))}\n` +
         `📱 *Username:* ${user.username ? '@' + user.username : 'Не указан'}\n` +
         `🆔 *User ID:* \`${user.id}\`\n` +
-        `💰 *Награда:* ${task.reward} ${task.rewardType === 'stars' ? '⭐ Stars' : 'Magnum Coins'}\n` +
+        `💰 *Награда:* ${task.reward} ${task.rewardType === 'stars' ? '⭐ Stars' : 'Stars'}\n` +
         `📅 *Дата:* ${new Date().toLocaleString('ru-RU')}\n\n` +
         `🎯 Выберите действие:`;
       
@@ -9137,8 +9137,8 @@ async function showTasksProgress(ctx, user) {
     // Общая статистика
     message += `📈 *Общая статистика:*\n`;
     message += `├ Выполнено заданий: \`${completedTasks}\`\n`;
-    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
-    message += `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Magnum Coins\n\n`;
+    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
+    message += `└ Средняя награда: \`${completedTasks > 0 ? formatNumber(totalEarnings / completedTasks) : '0.00'}\` Stars\n\n`;
     
     // Статистика по типам
     const sponsorTasks = tasks.sponsorTasks || {};
@@ -9223,7 +9223,7 @@ async function showTasksAchievements(ctx, user) {
     
     message += `📊 *Ваша статистика:*\n`;
     message += `├ Выполнено заданий: \`${completedTasks}\`\n`;
-    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Magnum Coins\n`;
+    message += `├ Заработано: \`${formatNumber(totalEarnings)}\` Stars\n`;
     message += `└ Получено достижений: \`${Object.keys(userAchievements).length}\`\n\n`;
     
     message += `🏆 *Достижения:*\n`;
@@ -9238,7 +9238,7 @@ async function showTasksAchievements(ctx, user) {
       message += `${status} *${achievement.title}*\n`;
       message += `├ ${achievement.description}\n`;
       message += `├ Прогресс: \`${completedTasks}/${achievement.requirement}\` (\`${progress}%\`)\n`;
-      message += `├ Награда: \`${achievement.reward}\` Magnum Coins\n`;
+      message += `├ Награда: \`${achievement.reward}\` Stars\n`;
       
       if (isCompleted && !isClaimed) {
         message += `└ 🎁 *Готово к получению!*\n\n`;
@@ -9338,7 +9338,7 @@ function getDailyTasks() {
     {
       id: 'daily_exchange',
       title: 'Трейдер дня',
-      description: 'Выполните 3 обмена Magnum Coins',
+      description: 'Выполните 3 обмена Stars',
       target: 3,
       reward: 30
     }
@@ -9431,8 +9431,8 @@ async function claimDailyTaskReward(ctx, user, taskId) {
       { id: user.id },
       { 
         $inc: { 
-          magnumCoins: task.reward,
-          totalEarnedMagnumCoins: task.reward,
+          magnuStarsoins: task.reward,
+          totalEarnedMagnuStarsoins: task.reward,
           experience: Math.floor(task.reward * 5),
           'tasks.completedTasks': 1,
           'tasks.totalTaskEarnings': task.reward
@@ -9457,7 +9457,7 @@ async function claimDailyTaskReward(ctx, user, taskId) {
       }
     }
     
-    await ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} Magnum Coins`);
+    await ctx.answerCbQuery(`🎁 Награда получена! +${task.reward} Stars`);
     
     // Обновляем меню ежедневных заданий
     await showDailyTasks(ctx, updatedUser || user);
@@ -9543,12 +9543,12 @@ async function showRanksMenu(ctx, user) {
 
 // ==================== ТИТУЛЫ ====================
 function getTitlesList(user) {
-  const farmCount = user.farm?.farmCount || 0;
+  const farStarsount = user.farm?.farStarsount || 0;
   const minerTotal = user.miner?.totalMined || 0;
   const streak = user.dailyBonus?.streak || 0;
   const level = user.level || 1;
   const stars = user.stars || 0;
-  const totalMC = user.totalEarnedMagnumCoins || 0;
+  const totalStars = user.totalEarnedMagnuStarsoins || 0;
   const totalStars = user.totalEarnedStars || 0;
   const referrals = user.referralsCount || 0;
   const achievements = user.achievementsCount || 0;
@@ -9558,9 +9558,9 @@ function getTitlesList(user) {
     // Обычные (5)
     { id: 'novice', name: '🌱 Новичок', rarity: 'Обычный', conditionText: 'Титул по умолчанию', unlocked: true, minerBonus: 1.0 },
     { id: 'starter', name: '🚀 Начинающий', rarity: 'Обычный', conditionText: 'Уровень 3 или 500 Stars', unlocked: level >= 3 || stars >= 500, minerBonus: 1.1 },
-    { id: 'skilled', name: '🎯 Опытный', rarity: 'Обычный', conditionText: 'Уровень 10 или 50 фармов', unlocked: level >= 10 || farmCount >= 50, minerBonus: 1.2 },
+    { id: 'skilled', name: '🎯 Опытный', rarity: 'Обычный', conditionText: 'Уровень 10 или 50 фармов', unlocked: level >= 10 || farStarsount >= 50, minerBonus: 1.2 },
     { id: 'master', name: '✨ Мастер', rarity: 'Обычный', conditionText: 'Уровень 25 или 10 000 Stars', unlocked: level >= 25 || stars >= 10000, minerBonus: 1.3 },
-    { id: 'expert', name: '💫 Эксперт', rarity: 'Обычный', conditionText: 'Уровень 50 или 10 000 Magnum Coins заработано', unlocked: level >= 50 || totalMC >= 10000, minerBonus: 1.4 },
+    { id: 'expert', name: '💫 Эксперт', rarity: 'Обычный', conditionText: 'Уровень 50 или 10 000 Stars заработано', unlocked: level >= 50 || totalStars >= 10000, minerBonus: 1.4 },
 
     // Редкие (3)
     { id: 'pro', name: '🌟 Профессионал', rarity: 'Редкий', conditionText: '100 000 Stars или 10 рефералов', unlocked: stars >= 100000 || referrals >= 10, minerBonus: 1.5 },
@@ -9569,11 +9569,11 @@ function getTitlesList(user) {
 
     // Секретные (3)
     { id: 'stealth', name: '🕵️ Скрытный', rarity: 'Секретный', conditionText: 'Серия бонусов 14 дней подряд', unlocked: streak >= 14, minerBonus: 1.8 },
-    { id: 'tactician', name: '🧠 Тактик', rarity: 'Секретный', conditionText: '100 фармов и 5 рефералов', unlocked: farmCount >= 100 && referrals >= 5, minerBonus: 1.9 },
-    { id: 'chronos', name: '⏳ Усердный', rarity: 'Секретный', conditionText: 'Намайнить 5 000 Magnum Coins', unlocked: minerTotal >= 5000, minerBonus: 2.0 },
+    { id: 'tactician', name: '🧠 Тактик', rarity: 'Секретный', conditionText: '100 фармов и 5 рефералов', unlocked: farStarsount >= 100 && referrals >= 5, minerBonus: 1.9 },
+    { id: 'chronos', name: '⏳ Усердный', rarity: 'Секретный', conditionText: 'Намайнить 5 000 Stars', unlocked: minerTotal >= 5000, minerBonus: 2.0 },
 
     // Легендарные (3)
-    { id: 'immortal', name: '🔥 Бессмертный', rarity: 'Легендарный', conditionText: '1 000 000 Magnum Coins заработано', unlocked: totalMC >= 1000000, minerBonus: 2.2 },
+    { id: 'immortal', name: '🔥 Бессмертный', rarity: 'Легендарный', conditionText: '1 000 000 Stars заработано', unlocked: totalStars >= 1000000, minerBonus: 2.2 },
     { id: 'dragon', name: '🐉 Дракон', rarity: 'Легендарный', conditionText: '100 рефералов', unlocked: referrals >= 100, minerBonus: 2.4 },
     { id: 'god', name: '⚡ Бог', rarity: 'Легендарный', conditionText: 'Уровень 100 и 50 достижений', unlocked: level >= 100 && achievements >= 50, minerBonus: 2.5 },
 
@@ -9863,7 +9863,7 @@ app.get('/db-status', async (req, res) => {
             usersWithMiningStats: usersWithMiningStats.length,
             sampleUser: users[0] ? {
                 id: users[0].id,
-                magnumCoins: users[0].magnumCoins,
+                magnuStarsoins: users[0].magnuStarsoins,
                 stars: users[0].stars,
                 miners: users[0].miners?.length || 0,
                 hasMiningStats: !!users[0].miningStats,
@@ -9923,7 +9923,7 @@ bot.start(async (ctx) => {
     
     console.log(`Пользователь ${ctx.from.id} получен:`, {
       level: user.level,
-      magnumCoins: user.magnumCoins,
+      magnuStarsoins: user.magnuStarsoins,
       stars: user.stars,
       banned: user.banned
     });
@@ -10083,7 +10083,7 @@ async function handleAdminSearchUser(ctx, user, text) {
       `📊 *Статистика:*\n` +
       `├ Уровень: \`${targetUser.level || 1}\`\n` +
       `├ Опыт: \`${targetUser.experience || 0}\`\n` +
-      `├ Magnum Coins: \`${formatNumber(targetUser.magnumCoins || 0)}\`\n` +
+      `├ Stars: \`${formatNumber(targetUser.magnuStarsoins || 0)}\`\n` +
       `├ Stars: \`${formatNumber(targetUser.stars || 0)}\`\n` +
       `├ Рефералов: \`${targetUser.referralsCount || 0}\`\n` +
       `└ Статус: ${targetUser.banned ? '🚫 Заблокирован' : '✅ Активен'}\n\n` +
@@ -10203,7 +10203,7 @@ async function handleAdminSetBonusBase(ctx, user, text) {
     // Обновляем конфиг в памяти
     config.DAILY_BONUS_BASE = newBonus;
     
-    await ctx.reply(`✅ Базовая награда ежедневного бонуса изменена на ${newBonus} Magnum Coins`);
+    await ctx.reply(`✅ Базовая награда ежедневного бонуса изменена на ${newBonus} Stars`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -10238,7 +10238,7 @@ async function handleAdminSetMinerReward(ctx, user, text) {
     // Обновляем конфиг в памяти
     config.MINER_REWARD_PER_MINUTE = newReward;
     
-    await ctx.reply(`✅ Базовая награда майнера изменена на ${newReward} Magnum Coins в минуту`);
+    await ctx.reply(`✅ Базовая награда майнера изменена на ${newReward} Stars в минуту`);
     
     // Сбрасываем состояние
     await db.collection('users').updateOne(
@@ -10405,7 +10405,7 @@ async function handleCreateSupportTicket(ctx, user, text) {
       `🆔 *User ID:* \`${user.id}\`\n` +
       `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
       `📊 *Уровень:* ${user.level || 1}\n` +
-      `💰 *Magnum Coins:* ${formatNumber(user.magnumCoins || 0)}\n` +
+      `💰 *Stars:* ${formatNumber(user.magnuStarsoins || 0)}\n` +
       `⭐ *Stars:* ${formatNumber(user.stars || 0)}\n\n` +
       `📝 *Проблема:*\n\`\`\`\n${text}\n\`\`\`\n\n` +
       `🎯 Выберите действие:`;
@@ -10818,7 +10818,7 @@ async function handleAdminCreatePromocode(ctx, user, text) {
     await ctx.reply(
       `✅ *Промокод создан успешно!*\n\n` +
       `🎫 Код: \`${code}\`\n` +
-      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `💰 Награда: \`${formatNumber(reward)}\` Stars\n` +
       `📊 Максимум активаций: \`${maxActivations}\`\n` +
       `📅 Создан: ${new Date().toLocaleString('ru-RU')}\n\n` +
       `🎯 Промокод готов к использованию!`,
@@ -10828,7 +10828,7 @@ async function handleAdminCreatePromocode(ctx, user, text) {
       }
     );
     
-    log(`✅ Промокод ${code} успешно создан админом ${user.id}, награда: ${reward} MC, активаций: ${maxActivations}`);
+    log(`✅ Промокод ${code} успешно создан админом ${user.id}, награда: ${reward} Stars, активаций: ${maxActivations}`);
     
   } catch (error) {
     logError(error, `Создание промокода админом ${user.id}`);
@@ -10838,10 +10838,10 @@ async function handleAdminCreatePromocode(ctx, user, text) {
 
 // ==================== СОЗДАНИЕ ПРОМОКОДОВ ПО ТИПАМ ====================
 
-// Создание ключа Magnum Coins
-async function handleAdminCreatePromoMC(ctx, user, text) {
+// Создание ключа Stars
+async function handleAdminCreatePromoStars(ctx, user, text) {
   try {
-    log(`💰 Админ ${user.id} создает ключ MC: "${text}"`);
+    log(`💰 Админ ${user.id} создает ключ Stars: "${text}"`);
     
     // Очищаем состояние пользователя
     await db.collection('users').updateOne(
@@ -10895,7 +10895,7 @@ async function handleAdminCreatePromoMC(ctx, user, text) {
     const promocode = {
       code: code,
       reward: reward,
-      rewardType: 'mc',
+      rewardType: 'Stars',
       maxActivations: maxActivations,
       activations: 0,
       totalActivations: 0,
@@ -10915,9 +10915,9 @@ async function handleAdminCreatePromoMC(ctx, user, text) {
     ]);
     
     await ctx.reply(
-      `✅ *Ключ Magnum Coins создан успешно!*\n\n` +
+      `✅ *Ключ Stars создан успешно!*\n\n` +
       `🔑 Ключ: \`${code}\`\n` +
-      `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins\n` +
+      `💰 Награда: \`${formatNumber(reward)}\` Stars\n` +
       `📊 Максимум активаций: \`${maxActivations}\`\n` +
       `📅 Создан: ${new Date().toLocaleString('ru-RU')}\n\n` +
       `🎯 Ключ готов к использованию!`,
@@ -10927,10 +10927,10 @@ async function handleAdminCreatePromoMC(ctx, user, text) {
       }
     );
     
-    log(`✅ Ключ MC ${code} успешно создан админом ${user.id}, награда: ${reward} MC, активаций: ${maxActivations}`);
+    log(`✅ Ключ Stars ${code} успешно создан админом ${user.id}, награда: ${reward} Stars, активаций: ${maxActivations}`);
     
   } catch (error) {
-    logError(error, `Создание ключа MC админом ${user.id}`);
+    logError(error, `Создание ключа Stars админом ${user.id}`);
     await ctx.reply('❌ Ошибка создания ключа. Попробуйте позже.');
   }
 }
@@ -11242,21 +11242,21 @@ function generateChestReward() {
   // Распределение вероятностей для разных уровней сундуков
   if (random < 0.6) {
     // 🟢 Обычный сундук (60%)
-    const isMC = Math.random() < 0.7; // 70% шанс на MC, 30% на Stars
+    const isStars = Math.random() < 0.7; // 70% шанс на Stars, 30% на Stars
     
-    if (isMC) {
+    if (isStars) {
       return {
         level: 'Обычный',
         emoji: '🟢',
-        magnumCoins: Math.floor(Math.random() * 1000) + 1, // 1-1000 MC
+        magnuStarsoins: Math.floor(Math.random() * 1000) + 1, // 1-1000 Stars
         stars: 0,
-        description: 'Обычные награды (MC)'
+        description: 'Обычные награды (Stars)'
       };
     } else {
       return {
         level: 'Обычный',
         emoji: '🟢',
-        magnumCoins: 0,
+        magnuStarsoins: 0,
         stars: Math.floor(Math.random() * 5) + 1, // 1-5 Stars
         description: 'Обычные награды (Stars)'
       };
@@ -11266,7 +11266,7 @@ function generateChestReward() {
     return {
       level: 'Редкий',
       emoji: '🔵',
-      magnumCoins: Math.floor(Math.random() * 100) + 50, // 50-150 MC
+      magnuStarsoins: Math.floor(Math.random() * 100) + 50, // 50-150 Stars
       stars: Math.floor(Math.random() * 50) + 25, // 25-75 Stars
       minerBonus: Math.floor(Math.random() * 2) + 1, // 1-3 майнера
       description: 'Редкие награды с майнерами'
@@ -11276,7 +11276,7 @@ function generateChestReward() {
     return {
       level: 'Эпический',
       emoji: '🟣',
-      magnumCoins: Math.floor(Math.random() * 200) + 100, // 100-300 MC
+      magnuStarsoins: Math.floor(Math.random() * 200) + 100, // 100-300 Stars
       stars: Math.floor(Math.random() * 100) + 50, // 50-150 Stars
       title: getRandomEpicTitle(),
       multiplier: 1.5,
@@ -11287,7 +11287,7 @@ function generateChestReward() {
     return {
       level: 'Легендарный',
       emoji: '🟡',
-      magnumCoins: Math.floor(Math.random() * 500) + 300, // 300-800 MC
+      magnuStarsoins: Math.floor(Math.random() * 500) + 300, // 300-800 Stars
       stars: Math.floor(Math.random() * 200) + 100, // 100-300 Stars
       minerBonus: Math.floor(Math.random() * 3) + 2, // 2-5 майнеров
       title: getRandomLegendaryTitle(),
@@ -11331,8 +11331,8 @@ function getRandomLegendaryTitle() {
 function formatChestReward(reward) {
   let text = '';
   
-  if (reward.magnumCoins > 0) {
-    text += `💰 Magnum Coins: +${formatNumber(reward.magnumCoins)}\n`;
+  if (reward.magnuStarsoins > 0) {
+    text += `💰 Stars: +${formatNumber(reward.magnuStarsoins)}\n`;
   }
   
   if (reward.stars > 0) {
@@ -11416,7 +11416,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
     
     // Определяем тип награды
     let reward = 0;
-    let rewardType = 'mc';
+    let rewardType = 'Stars';
     let chestReward = null;
     
     if (promocode.rewardType === 'chest') {
@@ -11426,7 +11426,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
     } else {
       // Старый тип - обычный промокод
       reward = promocode.reward || 0;
-      rewardType = promocode.rewardType || 'mc';
+      rewardType = promocode.rewardType || 'Stars';
     }
     
     let updateData = {
@@ -11447,12 +11447,12 @@ async function handleUserEnterPromocode(ctx, user, text) {
       };
       
       // Начисляем награды из сундука
-      if (chestReward.magnumCoins > 0) {
+      if (chestReward.magnuStarsoins > 0) {
         updateData.$inc = {
           ...updateData.$inc,
-          magnumCoins: chestReward.magnumCoins,
-          totalEarnedMagnumCoins: chestReward.magnumCoins,
-          experience: Math.floor(chestReward.magnumCoins * 5)
+          magnuStarsoins: chestReward.magnuStarsoins,
+          totalEarnedMagnuStarsoins: chestReward.magnuStarsoins,
+          experience: Math.floor(chestReward.magnuStarsoins * 5)
         };
       }
       
@@ -11480,10 +11480,10 @@ async function handleUserEnterPromocode(ctx, user, text) {
       }
     } else {
       // Старая логика для обычных промокодов
-      if (rewardType === 'mc') {
+      if (rewardType === 'Stars') {
         updateData.$inc = {
-          magnumCoins: reward,
-          totalEarnedMagnumCoins: reward,
+          magnuStarsoins: reward,
+          totalEarnedMagnuStarsoins: reward,
           experience: Math.floor(reward * 5)
         };
       } else if (rewardType === 'stars') {
@@ -11541,8 +11541,8 @@ async function handleUserEnterPromocode(ctx, user, text) {
     if (config.PROMO_NOTIFICATIONS_CHAT) {
       try {
         let rewardText = '';
-        if (rewardType === 'mc') {
-          rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
+        if (rewardType === 'Stars') {
+          rewardText = `💰 Награда: \`${formatNumber(reward)}\` Stars`;
         } else if (rewardType === 'stars') {
           rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
         } else if (rewardType === 'title') {
@@ -11572,8 +11572,8 @@ async function handleUserEnterPromocode(ctx, user, text) {
       const rewardText = formatChestReward(chestReward);
       notificationText = `🎉 ${chestReward.emoji} ${chestReward.level} сундук!\n${rewardText}`;
     } else {
-      if (rewardType === 'mc') {
-        notificationText = `💰 Получено ${formatNumber(reward)} Magnum Coins!`;
+      if (rewardType === 'Stars') {
+        notificationText = `💰 Получено ${formatNumber(reward)} Stars!`;
       } else if (rewardType === 'stars') {
         notificationText = `⭐ Получено ${formatNumber(reward)} Stars!`;
       } else if (rewardType === 'title') {
@@ -11587,8 +11587,8 @@ async function handleUserEnterPromocode(ctx, user, text) {
     let logReward = '';
     if (rewardType === 'chest') {
       logReward = `${chestReward.level} сундук`;
-    } else if (rewardType === 'mc') {
-      logReward = `${reward} MC`;
+    } else if (rewardType === 'Stars') {
+      logReward = `${reward} Stars`;
     } else if (rewardType === 'stars') {
       logReward = `${reward} Stars`;
     } else if (rewardType === 'title') {
@@ -11664,7 +11664,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
     
     // Определяем тип награды
     let reward = 0;
-    let rewardType = 'mc';
+    let rewardType = 'Stars';
     let chestReward = null;
     
     if (promocode.rewardType === 'chest') {
@@ -11674,7 +11674,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
     } else {
       // Старый тип - обычный промокод
       reward = promocode.reward || 0;
-      rewardType = promocode.rewardType || 'mc';
+      rewardType = promocode.rewardType || 'Stars';
     }
     
     let updateData = {
@@ -11695,12 +11695,12 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
       };
       
       // Начисляем награды из сундука
-      if (chestReward.magnumCoins > 0) {
+      if (chestReward.magnuStarsoins > 0) {
         updateData.$inc = {
           ...updateData.$inc,
-          magnumCoins: chestReward.magnumCoins,
-          totalEarnedMagnumCoins: chestReward.magnumCoins,
-          experience: Math.floor(chestReward.magnumCoins * 5)
+          magnuStarsoins: chestReward.magnuStarsoins,
+          totalEarnedMagnuStarsoins: chestReward.magnuStarsoins,
+          experience: Math.floor(chestReward.magnuStarsoins * 5)
         };
       }
       
@@ -11727,10 +11727,10 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
       }
     } else {
       // Старая логика для обычных промокодов
-      if (rewardType === 'mc') {
+      if (rewardType === 'Stars') {
         updateData.$inc = {
-          magnumCoins: reward,
-          totalEarnedMagnumCoins: reward,
+          magnuStarsoins: reward,
+          totalEarnedMagnuStarsoins: reward,
           experience: Math.floor(reward * 5)
         };
       } else if (rewardType === 'stars') {
@@ -11759,7 +11759,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
         $inc: { 
           activations: 1,
           totalActivations: 1,
-          totalRewards: rewardType === 'chest' ? (chestReward.magnumCoins || 0) + (chestReward.stars || 0) : reward
+          totalRewards: rewardType === 'chest' ? (chestReward.magnuStarsoins || 0) + (chestReward.stars || 0) : reward
         },
         $push: { 
           activationsHistory: {
@@ -11790,8 +11790,8 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
         let rewardText = '';
         if (rewardType === 'chest') {
           rewardText = `🎁 ${chestReward.level} сундук`;
-        } else if (rewardType === 'mc') {
-          rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
+        } else if (rewardType === 'Stars') {
+          rewardText = `💰 Награда: \`${formatNumber(reward)}\` Stars`;
         } else if (rewardType === 'stars') {
           rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
         } else if (rewardType === 'title') {
@@ -11821,8 +11821,8 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
       const rewardText = formatChestReward(chestReward);
       notificationText = `🎉 ${chestReward.emoji} ${chestReward.level} сундук!\n${rewardText}`;
     } else {
-      if (rewardType === 'mc') {
-        notificationText = `💰 Получено ${formatNumber(reward)} Magnum Coins!`;
+      if (rewardType === 'Stars') {
+        notificationText = `💰 Получено ${formatNumber(reward)} Stars!`;
       } else if (rewardType === 'stars') {
         notificationText = `⭐ Получено ${formatNumber(reward)} Stars!`;
       } else if (rewardType === 'title') {
@@ -11836,8 +11836,8 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
     let logReward = '';
     if (rewardType === 'chest') {
       logReward = `${chestReward.level} сундук`;
-    } else if (rewardType === 'mc') {
-      logReward = `${reward} MC`;
+    } else if (rewardType === 'Stars') {
+      logReward = `${reward} Stars`;
     } else if (rewardType === 'stars') {
       logReward = `${reward} Stars`;
     } else if (rewardType === 'title') {
@@ -11866,18 +11866,18 @@ bot.action('faq_miner', async (ctx) => {
     const message = 
       `⛏️ *FAQ - Майнер*\n\n` +
       `*❓ Что такое майнер?*\n` +
-      `Майнер - это автоматический способ заработка Magnum Coins. Он работает в фоновом режиме и приносит награды каждую минуту.\n\n` +
+      `Майнер - это автоматический способ заработка Stars. Он работает в фоновом режиме и приносит награды каждую минуту.\n\n` +
       `*❓ Как запустить майнер?*\n` +
       `Перейдите в раздел "Фарм" → "⛏️ Майнер" и нажмите "▶️ Запустить майнер".\n\n` +
       `*❓ Как часто майнер приносит награды?*\n` +
       `Майнер приносит награды каждую минуту.\n\n` +
-          `*❓ Сколько Magnum Coins я получаю от майнера?*\n` +
+          `*❓ Сколько Stars я получаю от майнера?*\n` +
     `Награда майнера динамическая и зависит от:\n` +
-    `• Курса обмена Magnum Coins\n` +
+    `• Курса обмена Stars\n` +
     `• Количества активных майнеров\n` +
     `• Уровня вашего майнера\n\n` +
       `*❓ Как улучшить майнер?*\n` +
-      `Майнер можно улучшить, потратив Magnum Coins. Улучшения увеличивают эффективность и награды.\n\n` +
+      `Майнер можно улучшить, потратив Stars. Улучшения увеличивают эффективность и награды.\n\n` +
       `*❓ Что такое эффективность майнера?*\n` +
       `Эффективность показывает множитель награды. Например, эффективность 2x означает двойную награду.\n\n` +
       `*❓ Можно ли остановить майнер?*\n` +
@@ -11910,8 +11910,8 @@ bot.action('faq_bonus', async (ctx) => {
       `Бонус доступен каждые 24 часа. Если вы пропустите день, серия сбрасывается.\n\n` +
       `*❓ Что такое серия бонусов?*\n` +
       `Серия - это количество дней подряд, когда вы забирали бонус. Чем длиннее серия, тем больше награда.\n\n` +
-      `*❓ Сколько Magnum Coins в бонусе?*\n` +
-      `Базовый бонус составляет ${config.DAILY_BONUS_BASE || 10} Magnum Coins. С каждым днем серии награда увеличивается.\n\n` +
+      `*❓ Сколько Stars в бонусе?*\n` +
+      `Базовый бонус составляет ${config.DAILY_BONUS_BASE || 10} Stars. С каждым днем серии награда увеличивается.\n\n` +
       `*❓ Что происходит при пропуске дня?*\n` +
       `Если вы пропустите день, серия сбрасывается на 1, и награда возвращается к базовому значению.\n\n` +
       `*❓ Как посмотреть статистику бонусов?*\n` +
@@ -11939,13 +11939,13 @@ bot.action('faq_exchange', async (ctx) => {
     const message = 
       `💎 *FAQ - Обмен*\n\n` +
       `*❓ Что такое обмен?*\n` +
-      `Обмен позволяет конвертировать Magnum Coins в Stars по фиксированному курсу.\n\n` +
+      `Обмен позволяет конвертировать Stars в Stars по фиксированному курсу.\n\n` +
       `*❓ Какой курс обмена?*\n` +
       `Курс обмена: 1 Magnum Coin = 1 Star (1:1).\n\n` +
       `*❓ Какие суммы можно обменивать?*\n` +
-      `Доступные суммы: 10, 50, 100, 500, 1000, 5000 Magnum Coins.\n\n` +
-      `*❓ Можно ли обменять Stars обратно на Magnum Coins?*\n` +
-      `Нет, обмен работает только в одну сторону: Magnum Coins → Stars.\n\n` +
+      `Доступные суммы: 10, 50, 100, 500, 1000, 5000 Stars.\n\n` +
+      `*❓ Можно ли обменять Stars обратно на Stars?*\n` +
+      `Нет, обмен работает только в одну сторону: Stars → Stars.\n\n` +
       `*❓ Есть ли комиссия за обмен?*\n` +
       `Нет, обмен происходит без комиссии по курсу 1:1.\n\n` +
       `*❓ Зачем нужны Stars?*\n` +
@@ -11974,11 +11974,11 @@ bot.action('faq_promocodes', async (ctx) => {
     const message = 
       `🎫 *FAQ - Промокоды*\n\n` +
       `*❓ Что такое промокоды?*\n` +
-      `Промокоды - это специальные коды, которые дают бонусные Magnum Coins при активации.\n\n` +
+      `Промокоды - это специальные коды, которые дают бонусные Stars при активации.\n\n` +
       `*❓ Как активировать промокод?*\n` +
       `Перейдите в "🎫 Промокод" → "🔑 Активировать ключ" и введите код.\n\n` +
       `*❓ Какие награды дают промокоды?*\n` +
-      `Промокоды дают Magnum Coins. Количество зависит от конкретного промокода.\n\n` +
+      `Промокоды дают Stars. Количество зависит от конкретного промокода.\n\n` +
       `*❓ Можно ли использовать один промокод несколько раз?*\n` +
       `Нет, каждый промокод можно использовать только один раз на аккаунт.\n\n` +
       `*❓ Что если промокод не работает?*\n` +
@@ -12017,7 +12017,7 @@ bot.action('faq_referrals', async (ctx) => {
       `*❓ Как работает реферальная ссылка?*\n` +
       `Когда друг переходит по вашей ссылке и запускает бота, он становится вашим рефералом.\n\n` +
       `*❓ Какие награды за рефералов?*\n` +
-      `За каждого реферала вы получаете ${config.REFERRAL_REWARD || 10} Magnum Coins.\n\n` +
+      `За каждого реферала вы получаете ${config.REFERRAL_REWARD || 10} Stars.\n\n` +
       `*❓ Что такое уровни рефералов?*\n` +
       `Уровни зависят от количества рефералов:\n` +
       `• 1-5 рефералов: Новичок\n` +
@@ -12063,7 +12063,7 @@ bot.action('faq_achievements', async (ctx) => {
       `*❓ Как получить достижения?*\n` +
       `Достижения получаются автоматически при выполнении условий. Прогресс отображается в процентах.\n\n` +
       `*❓ Какие награды за достижения?*\n` +
-      `За достижения даются Magnum Coins. Количество зависит от сложности достижения.\n\n` +
+      `За достижения даются Stars. Количество зависит от сложности достижения.\n\n` +
       `*❓ Как посмотреть прогресс достижений?*\n` +
       `В разделе "🏆 Достижения" → "📊 Прогресс" можно посмотреть прогресс по всем достижениям.\n\n` +
       `*❓ Можно ли потерять достижения?*\n` +
@@ -12094,7 +12094,7 @@ bot.action('faq_tasks', async (ctx) => {
     const message = 
       `📋 *FAQ - Задания*\n\n` +
       `*❓ Что такое задания?*\n` +
-      `Задания - это способ получить дополнительные Magnum Coins за выполнение различных действий.\n\n` +
+      `Задания - это способ получить дополнительные Stars за выполнение различных действий.\n\n` +
       `*❓ Какие бывают задания?*\n` +
       `• Спонсорские задания - подписка на каналы, запуск ботов\n` +
       `• Ежедневные задания - регулярные задачи\n` +
@@ -12107,7 +12107,7 @@ bot.action('faq_tasks', async (ctx) => {
       `*❓ Как проверить выполнение задания?*\n` +
       `Бот автоматически проверяет выполнение заданий. Если задание выполнено, появится кнопка "🎁 Получить награду".\n\n` +
       `*❓ Какие награды за задания?*\n` +
-      `Задания дают Magnum Coins. Количество зависит от сложности задания.\n\n` +
+      `Задания дают Stars. Количество зависит от сложности задания.\n\n` +
       `*❓ Можно ли выполнить задание несколько раз?*\n` +
       `Нет, каждое задание можно выполнить только один раз.\n\n` +
       `*❓ Что такое прогресс заданий?*\n` +
@@ -12544,7 +12544,7 @@ bot.action(/^support_cancel_(.+)$/, async (ctx) => {
         `🆔 *User ID:* \`${ticket.userId}\`\n` +
         `📅 *Дата:* ${ticket.createdAt.toLocaleString('ru-RU')}\n` +
         `📊 *Уровень:* ${ticket.level || 1}\n` +
-        `💰 *Magnum Coins:* ${formatNumber(ticket.magnumCoins || 0)}\n` +
+        `💰 *Stars:* ${formatNumber(ticket.magnuStarsoins || 0)}\n` +
         `⭐ *Stars:* ${formatNumber(ticket.stars || 0)}\n\n` +
         `📝 *Проблема:*\n\`\`\`\n${ticket.description}\n\`\`\`\n\n` +
         `🎯 Выберите действие:`;
@@ -12743,7 +12743,7 @@ bot.action(/^approve_screenshot_(\d+)_(\d+)$/, async (ctx) => {
       await ctx.telegram.sendMessage(userId, 
         `✅ *Скриншот одобрен!*\n\n` +
         `🎯 Задание: ${task.title}\n` +
-        `💰 Награда: ${task.reward} ${task.rewardType === 'stars' ? '⭐ Stars' : 'Magnum Coins'}\n\n` +
+        `💰 Награда: ${task.reward} ${task.rewardType === 'stars' ? '⭐ Stars' : 'Stars'}\n\n` +
         `🎁 Теперь вы можете получить награду в разделе "Задания"!`,
         { parse_mode: 'Markdown' }
       );
@@ -12914,7 +12914,7 @@ bot.action('main_menu', async (ctx) => {
     
     logDebug(`Показ главного меню для пользователя ${ctx.from.id}`, {
       level: user.level,
-      magnumCoins: user.magnumCoins,
+      magnuStarsoins: user.magnuStarsoins,
       stars: user.stars,
       isAdmin: isAdmin(user.id)
     });
@@ -13220,7 +13220,7 @@ bot.action(/^upgrade_miner_(.+)$/, async (ctx) => {
 
 bot.action('insufficient_funds', async (ctx) => {
   try {
-    await ctx.answerCbQuery('❌ Недостаточно Magnum Coins для улучшения!');
+    await ctx.answerCbQuery('❌ Недостаточно Stars для улучшения!');
   } catch (error) {
     logError(error, 'Недостаточно средств (обработчик)');
   }
@@ -13250,15 +13250,15 @@ bot.action('exchange', async (ctx) => {
 });
 
 // Обработчики для ввода суммы обмена
-bot.action('exchange_custom_mc', async (ctx) => {
+bot.action('exchange_custom_Stars', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    // Устанавливаем состояние для ввода суммы MC
+    // Устанавливаем состояние для ввода суммы Stars
     await db.collection('users').updateOne(
       { id: user.id },
-      { $set: { adminState: 'exchange_custom_mc', updatedAt: new Date() } }
+      { $set: { adminState: 'exchange_custom_Stars', updatedAt: new Date() } }
     );
     
     userCache.delete(user.id);
@@ -13268,16 +13268,16 @@ bot.action('exchange_custom_mc', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `🪙 *Ввод суммы обмена MC → Stars*\n\n` +
-      `💰 Ваш баланс: \`${formatNumber(user.magnumCoins)}\` Magnum Coins\n\n` +
-      `💡 Введите сумму Magnum Coins для обмена на Stars:`,
+      `🪙 *Ввод суммы обмена Stars → Stars*\n\n` +
+      `💰 Ваш баланс: \`${formatNumber(user.magnuStarsoins)}\` Stars\n\n` +
+      `💡 Введите сумму Stars для обмена на Stars:`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
       }
     );
   } catch (error) {
-    logError(error, 'Ввод суммы MC для обмена');
+    logError(error, 'Ввод суммы Stars для обмена');
     await ctx.answerCbQuery('❌ Ошибка ввода суммы');
   }
 });
@@ -13302,10 +13302,10 @@ bot.action('exchange_custom_stars', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `⭐ *Ввод суммы обмена Stars → MC*\n\n` +
+      `⭐ *Ввод суммы обмена Stars → Stars*\n\n` +
       `💰 Ваш баланс: \`${formatNumber(user.stars)}\` Stars\n` +
-      `📊 Текущий курс: 1 MC = \`${exchangeRate.toFixed(6)}\` Stars\n\n` +
-      `💡 Введите сумму Stars для обмена на Magnum Coins:`,
+      `📊 Текущий курс: 1 Stars = \`${exchangeRate.toFixed(6)}\` Stars\n\n` +
+      `💡 Введите сумму Stars для обмена на Stars:`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
@@ -13323,15 +13323,15 @@ bot.action('exchange_all', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    const amount = Math.floor(user.magnumCoins);
+    const amount = Math.floor(user.magnuStarsoins);
     if (amount <= 0) {
-      await ctx.answerCbQuery('❌ У вас нет Magnum Coins для обмена!');
+      await ctx.answerCbQuery('❌ У вас нет Stars для обмена!');
       return;
     }
     
     await performExchange(ctx, user, amount);
   } catch (error) {
-    logError(error, 'Обмен всех Magnum Coins');
+    logError(error, 'Обмен всех Stars');
   }
 });
 
@@ -13612,14 +13612,14 @@ bot.action('withdrawal', async (ctx) => {
 });
 
 // Обработчики вывода средств
-bot.action('withdrawal_mc', async (ctx) => {
+bot.action('withdrawal_Stars', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
     await ctx.answerCbQuery('🚧 Функция в разработке');
   } catch (error) {
-    logError(error, 'Вывод Magnum Coins (в разработке)');
+    logError(error, 'Вывод Stars (в разработке)');
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
@@ -13678,11 +13678,11 @@ bot.action('withdrawal_stats', async (ctx) => {
       `📊 *Статистика выводов*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Всего выводов: ${withdrawal.withdrawalCount}\n` +
-      `├ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Magnum Coins\n` +
-      `└ Средний вывод: ${withdrawal.withdrawalCount > 0 ? formatNumber(withdrawal.totalWithdrawn / withdrawal.withdrawalCount) : '0.00'} Magnum Coins\n\n` +
+      `├ Всего выведено: ${formatNumber(withdrawal.totalWithdrawn)} Stars\n` +
+      `└ Средний вывод: ${withdrawal.withdrawalCount > 0 ? formatNumber(withdrawal.totalWithdrawn / withdrawal.withdrawalCount) : '0.00'} Stars\n\n` +
       `💡 *Информация:*\n` +
       `├ Комиссия за вывод: 5%\n` +
-      `├ 🚧 Вывод MC: в разработке\n` +
+      `├ 🚧 Вывод Stars: в разработке\n` +
       `├ Минимум Stars: 50\n` +
       `└ Обработка: до 24 часов`;
     
@@ -14187,7 +14187,7 @@ bot.action('admin_add_magnum', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `➕ *Добавление Magnum Coins*\n\n` +
+      `➕ *Добавление Stars*\n\n` +
       `Введите ID пользователя и количество:\n\n` +
       `💡 *Формат:* ID количество\n` +
       `💡 *Пример:* 123456789 1000\n\n` +
@@ -14198,8 +14198,8 @@ bot.action('admin_add_magnum', async (ctx) => {
       }
     );
   } catch (error) {
-    logError(error, 'Добавление Magnum Coins');
-    await ctx.answerCbQuery('❌ Ошибка добавления Magnum Coins');
+    logError(error, 'Добавление Stars');
+    await ctx.answerCbQuery('❌ Ошибка добавления Stars');
   }
 });
 
@@ -14223,7 +14223,7 @@ bot.action('admin_remove_magnum', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `➖ *Удаление Magnum Coins*\n\n` +
+      `➖ *Удаление Stars*\n\n` +
       `Введите ID пользователя и количество:\n\n` +
       `💡 *Формат:* ID количество\n` +
       `💡 *Пример:* 123456789 1000\n\n` +
@@ -14234,8 +14234,8 @@ bot.action('admin_remove_magnum', async (ctx) => {
       }
     );
   } catch (error) {
-    logError(error, 'Удаление Magnum Coins');
-    await ctx.answerCbQuery('❌ Ошибка удаления Magnum Coins');
+    logError(error, 'Удаление Stars');
+    await ctx.answerCbQuery('❌ Ошибка удаления Stars');
   }
 });
 
@@ -14869,7 +14869,7 @@ bot.action('admin_add_experience', async (ctx) => {
     await ctx.answerCbQuery('❌ Ошибка добавления опыта');
   }
 });
-bot.action('admin_reserve_add_mc', async (ctx) => {
+bot.action('admin_reserve_add_Stars', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
@@ -14879,7 +14879,7 @@ bot.action('admin_reserve_add_mc', async (ctx) => {
     
     await db.collection('users').updateOne(
       { id: user.id },
-      { $set: { adminState: 'adding_reserve_mc', updatedAt: new Date() } }
+      { $set: { adminState: 'adding_reserve_Stars', updatedAt: new Date() } }
     );
     
     userCache.delete(user.id);
@@ -14889,8 +14889,8 @@ bot.action('admin_reserve_add_mc', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `➕ *Добавление Magnum Coins в резерв*\n\n` +
-      `Введите количество Magnum Coins для добавления в резерв:\n\n` +
+      `➕ *Добавление Stars в резерв*\n\n` +
+      `Введите количество Stars для добавления в резерв:\n\n` +
       `💡 *Пример:* 1000, 5000, 10000\n\n` +
       `⚠️ *Внимание:* Операция необратима!`,
       {
@@ -14899,12 +14899,12 @@ bot.action('admin_reserve_add_mc', async (ctx) => {
       }
     );
   } catch (error) {
-    logError(error, 'Добавление Magnum Coins в резерв');
+    logError(error, 'Добавление Stars в резерв');
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
 
-bot.action('admin_reserve_remove_mc', async (ctx) => {
+bot.action('admin_reserve_remove_Stars', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user || !isAdmin(user.id)) {
@@ -14914,7 +14914,7 @@ bot.action('admin_reserve_remove_mc', async (ctx) => {
     
     await db.collection('users').updateOne(
       { id: user.id },
-      { $set: { adminState: 'removing_reserve_mc', updatedAt: new Date() } }
+      { $set: { adminState: 'removing_reserve_Stars', updatedAt: new Date() } }
     );
     
     userCache.delete(user.id);
@@ -14924,8 +14924,8 @@ bot.action('admin_reserve_remove_mc', async (ctx) => {
     ]);
     
     await ctx.editMessageText(
-      `➖ *Удаление Magnum Coins из резерва*\n\n` +
-      `Введите количество Magnum Coins для удаления из резерва:\n\n` +
+      `➖ *Удаление Stars из резерва*\n\n` +
+      `Введите количество Stars для удаления из резерва:\n\n` +
       `💡 *Пример:* 1000, 5000, 10000\n\n` +
       `⚠️ *Внимание:* Операция необратима!`,
       {
@@ -14934,7 +14934,7 @@ bot.action('admin_reserve_remove_mc', async (ctx) => {
       }
     );
   } catch (error) {
-    logError(error, 'Удаление Magnum Coins из резерва');
+    logError(error, 'Удаление Stars из резерва');
     await ctx.answerCbQuery('❌ Ошибка');
   }
 });
@@ -15029,13 +15029,13 @@ bot.action('admin_reserve_update_rate', async (ctx) => {
       type: 'rate_update',
       rate: newRate,
       timestamp: new Date(),
-      magnumCoinsReserve: reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS,
+      magnuStarsoinsReserve: reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS,
       starsReserve: reserve?.stars || config.INITIAL_RESERVE_STARS,
       reason: 'admin_force_update',
       adminId: user.id
     });
     
-    await ctx.answerCbQuery(`✅ Курс обновлен: ${newRate.toFixed(6)} Stars за 1 MC`);
+    await ctx.answerCbQuery(`✅ Курс обновлен: ${newRate.toFixed(6)} Stars за 1 Stars`);
     await showAdminReserve(ctx, user);
   } catch (error) {
     logError(error, 'Принудительное обновление курса');
@@ -15053,14 +15053,14 @@ bot.action('admin_reserve_rate_details', async (ctx) => {
     
     // Получаем текущий резерв
     const reserve = await db.collection('reserve').findOne({ currency: 'main' });
-    const magnumCoinsReserve = reserve?.magnumCoins || config.INITIAL_RESERVE_MAGNUM_COINS;
+    const magnuStarsoinsReserve = reserve?.magnuStarsoins || config.INITIAL_RESERVE_MAGNUM_COINS;
     const starsReserve = reserve?.stars || config.INITIAL_RESERVE_STARS;
     
     // Получаем текущий курс обмена
     const exchangeRate = await calculateExchangeRate();
     
     // Рассчитываем детали
-    const ratio = magnumCoinsReserve / starsReserve;
+    const ratio = magnuStarsoinsReserve / starsReserve;
     const logRatio = ratio > 1 ? Math.log(ratio) / Math.log(10) : 0;
     const multiplier = ratio <= 1 ? Math.max(0.1, ratio) : Math.max(0.1, Math.min(50, 1 + logRatio * 2));
     
@@ -15071,7 +15071,7 @@ bot.action('admin_reserve_rate_details', async (ctx) => {
     const message = 
       `📊 *Детали расчета курса*\n\n` +
       `💰 *Резервы:*\n` +
-      `├ 🪙 Magnum Coins: \`${formatNumber(magnumCoinsReserve)}\`\n` +
+      `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `📈 *Расчет курса:*\n` +
       `├ Соотношение: \`${ratio.toFixed(4)}\`\n` +
@@ -15211,12 +15211,12 @@ bot.action('admin_commission_stats', async (ctx) => {
       `📊 *Статистика комиссий*\n\n` +
       `💰 *Общая статистика:*\n` +
       `├ Всего обменов: \`${totalExchangesCount}\`\n` +
-      `├ Всего обменено: \`${formatNumber(totalExchangedAmount)}\` Magnum Coins\n` +
+      `├ Всего обменено: \`${formatNumber(totalExchangedAmount)}\` Stars\n` +
       `├ Текущая комиссия: \`${config.EXCHANGE_COMMISSION}%\`\n` +
-      `└ Всего комиссий: \`${formatNumber(totalCommission)}\` Magnum Coins\n\n` +
+      `└ Всего комиссий: \`${formatNumber(totalCommission)}\` Stars\n\n` +
       `📈 *Средние показатели:*\n` +
-      `├ Средний обмен: \`${totalExchangesCount > 0 ? formatNumber(totalExchangedAmount / totalExchangesCount) : '0.00'}\` Magnum Coins\n` +
-      `├ Средняя комиссия: \`${totalExchangesCount > 0 ? formatNumber(totalCommission / totalExchangesCount) : '0.00'}\` Magnum Coins\n` +
+      `├ Средний обмен: \`${totalExchangesCount > 0 ? formatNumber(totalExchangedAmount / totalExchangesCount) : '0.00'}\` Stars\n` +
+      `├ Средняя комиссия: \`${totalExchangesCount > 0 ? formatNumber(totalCommission / totalExchangesCount) : '0.00'}\` Stars\n` +
       `└ Процент комиссии: \`${config.EXCHANGE_COMMISSION}%\`\n\n` +
       `💡 *Информация:*\n` +
       `├ Все комиссии остаются в резерве\n` +
@@ -15399,8 +15399,8 @@ bot.action('admin_promocodes_stats', async (ctx) => {
     const activeKeys = promocodes.filter(p => p.isActive && p.activations < p.maxActivations);
     const activeKeysList = activeKeys.slice(0, 10).map(p => {
       const remaining = p.maxActivations - p.activations;
-      const rewardType = p.rewardType || 'mc';
-      const rewardText = rewardType === 'mc' ? `${p.reward} MC` : 
+      const rewardType = p.rewardType || 'Stars';
+      const rewardText = rewardType === 'Stars' ? `${p.reward} Stars` : 
                         rewardType === 'stars' ? `${p.reward} ⭐` :
                         rewardType === 'title' ? p.title : 'Сундук';
       return `🔑 \`${p.code}\` - ${rewardText} (${remaining}/${p.maxActivations})`;
@@ -15413,10 +15413,10 @@ bot.action('admin_promocodes_stats', async (ctx) => {
       `├ Активных: \`${activePromocodes}\`\n` +
       `├ Истекших: \`${expiredPromocodes}\`\n` +
       `├ Всего активаций: \`${totalActivations}\`\n` +
-      `└ Всего наград: \`${formatNumber(totalRewards)}\` Magnum Coins\n\n` +
+      `└ Всего наград: \`${formatNumber(totalRewards)}\` Stars\n\n` +
       `📈 *Средние показатели:*\n` +
       `├ Средние активации: \`${totalPromocodes > 0 ? (totalActivations / totalPromocodes).toFixed(1) : '0'}\`\n` +
-      `├ Средняя награда: \`${totalActivations > 0 ? formatNumber(totalRewards / totalActivations) : '0.00'}\` Magnum Coins\n` +
+      `├ Средняя награда: \`${totalActivations > 0 ? formatNumber(totalRewards / totalActivations) : '0.00'}\` Stars\n` +
       `└ Эффективность: \`${totalPromocodes > 0 ? ((activePromocodes / totalPromocodes) * 100).toFixed(1) : '0'}%\`\n\n` +
       `🔑 *Активные ключи (топ-10):*\n` +
       `${activeKeysList || 'Нет активных ключей'}\n\n` +
@@ -15468,7 +15468,7 @@ bot.action('admin_create_promocode', async (ctx) => {
         Markup.button.callback('🟡 Легендарный сундук', 'create_promo_legendary')
       ],
       [
-        Markup.button.callback('💰 Magnum Coins', 'create_promo_mc'),
+        Markup.button.callback('💰 Stars', 'create_promo_Stars'),
         Markup.button.callback('⭐ Stars', 'create_promo_stars')
       ],
       [
@@ -15486,7 +15486,7 @@ bot.action('admin_create_promocode', async (ctx) => {
       `🔵 **Редкий сундук** - награды + майнеры\n` +
       `🟣 **Эпический сундук** - награды + титул + множитель\n` +
       `🟡 **Легендарный сундук** - максимальные награды\n\n` +
-      `💰 **Magnum Coins** - награда в монетах\n` +
+      `💰 **Stars** - награда в монетах\n` +
       `⭐ **Stars** - награда в звездах\n` +
       `👑 **Титул** - выдача титула\n` +
       `🎫 **Пользовательский** - ручной ввод\n\n` +
@@ -15500,30 +15500,30 @@ bot.action('admin_create_promocode', async (ctx) => {
 });
 
 // Обработчики создания промокодов по типам
-bot.action('create_promo_mc', async (ctx) => {
+bot.action('create_promo_Stars', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); 
     if (!user || !isAdmin(user.id)) return;
     
     await db.collection('users').updateOne(
       { id: user.id }, 
-      { $set: { adminState: 'creating_promo_mc', updatedAt: new Date() } }
+      { $set: { adminState: 'creating_promo_Stars', updatedAt: new Date() } }
     );
     userCache.delete(user.id);
     
     await ctx.editMessageText(
-      `💰 *Создание ключа Magnum Coins*\n\n` +
+      `💰 *Создание ключа Stars*\n\n` +
       `Введите данные ключа в формате:\n\n` +
       `**НАГРАДА АКТИВАЦИИ**\n\n` +
       `💡 Пример: 100 50\n\n` +
       `📋 Где:\n` +
-      `├ НАГРАДА - количество Magnum Coins\n` +
+      `├ НАГРАДА - количество Stars\n` +
       `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
       `🔑 Ключ будет сгенерирован автоматически (12 символов)\n\n` +
       `🎯 Введите данные:`,
       { parse_mode: 'Markdown' }
     );
-  } catch (error) { logError(error, 'Создание промокода MC (обработчик)'); }
+  } catch (error) { logError(error, 'Создание промокода Stars (обработчик)'); }
 });
 
 bot.action('create_promo_stars', async (ctx) => {
@@ -15605,13 +15605,13 @@ bot.action('create_promo_custom', async (ctx) => {
       `Введите данные промокода в формате:\n\n` +
       `**КОД НАГРАДА ТИП АКТИВАЦИИ**\n\n` +
       `💡 Примеры:\n` +
-      `├ WELCOME 100 mc 50\n` +
+      `├ WELCOME 100 Stars 50\n` +
       `├ STARS50 50 stars 25\n` +
       `└ LEGEND 👑 Легенда 10\n\n` +
       `📋 Где:\n` +
       `├ КОД - название промокода\n` +
       `├ НАГРАДА - количество или название титула\n` +
-      `├ ТИП - mc, stars, или title\n` +
+      `├ ТИП - Stars, stars, или title\n` +
       `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
       `🎯 Введите данные:`,
       { 
@@ -15649,7 +15649,7 @@ bot.action('create_promo_common', async (ctx) => {
       `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
       `🔑 Ключ будет сгенерирован автоматически (12 символов)\n\n` +
       `🎁 *Награды обычного сундука:*\n` +
-      `├ 10-60 Magnum Coins\n` +
+      `├ 10-60 Stars\n` +
       `└ 5-25 Stars\n\n` +
       `🎯 Введите количество активаций:`,
       { 
@@ -15685,7 +15685,7 @@ bot.action('create_promo_rare', async (ctx) => {
       `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
       `🔑 Ключ будет сгенерирован автоматически (12 символов)\n\n` +
       `🎁 *Награды редкого сундука:*\n` +
-      `├ 50-150 Magnum Coins\n` +
+      `├ 50-150 Stars\n` +
       `├ 25-75 Stars\n` +
       `└ 1-3 майнера\n\n` +
       `🎯 Введите количество активаций:`,
@@ -15722,7 +15722,7 @@ bot.action('create_promo_epic', async (ctx) => {
       `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
       `🔑 Ключ будет сгенерирован автоматически (12 символов)\n\n` +
       `🎁 *Награды эпического сундука:*\n` +
-      `├ 100-300 Magnum Coins\n` +
+      `├ 100-300 Stars\n` +
       `├ 50-150 Stars\n` +
       `├ Уникальный титул\n` +
       `└ Множитель x1.5\n\n` +
@@ -15760,7 +15760,7 @@ bot.action('create_promo_legendary', async (ctx) => {
       `└ АКТИВАЦИИ - максимальное количество использований\n\n` +
       `🔑 Ключ будет сгенерирован автоматически (12 символов)\n\n` +
       `🎁 *Награды легендарного сундука:*\n` +
-      `├ 300-800 Magnum Coins\n` +
+      `├ 300-800 Stars\n` +
       `├ 100-300 Stars\n` +
       `├ 2-5 майнеров\n` +
       `├ Легендарный титул\n` +
@@ -15778,7 +15778,7 @@ bot.action('admin_mass_give', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); if (!user || !isAdmin(user.id)) return;
     await db.collection('users').updateOne({ id: user.id }, { $set: { adminState: 'mass_give', updatedAt: new Date() } });
-    await ctx.reply('💰 Введите массовую выдачу (например: "stars 100" или "mc 50"):');
+    await ctx.reply('💰 Введите массовую выдачу (например: "stars 100" или "Stars 50"):');
   } catch (error) { logError(error, 'Массовая выдача (обработчик)'); }
 });
 bot.action('admin_mining_seasons', async (ctx) => {
@@ -15845,8 +15845,8 @@ bot.action('admin_season_end', async (ctx) => {
     
     // Получаем топ игроков сезона
     const topPlayers = await db.collection('users')
-      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
-      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .find({ 'miningStats.seasonMinedStars': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(50)
       .toArray();
     
@@ -15857,7 +15857,7 @@ bot.action('admin_season_end', async (ctx) => {
       const player = topPlayers[i];
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
-      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedMC || 0)} MC\n`;
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: ${formatNumber(player.miningStats?.seasonMinedStars || 0)} Stars\n`;
     }
     
     message += `\n💡 *Награды будут выданы автоматически*\n`;
@@ -15893,15 +15893,15 @@ bot.action('admin_season_rewards', async (ctx) => {
     
     // Получаем топ игроков сезона
     const topPlayers = await db.collection('users')
-      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
-      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .find({ 'miningStats.seasonMinedStars': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(50)
       .toArray();
     
     let message = `🏆 *Выдача наград сезона ${currentSeason.season}*\n\n`;
     message += `📊 *Топ-10 игроков:*\n`;
     
-    let totalRewardsMC = 0;
+    let totalRewardsStars = 0;
     let totalRewardsStars = 0;
     
     for (let i = 0; i < Math.min(10, topPlayers.length); i++) {
@@ -15909,28 +15909,28 @@ bot.action('admin_season_rewards', async (ctx) => {
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
       
-      let rewardMC = 0;
+      let rewardStars = 0;
       let rewardStars = 0;
       
       if (position === 1) {
-        rewardMC = config.SEASON_REWARDS.top1.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top1.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top1.stars;
       } else if (position <= 3) {
-        rewardMC = config.SEASON_REWARDS.top3.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top3.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top3.stars;
       } else if (position <= 10) {
-        rewardMC = config.SEASON_REWARDS.top10.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top10.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top10.stars;
       }
       
-      totalRewardsMC += rewardMC;
+      totalRewardsStars += rewardStars;
       totalRewardsStars += rewardStars;
       
-      message += `${emoji} ${player.firstName || 'Неизвестно'}: +${formatNumber(rewardMC)} MC +${rewardStars} ⭐\n`;
+      message += `${emoji} ${player.firstName || 'Неизвестно'}: +${formatNumber(rewardStars)} Stars +${rewardStars} ⭐\n`;
     }
     
     message += `\n💰 *Итого наград:*\n`;
-    message += `├ Magnum Coins: \`${formatNumber(totalRewardsMC)}\`\n`;
+    message += `├ Stars: \`${formatNumber(totalRewardsStars)}\`\n`;
     message += `└ Stars: \`${totalRewardsStars}\`\n\n`;
     message += `🎯 Выберите действие:`;
     
@@ -15964,50 +15964,50 @@ bot.action('admin_season_rewards_confirm', async (ctx) => {
     
     // Получаем топ игроков сезона
     const topPlayers = await db.collection('users')
-      .find({ 'miningStats.seasonMinedMC': { $exists: true } })
-      .sort({ 'miningStats.seasonMinedMC': -1 })
+      .find({ 'miningStats.seasonMinedStars': { $exists: true } })
+      .sort({ 'miningStats.seasonMinedStars': -1 })
       .limit(50)
       .toArray();
     
     let issuedCount = 0;
-    let totalRewardsMC = 0;
+    let totalRewardsStars = 0;
     let totalRewardsStars = 0;
     
     for (let i = 0; i < topPlayers.length; i++) {
       const player = topPlayers[i];
       const position = i + 1;
       
-      let rewardMC = 0;
+      let rewardStars = 0;
       let rewardStars = 0;
       
       if (position === 1) {
-        rewardMC = config.SEASON_REWARDS.top1.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top1.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top1.stars;
       } else if (position <= 3) {
-        rewardMC = config.SEASON_REWARDS.top3.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top3.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top3.stars;
       } else if (position <= 10) {
-        rewardMC = config.SEASON_REWARDS.top10.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top10.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top10.stars;
       } else if (position <= 50) {
-        rewardMC = config.SEASON_REWARDS.top50.magnumCoins;
+        rewardStars = config.SEASON_REWARDS.top50.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top50.stars;
       }
       
-      if (rewardMC > 0 || rewardStars > 0) {
+      if (rewardStars > 0 || rewardStars > 0) {
         await db.collection('users').updateOne(
           { id: player.id },
           {
             $inc: {
-              magnumCoins: rewardMC,
+              magnuStarsoins: rewardStars,
               stars: rewardStars,
-              'miningStats.seasonRewardsMC': rewardMC,
+              'miningStats.seasonRewardsStars': rewardStars,
               'miningStats.seasonRewardsStars': rewardStars
             }
           }
         );
         
-        totalRewardsMC += rewardMC;
+        totalRewardsStars += rewardStars;
         totalRewardsStars += rewardStars;
         issuedCount++;
       }
@@ -16017,7 +16017,7 @@ bot.action('admin_season_rewards_confirm', async (ctx) => {
       `✅ *Награды сезона ${currentSeason.season} выданы!*\n\n` +
       `📊 *Результат:*\n` +
       `├ Игроков получили награды: \`${issuedCount}\`\n` +
-      `├ Выдано Magnum Coins: \`${formatNumber(totalRewardsMC)}\`\n` +
+      `├ Выдано Stars: \`${formatNumber(totalRewardsStars)}\`\n` +
       `└ Выдано Stars: \`${totalRewardsStars}\`\n\n` +
       `🎉 *Сезон завершен успешно!*`;
     
@@ -16086,20 +16086,20 @@ bot.action('admin_season_stats', async (ctx) => {
     
     // Статистика сезона
     const seasonStats = await db.collection('users').aggregate([
-      { $match: { 'miningStats.seasonMinedMC': { $exists: true } } },
+      { $match: { 'miningStats.seasonMinedStars': { $exists: true } } },
       { 
         $group: { 
           _id: null, 
-          totalMC: { $sum: '$miningStats.seasonMinedMC' },
           totalStars: { $sum: '$miningStats.seasonMinedStars' },
-          avgMC: { $avg: '$miningStats.seasonMinedMC' },
+          totalStars: { $sum: '$miningStats.seasonMinedStars' },
+          avgStars: { $avg: '$miningStats.seasonMinedStars' },
           avgStars: { $avg: '$miningStats.seasonMinedStars' },
           players: { $sum: 1 }
         } 
       }
     ]).toArray();
     
-    const stats = seasonStats[0] || { totalMC: 0, totalStars: 0, avgMC: 0, avgStars: 0, players: 0 };
+    const stats = seasonStats[0] || { totalStars: 0, totalStars: 0, avgStars: 0, avgStars: 0, players: 0 };
     
     const message = 
       `📊 *Статистика сезона ${currentSeason.season}*\n\n` +
@@ -16108,9 +16108,9 @@ bot.action('admin_season_stats', async (ctx) => {
       `├ Активных майнеров: \`${stats.players}\`\n` +
       `└ Средняя активность: \`${((stats.players / 100) * 100).toFixed(1)}%\`\n\n` +
       `💰 *Добыча:*\n` +
-      `├ Всего MC: \`${formatNumber(stats.totalMC)}\`\n` +
       `├ Всего Stars: \`${formatNumber(stats.totalStars)}\`\n` +
-      `├ Среднее MC/игрок: \`${formatNumber(stats.avgMC)}\`\n` +
+      `├ Всего Stars: \`${formatNumber(stats.totalStars)}\`\n` +
+      `├ Среднее Stars/игрок: \`${formatNumber(stats.avgStars)}\`\n` +
       `└ Среднее Stars/игрок: \`${formatNumber(stats.avgStars)}\`\n\n` +
       `📅 *Время сезона:*\n` +
       `├ День сезона: \`${currentSeason.dayInSeason}/${config.MINING_SEASON_DURATION}\`\n` +
@@ -16150,7 +16150,7 @@ bot.action('admin_referral_bonuses', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id); if (!user) return;
     const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_referral_settings')]]);
-    const message = `🏆 *Бонусы за рефералов*`+"\n\n"+`Базовая награда: \`${config.REFERRAL_BONUS}\` MC.`;
+    const message = `🏆 *Бонусы за рефералов*`+"\n\n"+`Базовая награда: \`${config.REFERRAL_BONUS}\` Stars.`;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'Бонусы за рефералов (обработчик)'); }
 });
@@ -16165,7 +16165,7 @@ bot.action('admin_referral_stats', async (ctx) => {
     const keyboard = Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'admin_referral_settings')]]);
     const message = `👥 *Статистика рефералов*`+"\n\n"+
       `├ Всего рефералов: \`${g.totalRef}\``+"\n"+
-      `├ Суммарные выплаты: \`${formatNumber(g.totalEarn)}\` MC`+"\n"+
+      `├ Суммарные выплаты: \`${formatNumber(g.totalEarn)}\` Stars`+"\n"+
       `└ Пользователей: \`${g.users}\``;
     await ctx.editMessageText(message, { parse_mode: 'Markdown', reply_markup: keyboard.reply_markup });
   } catch (error) { logError(error, 'Статистика рефералов (обработчик)'); }
@@ -16240,7 +16240,7 @@ bot.action('admin_daily_bonus', async (ctx) => {
       `├ 5 (5 монет)\n` +
       `├ 10 (10 монет)\n` +
       `└ 50 (50 монет)\n\n` +
-      `⚠️ *Текущий бонус:* \`${config.DAILY_BONUS_BASE}\` Magnum Coins\n\n` +
+      `⚠️ *Текущий бонус:* \`${config.DAILY_BONUS_BASE}\` Stars\n\n` +
       `🎯 Введите новое значение:`,
       {
         parse_mode: 'Markdown',
@@ -16280,7 +16280,7 @@ bot.action('admin_miner_settings', async (ctx) => {
       `├ 0.1 (10 центов в минуту)\n` +
       `├ 1.0 (1 монета в минуту)\n` +
       `└ 10.0 (10 монет в минуту)\n\n` +
-      `⚠️ *Текущая награда:* \`${config.MINER_REWARD_PER_MINUTE}\` Magnum Coins/мин\n\n` +
+      `⚠️ *Текущая награда:* \`${config.MINER_REWARD_PER_MINUTE}\` Stars/мин\n\n` +
       `🎯 Введите новое значение:`,
       {
         parse_mode: 'Markdown',
@@ -16320,7 +16320,7 @@ bot.action('admin_referral_settings', async (ctx) => {
       `├ 50 (50 монет)\n` +
       `├ 100 (100 монет)\n` +
       `└ 500 (500 монет)\n\n` +
-      `⚠️ *Текущая награда:* \`${config.REFERRAL_REWARD}\` Magnum Coins\n\n` +
+      `⚠️ *Текущая награда:* \`${config.REFERRAL_REWARD}\` Stars\n\n` +
       `🎯 Введите новое значение:`,
       {
         parse_mode: 'Markdown',
@@ -16732,17 +16732,17 @@ bot.on('text', async (ctx) => {
         console.log(`🎫 Пользователь ${ctx.from.id} вводит промокод: "${text}"`);
         await handleUserEnterPromocodeText(ctx, user, text);
         return;
-      } else if (user.adminState === 'exchange_custom_mc') {
-        console.log(`🪙 Пользователь ${ctx.from.id} вводит сумму MC для обмена: "${text}"`);
-        await handleExchangeCustomMC(ctx, user, text);
+      } else if (user.adminState === 'exchange_custom_Stars') {
+        console.log(`🪙 Пользователь ${ctx.from.id} вводит сумму Stars для обмена: "${text}"`);
+        await handleExchangeCustomStars(ctx, user, text);
         return;
       } else if (user.adminState === 'exchange_custom_stars') {
         console.log(`⭐ Пользователь ${ctx.from.id} вводит сумму Stars для обмена: "${text}"`);
         await handleExchangeCustomStars(ctx, user, text);
         return;
-      } else if (user.adminState === 'withdrawing_mc') {
-        console.log(`💰 Пользователь ${ctx.from.id} вводит сумму MC для вывода: "${text}"`);
-        await handleWithdrawalMC(ctx, user, text);
+      } else if (user.adminState === 'withdrawing_Stars') {
+        console.log(`💰 Пользователь ${ctx.from.id} вводит сумму Stars для вывода: "${text}"`);
+        await handleWithdrawalStars(ctx, user, text);
         return;
       } else if (user.adminState === 'withdrawing_stars') {
         console.log(`⭐ Пользователь ${ctx.from.id} вводит сумму Stars для вывода: "${text}"`);
@@ -16765,7 +16765,7 @@ bot.on('text', async (ctx) => {
           await handleAdminSetFarmReward(ctx, user, text);
         } else if (user.adminState === 'setting_farm_cooldown') {
           console.log(`⏰ Админ ${ctx.from.id} устанавливает кулдаун фарма: "${text}"`);
-          await handleAdminSetFarmCooldown(ctx, user, text);
+          await handleAdminSetFarStarsooldown(ctx, user, text);
         } else if (user.adminState === 'setting_bonus_base') {
           console.log(`🎁 Админ ${ctx.from.id} устанавливает базовый бонус: "${text}"`);
           await handleAdminSetBonusBase(ctx, user, text);
@@ -16787,9 +16787,9 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'creating_promocode') {
           console.log(`🎫 Админ ${ctx.from.id} создает промокод: "${text}"`);
           await handleAdminCreatePromocode(ctx, user, text);
-        } else if (user.adminState === 'creating_promo_mc') {
-          console.log(`💰 Админ ${ctx.from.id} создает промокод MC: "${text}"`);
-          await handleAdminCreatePromoMC(ctx, user, text);
+        } else if (user.adminState === 'creating_promo_Stars') {
+          console.log(`💰 Админ ${ctx.from.id} создает промокод Stars: "${text}"`);
+          await handleAdminCreatePromoStars(ctx, user, text);
         } else if (user.adminState === 'creating_promo_stars') {
           console.log(`⭐ Админ ${ctx.from.id} создает промокод Stars: "${text}"`);
           await handleAdminCreatePromoStars(ctx, user, text);
@@ -16814,12 +16814,12 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'giving_rank') {
           console.log(`⭐ Админ ${ctx.from.id} выдает ранг: "${text}"`);
           await handleAdminGiveRank(ctx, user, text);
-        } else if (user.adminState === 'adding_reserve_mc') {
-          console.log(`➕ Админ ${ctx.from.id} добавляет Magnum Coins в резерв: "${text}"`);
-          await handleAdminAddReserveMC(ctx, user, text);
-        } else if (user.adminState === 'removing_reserve_mc') {
-          console.log(`➖ Админ ${ctx.from.id} убирает Magnum Coins из резерва: "${text}"`);
-          await handleAdminRemoveReserveMC(ctx, user, text);
+        } else if (user.adminState === 'adding_reserve_Stars') {
+          console.log(`➕ Админ ${ctx.from.id} добавляет Stars в резерв: "${text}"`);
+          await handleAdminAddReserveStars(ctx, user, text);
+        } else if (user.adminState === 'removing_reserve_Stars') {
+          console.log(`➖ Админ ${ctx.from.id} убирает Stars из резерва: "${text}"`);
+          await handleAdminRemoveReserveStars(ctx, user, text);
         } else if (user.adminState === 'adding_reserve_stars') {
           console.log(`➕ Админ ${ctx.from.id} добавляет Stars в резерв: "${text}"`);
           await handleAdminAddReserveStars(ctx, user, text);
@@ -16853,12 +16853,12 @@ bot.on('text', async (ctx) => {
           if (text.trim().toUpperCase() === 'ПОДТВЕРДИТЬ') {
             // Сбрасываем сезонную статистику всех игроков
             await db.collection('users').updateMany(
-              { 'miningStats.seasonMinedMC': { $exists: true } },
+              { 'miningStats.seasonMinedStars': { $exists: true } },
               {
                 $set: {
-                  'miningStats.seasonMinedMC': 0,
                   'miningStats.seasonMinedStars': 0,
-                  'miningStats.seasonRewardsMC': 0,
+                  'miningStats.seasonMinedStars': 0,
+                  'miningStats.seasonRewardsStars': 0,
                   'miningStats.seasonRewardsStars': 0,
                   updatedAt: new Date()
                 }
@@ -16875,12 +16875,12 @@ bot.on('text', async (ctx) => {
           if (text.trim().toUpperCase() === 'СБРОСИТЬ') {
             // Сбрасываем сезонную статистику всех игроков
             await db.collection('users').updateMany(
-              { 'miningStats.seasonMinedMC': { $exists: true } },
+              { 'miningStats.seasonMinedStars': { $exists: true } },
               {
                 $set: {
-                  'miningStats.seasonMinedMC': 0,
                   'miningStats.seasonMinedStars': 0,
-                  'miningStats.seasonRewardsMC': 0,
+                  'miningStats.seasonMinedStars': 0,
+                  'miningStats.seasonRewardsStars': 0,
                   'miningStats.seasonRewardsStars': 0,
                   updatedAt: new Date()
                 }
@@ -16895,11 +16895,11 @@ bot.on('text', async (ctx) => {
         } else if (user.adminState === 'mass_give') {
           console.log(`💰 Админ ${ctx.from.id} выполняет массовую выдачу: "${text}"`);
           const parts = text.trim().split(/\s+/);
-          if (parts.length < 2) { await ctx.reply('❌ Формат: "stars 100" или "mc 50"'); return; }
+          if (parts.length < 2) { await ctx.reply('❌ Формат: "stars 100" или "Stars 50"'); return; }
           const type = parts[0].toLowerCase();
           const amount = parseFloat(parts[1]);
-          if (!['stars','mc'].includes(type) || !isFinite(amount)) { await ctx.reply('❌ Неверные параметры'); return; }
-          const inc = type === 'stars' ? { stars: amount, totalEarnedStars: Math.max(amount, 0) } : { magnumCoins: amount, totalEarnedMagnumCoins: Math.max(amount, 0) };
+          if (!['stars','Stars'].includes(type) || !isFinite(amount)) { await ctx.reply('❌ Неверные параметры'); return; }
+          const inc = type === 'stars' ? { stars: amount, totalEarnedStars: Math.max(amount, 0) } : { magnuStarsoins: amount, totalEarnedMagnuStarsoins: Math.max(amount, 0) };
           await db.collection('users').updateMany({}, { $inc: inc, $set: { updatedAt: new Date() } });
           await db.collection('users').updateOne({ id: user.id }, { $unset: { adminState: '' } });
           await ctx.reply(`✅ Массовая выдача выполнена: ${type} ${amount}`);
@@ -16986,9 +16986,9 @@ bot.action(/^approve_(.+)$/, async (ctx) => {
         withdrawalRequest.userId,
         `✅ *Заявка на вывод одобрена!*\n\n` +
         `💰 *Детали заявки:*\n` +
-        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
-        `├ Комиссия: ${formatNumber(withdrawalRequest.amount * 0.05)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
-        `├ К выплате: ${formatNumber(withdrawalRequest.amount * 0.95)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(withdrawalRequest.amount * 0.05)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
+        `├ К выплате: ${formatNumber(withdrawalRequest.amount * 0.95)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
         `└ Статус: ✅ Одобрено\n\n` +
         `📅 *Дата одобрения:* ${new Date().toLocaleString('ru-RU')}\n` +
         `🆔 *Номер заявки:* #${requestId}\n\n` +
@@ -17151,7 +17151,7 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
     );
     
     // Возвращаем средства пользователю
-    const currencyField = withdrawalRequest.currency === 'magnum_coins' ? 'magnumCoins' : 'stars';
+    const currencyField = withdrawalRequest.currency === 'magnum_coins' ? 'magnuStarsoins' : 'stars';
     await db.collection('users').updateOne(
       { id: withdrawalRequest.userId },
       { 
@@ -17172,9 +17172,9 @@ bot.action(/^reject_(.+):(.+)$/, async (ctx) => {
         withdrawalRequest.userId,
         `❌ *Заявка на вывод отклонена*\n\n` +
         `${withdrawalRequest.currency === 'magnum_coins' ? '💰' : '⭐'} *Детали заявки:*\n` +
-        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
-        `├ Комиссия: ${formatNumber(commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
-        `├ К получению: ${formatNumber(amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Magnum Coins' : 'Stars'}\n` +
+        `├ Сумма: ${formatNumber(withdrawalRequest.amount)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
+        `├ Комиссия: ${formatNumber(commission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
+        `├ К получению: ${formatNumber(amountAfterCommission)} ${withdrawalRequest.currency === 'magnum_coins' ? 'Stars' : 'Stars'}\n` +
         `└ Статус: ❌ Отклонено\n\n` +
         `🚫 *Причина отклонения:* ${reasonText}\n` +
         `📅 *Дата отклонения:* ${new Date().toLocaleString('ru-RU')}\n` +
