@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnum Stars - Заработок</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Заголовок -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🌟</span>
+                    <span class="logo-text">Magnum Stars</span>
+                </div>
+                <div class="user-balance">
+                    <div class="balance-item">
+                        <span class="balance-icon">💰</span>
+                        <span class="balance-value" id="magnumCoins">0</span>
+                        <span class="balance-label">MC</span>
+                    </div>
+                    <div class="balance-item">
+                        <span class="balance-icon">⭐</span>
+                        <span class="balance-value" id="stars">0</span>
+                        <span class="balance-label">Stars</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Основной контент -->
+        <main class="app-main">
+            <div class="welcome-section">
+                <h1 class="welcome-title">Добро пожаловать!</h1>
+                <p class="welcome-text">Зарабатывайте Magnum Coins и Stars прямо сейчас</p>
+            </div>
+
+            <!-- Статистика -->
+            <div class="stats-section">
+                <div class="stat-card">
+                    <div class="stat-icon">⛏️</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="miningSpeed">0</div>
+                        <div class="stat-label">MC/мин</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🏆</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="userLevel">1</div>
+                        <div class="stat-label">Уровень</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="totalMined">0</div>
+                        <div class="stat-label">Всего добыто</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Быстрые действия -->
+            <div class="quick-actions">
+                <h2 class="section-title">Быстрые действия</h2>
+                <div class="action-grid">
+                    <button class="action-btn" onclick="handleMiningClick()">
+                        <span class="action-icon">⚡</span>
+                        <span class="action-text">Активный клик</span>
+                    </button>
+                    <button class="action-btn" onclick="handleFarmClick()">
+                        <span class="action-icon">🌾</span>
+                        <span class="action-text">Фарм</span>
+                    </button>
+                    <button class="action-btn" onclick="handleExchangeClick()">
+                        <span class="action-icon">💱</span>
+                        <span class="action-text">Обмен</span>
+                    </button>
+                    <button class="action-btn" onclick="handleTasksClick()">
+                        <span class="action-icon">📋</span>
+                        <span class="action-text">Задания</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Уведомления -->
+            <div id="notifications" class="notifications"></div>
+        </main>
+
+        <!-- Нижняя панель с кнопкой "Заработать" -->
+        <footer class="app-footer">
+            <div class="footer-content">
+                <button class="earn-button" onclick="handleEarnClick()">
+                    <span class="earn-icon">💰</span>
+                    <span class="earn-text">Заработать</span>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnum Stars - Тест WebApp</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Стили для тестового режима */
+        .test-mode {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: #ff6b6b;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            font-size: 12px;
+        }
+        
+        .test-controls {
+            position: fixed;
+            top: 50px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 1000;
+            font-size: 12px;
+            max-width: 200px;
+        }
+        
+        .test-controls button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .test-controls button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <!-- Тестовый режим индикатор -->
+    <div class="test-mode">🧪 ТЕСТОВЫЙ РЕЖИМ</div>
+    
+    <!-- Тестовые контролы -->
+    <div class="test-controls">
+        <h4>Тестовые данные:</h4>
+        <button onclick="setTestData('new')">Новый пользователь</button>
+        <button onclick="setTestData('rich')">Богатый пользователь</button>
+        <button onclick="setTestData('vip')">VIP пользователь</button>
+        <br><br>
+        <h4>Действия:</h4>
+        <button onclick="simulateAction('mining')">Майнинг клик</button>
+        <button onclick="simulateAction('farm')">Фарм</button>
+        <button onclick="simulateAction('exchange')">Обмен</button>
+        <br><br>
+        <h4>Ошибки:</h4>
+        <button onclick="simulateError('network')">Ошибка сети</button>
+        <button onclick="simulateError('server')">Ошибка сервера</button>
+    </div>
+
+    <div class="app-container">
+        <!-- Заголовок -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🌟</span>
+                    <span class="logo-text">Magnum Stars</span>
+                </div>
+                <div class="user-balance">
+                    <div class="balance-item">
+                        <span class="balance-icon">💰</span>
+                        <span class="balance-value" id="magnumCoins">0</span>
+                        <span class="balance-label">MC</span>
+                    </div>
+                    <div class="balance-item">
+                        <span class="balance-icon">⭐</span>
+                        <span class="balance-value" id="stars">0</span>
+                        <span class="balance-label">Stars</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Основной контент -->
+        <main class="app-main">
+            <div class="welcome-section">
+                <h1 class="welcome-title">Добро пожаловать!</h1>
+                <p class="welcome-text">Зарабатывайте Magnum Coins и Stars прямо сейчас</p>
+            </div>
+
+            <!-- Статистика -->
+            <div class="stats-section">
+                <div class="stat-card">
+                    <div class="stat-icon">⛏️</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="miningSpeed">0</div>
+                        <div class="stat-label">MC/мин</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🏆</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="userLevel">1</div>
+                        <div class="stat-label">Уровень</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="totalMined">0</div>
+                        <div class="stat-label">Всего добыто</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Быстрые действия -->
+            <div class="quick-actions">
+                <h2 class="section-title">Быстрые действия</h2>
+                <div class="action-grid">
+                    <button class="action-btn" onclick="handleMiningClick()">
+                        <span class="action-icon">⚡</span>
+                        <span class="action-text">Активный клик</span>
+                    </button>
+                    <button class="action-btn" onclick="handleFarmClick()">
+                        <span class="action-icon">🌾</span>
+                        <span class="action-text">Фарм</span>
+                    </button>
+                    <button class="action-btn" onclick="handleExchangeClick()">
+                        <span class="action-icon">💱</span>
+                        <span class="action-text">Обмен</span>
+                    </button>
+                    <button class="action-btn" onclick="handleTasksClick()">
+                        <span class="action-icon">📋</span>
+                        <span class="action-text">Задания</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Уведомления -->
+            <div id="notifications" class="notifications"></div>
+        </main>
+
+        <!-- Нижняя панель с кнопкой "Заработать" -->
+        <footer class="app-footer">
+            <div class="footer-content">
+                <button class="earn-button" onclick="handleEarnClick()">
+                    <span class="earn-icon">💰</span>
+                    <span class="earn-text">Заработать</span>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Тестовые данные
+        let testUserData = {
+            userId: 123456789,
+            magnumCoins: 100,
+            stars: 50,
+            level: 1,
+            miningStats: {
+                totalMinedMC: 0,
+                totalMinedStars: 0,
+                activeClicks: 0
+            },
+            miners: [
+                { type: 'magnumCoins', level: 1, speed: 1, active: true },
+                { type: 'stars', level: 1, speed: 1, active: true }
+            ]
+        };
+
+        // Инициализация тестового режима
+        document.addEventListener('DOMContentLoaded', () => {
+            updateUI();
+            showNotification('🧪 Тестовый режим активирован', 'info');
+        });
+
+        // Обновление интерфейса
+        function updateUI() {
+            document.getElementById('magnumCoins').textContent = formatNumber(testUserData.magnumCoins);
+            document.getElementById('stars').textContent = formatNumber(testUserData.stars);
+            document.getElementById('userLevel').textContent = testUserData.level;
+            
+            const miningSpeed = calculateMiningSpeed();
+            document.getElementById('miningSpeed').textContent = miningSpeed.toFixed(2);
+            
+            const totalMined = testUserData.miningStats.totalMinedMC + testUserData.miningStats.totalMinedStars;
+            document.getElementById('totalMined').textContent = formatNumber(totalMined);
+        }
+
+        // Расчет скорости майнинга
+        function calculateMiningSpeed() {
+            let totalSpeed = 0;
+            testUserData.miners.forEach(miner => {
+                if (miner.active) {
+                    const baseSpeed = miner.type === 'magnumCoins' ? 1 : 0.5;
+                    totalSpeed += baseSpeed * miner.speed * miner.level;
+                }
+            });
+            return totalSpeed;
+        }
+
+        // Форматирование чисел
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toFixed(0);
+        }
+
+        // Показ уведомлений
+        function showNotification(message, type = 'info') {
+            const notifications = document.getElementById('notifications');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            
+            notifications.appendChild(notification);
+            
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 5000);
+        }
+
+        // Установка тестовых данных
+        function setTestData(type) {
+            switch(type) {
+                case 'new':
+                    testUserData = {
+                        userId: 123456789,
+                        magnumCoins: 100,
+                        stars: 50,
+                        level: 1,
+                        miningStats: { totalMinedMC: 0, totalMinedStars: 0, activeClicks: 0 },
+                        miners: [
+                            { type: 'magnumCoins', level: 1, speed: 1, active: true },
+                            { type: 'stars', level: 1, speed: 1, active: true }
+                        ]
+                    };
+                    break;
+                case 'rich':
+                    testUserData = {
+                        userId: 123456789,
+                        magnumCoins: 10000,
+                        stars: 5000,
+                        level: 10,
+                        miningStats: { totalMinedMC: 5000, totalMinedStars: 2000, activeClicks: 100 },
+                        miners: [
+                            { type: 'magnumCoins', level: 5, speed: 2, active: true },
+                            { type: 'stars', level: 3, speed: 1.5, active: true }
+                        ]
+                    };
+                    break;
+                case 'vip':
+                    testUserData = {
+                        userId: 123456789,
+                        magnumCoins: 100000,
+                        stars: 50000,
+                        level: 50,
+                        miningStats: { totalMinedMC: 50000, totalMinedStars: 25000, activeClicks: 1000 },
+                        miners: [
+                            { type: 'magnumCoins', level: 10, speed: 5, active: true },
+                            { type: 'stars', level: 8, speed: 3, active: true }
+                        ]
+                    };
+                    break;
+            }
+            updateUI();
+            showNotification(`📊 Данные изменены: ${type}`, 'success');
+        }
+
+        // Симуляция действий
+        function simulateAction(action) {
+            switch(action) {
+                case 'mining':
+                    testUserData.magnumCoins += 0.1;
+                    testUserData.miningStats.activeClicks++;
+                    testUserData.miningStats.totalMinedMC += 0.1;
+                    showNotification('⚡ +0.1 MC за активный клик!', 'success');
+                    break;
+                case 'farm':
+                    testUserData.magnumCoins += 10;
+                    testUserData.miningStats.totalMinedMC += 10;
+                    showNotification('🌾 +10 MC за фарм!', 'success');
+                    break;
+                case 'exchange':
+                    if (testUserData.magnumCoins >= 100) {
+                        testUserData.magnumCoins -= 100;
+                        testUserData.stars += 0.1;
+                        showNotification('💱 Обмен: 100 MC → 0.1 Stars', 'success');
+                    } else {
+                        showNotification('❌ Недостаточно MC для обмена', 'error');
+                    }
+                    break;
+            }
+            updateUI();
+        }
+
+        // Симуляция ошибок
+        function simulateError(type) {
+            switch(type) {
+                case 'network':
+                    showNotification('🌐 Ошибка сети. Проверьте подключение.', 'error');
+                    break;
+                case 'server':
+                    showNotification('🔧 Ошибка сервера. Попробуйте позже.', 'error');
+                    break;
+            }
+        }
+
+        // Обработчики кнопок
+        function handleEarnClick() {
+            showNotification('💰 Открывается меню заработка...', 'info');
+        }
+
+        function handleMiningClick() {
+            simulateAction('mining');
+        }
+
+        function handleFarmClick() {
+            simulateAction('farm');
+        }
+
+        function handleExchangeClick() {
+            simulateAction('exchange');
+        }
+
+        function handleTasksClick() {
+            showNotification('📋 Загрузка заданий...', 'info');
+        }
+    </script>
+</body>
+</html>

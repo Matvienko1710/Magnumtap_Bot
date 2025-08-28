@@ -4,42 +4,64 @@
  */
 
 const axios = require('axios');
+const config = require('./config/constants');
+const logger = require('./utils/logger');
 
 class RichAdsIntegration {
   constructor() {
-    this.apiKey = process.env.RICHADS_API_KEY || '6d0734893c941affcca49d54e05193da';
-    this.apiUrl = 'https://11745.direct.4armn.com';
+    this.apiKey = config.RICHADS_API_KEY || '6d0734893c941affcca49d54e05193da';
+    this.apiUrl = config.RICHADS_API_URL;
+    this.publisherId = config.RICHADS_PUBLISHER_ID || '982065';
+    this.siteId = config.RICHADS_SITE_ID || 'demo';
     this.offers = [];
     this.lastUpdate = null;
     this.updateInterval = 30 * 60 * 1000; // 30 минут
+    
+    logger.info('RichAds интеграция инициализирована', {
+      apiUrl: this.apiUrl,
+      hasApiKey: !!this.apiKey,
+      publisherId: this.publisherId,
+      siteId: this.siteId
+    });
   }
 
   // Получение офферов от RichAds
   async getOffers() {
     try {
       if (!this.apiKey) {
-        console.log('⚠️ RICHADS_API_KEY не установлен, возвращаем демо-офферы');
+        logger.warn('RICHADS_API_KEY не установлен, возвращаем демо-офферы');
         return this.getDemoOffers();
       }
 
       // Проверяем, нужно ли обновить кеш
       if (this.offers.length > 0 && this.lastUpdate && 
           (Date.now() - this.lastUpdate) < this.updateInterval) {
+        logger.debug('Возвращаем кэшированные офферы RichAds');
         return this.offers;
       }
 
-      console.log('🔄 Обновление офферов RichAds...');
+      logger.info('Обновление офферов RichAds...');
 
-      // Используем правильный URL для RichAds API
+      // Используем правильный URL для RichAds API с улучшенными параметрами
       const response = await axios.get(`${this.apiUrl}`, {
         params: {
           ip: '93.195.225.194', // IP пользователя (можно получить динамически)
           useragent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          pubid: '982065',
-          siteid: 'demo', // Можно заменить на реальный siteid
-          'source-type': '1'
+          pubid: this.publisherId,
+          siteid: this.siteId,
+          'source-type': '1',
+          api_key: this.apiKey
         },
-        timeout: 10000
+        timeout: config.API_TIMEOUT,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      logger.debug('RichAds API ответ получен', {
+        status: response.status,
+        dataLength: response.data?.length || 0
       });
 
       if (response.data && response.data.length > 0) {
@@ -47,30 +69,30 @@ class RichAdsIntegration {
         const offers = this.parseJSONOffers(response.data);
         this.offers = this.formatOffers(offers);
         this.lastUpdate = Date.now();
-        console.log(`✅ Получено ${this.offers.length} офферов RichAds`);
+        logger.info(`Получено ${this.offers.length} офферов RichAds`);
         return this.offers;
       } else {
         // Если нет данных, возвращаем демо-офферы
-        console.log('📋 RichAds API не вернул данные, используем демо-офферы');
+        logger.warn('RichAds API не вернул данные, используем демо-офферы');
         return this.getDemoOffers();
       }
 
       return [];
     } catch (error) {
-      console.error('❌ Ошибка получения офферов RichAds:', error.message);
-      if (error.response) {
-        console.error('📊 Статус ответа:', error.response.status);
-        console.error('📊 Данные ответа:', error.response.data);
-        
-        // Если статус 204 (No Content), это нормально для RichAds
-        if (error.response.status === 204) {
-          console.log('📋 RichAds API вернул 204 (No Content), используем демо-офферы');
-          return this.getDemoOffers();
-        }
+      logger.apiError('RichAds', error, {
+        apiUrl: this.apiUrl,
+        publisherId: this.publisherId,
+        siteId: this.siteId
+      });
+      
+      // Если статус 204 (No Content), это нормально для RichAds
+      if (error.response?.status === 204) {
+        logger.info('RichAds API вернул 204 (No Content), используем демо-офферы');
+        return this.getDemoOffers();
       }
       
       // Возвращаем демо-офферы если API недоступен
-      console.log('🔄 Возвращаем демо-офферы из-за ошибки API');
+      logger.warn('Возвращаем демо-офферы из-за ошибки API');
       return this.getDemoOffers();
     }
   }

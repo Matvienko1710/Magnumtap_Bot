@@ -5,8 +5,9 @@
   "main": "magnum-bot-final.js",
   "scripts": {
     "start": "node magnum-bot-final.js",
+    "start:modular": "node magnum-bot-modular.js",
     "dev": "nodemon magnum-bot-final.js",
-    "logging": "node start-with-logging.js",
+    "test:release": "node test-release-readiness.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -25,10 +26,15 @@
   "license": "MIT",
   "dependencies": {
     "axios": "^1.11.0",
+    "compression": "^1.7.4",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
     "mongodb": "^6.3.0",
-    "telegraf": "^4.15.6"
+    "telegraf": "^4.15.6",
+    "redis": "^4.6.13",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
