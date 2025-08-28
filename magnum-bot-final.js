@@ -2065,7 +2065,7 @@ async function formatProfileMessage(user, rankProgress) {
     `└ Титул: ${user.mainTitle}\n\n` +
     `💎 *Баланс:*\n` +
     `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
-    `└ 🪙 Stars: \`${formatNumber(user.magnuStarsoins)}\`\n\n` +
+    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnuStarsoins)}\`\n\n` +
     `📊 *Статистика сообщества:*\n` +
     `├ 👥 Пользователей: \`${Math.floor(globalStats.totalUsers)}\`\n` +
     `├ 💰 Выведено Stars: \`${formatNumber(globalStats.totalWithdrawnStars)}\`\n` +
@@ -2829,18 +2829,14 @@ async function showMinerMenu(ctx, user) {
   const message = 
     `⛏️ *Новая система майнинга*${seasonInfo}\n\n` +
     `💎 *Ваши майнеры:* ${totalMiners} шт.\n` +
-    `⚡ *Скорость добычи Stars:* ${formatNumber(totalSpeed.stars)} Stars/мин\n` +
-    `⭐ *Скорость добычи Stars:* ${formatNumber(totalSpeed.stars)} ⭐/мин\n\n` +
+    `⚡ *Скорость добычи Stars:* ${formatNumber(totalSpeed.stars)} Stars/мин\n\n` +
     `💰 *Награды:*\n` +
-    `└ Stars: ${formatNumber(rewardPerMinuteStars)} Stars/мин • ${formatNumber(rewardPerHourStars)} Stars/час\n` +
-    `└ Stars: ${formatNumber(rewardPerMinuteStars)} ⭐/мин • ${formatNumber(rewardPerHourStars)} ⭐/час\n\n` +
+    `└ Stars: ${formatNumber(rewardPerMinuteStars)} Stars/мин • ${formatNumber(rewardPerHourStars)} Stars/час\n\n` +
     `👑 *Титул:* ${mainTitle}${titleBonusText}\n\n` +
     `📊 *Всего добыто:*\n` +
-    `└ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} Stars\n` +
-    `└ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} ⭐\n\n` +
+    `└ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} Stars\n\n` +
     `📊 *Сезонная добыча:*\n` +
-    `└ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} Stars\n` +
-    `└ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} ⭐\n\n` +
+    `└ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} Stars\n\n` +
     `🎯 Выберите действие ниже.`;
   
   await ctx.editMessageText(message, {
@@ -4993,7 +4989,7 @@ async function showAdminReserve(ctx, user) {
     const message = 
       `🏦 *Управление резервом биржи*\n\n` +
       `💰 *Текущий резерв:*\n` +
-      `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `💱 *Текущий курс обмена:*\n` +
       `├ 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
@@ -6970,7 +6966,7 @@ async function showExchangeMenu(ctx, user) {
     const message = 
       `📈 *Magnum Exchange*\n\n` +
       `💰 *Ваши балансы:*\n` +
-      `├ 🪙 Stars: \`${formatNumber(user.magnuStarsoins)}\`\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(user.magnuStarsoins)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(user.stars)}\`\n\n` +
       `📊 *Текущий курс:*\n` +
       `├ ${priceChangeIcon} 1 Magnum Coin = ${exchangeRate.toFixed(6)} Stars\n` +
@@ -6978,7 +6974,7 @@ async function showExchangeMenu(ctx, user) {
       `├ 💸 Комиссия: ${config.EXCHANGE_COMMISSION}%\n` +
       `└ 📅 Обновлено: ${new Date().toLocaleTimeString('ru-RU')}\n\n` +
       `🏦 *Резерв биржи:*\n` +
-      `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `📈 *Рыночные данные:*\n` +
       `├ 24ч объем: \`${formatNumber(user.exchange?.totalExchanged || 0)}\` Stars\n` +
@@ -7784,7 +7780,7 @@ async function showAchievementsRewards(ctx, user) {
     
     const categories = {
       '🌾 Фарм': achievements.filter(a => a.id.includes('farm')),
-      '🪙 Stars': achievements.filter(a => a.id.includes('magnum')),
+      '🪙 Magnum Coins': achievements.filter(a => a.id.includes('magnum')),
       '💱 Обмен': achievements.filter(a => a.id.includes('exchange')),
       '⭐ Уровни': achievements.filter(a => a.id.includes('level')),
       '👥 Рефералы': achievements.filter(a => a.id.includes('referral')),
@@ -8635,7 +8631,7 @@ async function showSponsorTasks(ctx, user) {
         const userTask = userTasks[task.id];
         // Показываем только те офферы, которые существуют в userTasks и завершены
         if (userTask && userTask.completed && userTask.claimed) {
-          const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
+          const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} 🪙 Magnum Coins`;
           message += `✅ *${escapeMarkdown(task.title)}*\n`;
           message += `├ Награда: \`${escapeMarkdown(rewardText)}\` ✅ Получена\n`;
           message += `└ Сложность: ${escapeMarkdown(task.difficulty)}\n\n`;
@@ -8687,7 +8683,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
-      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} 🪙 Magnum Coins`;
       
       let message = `✅ *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8712,7 +8708,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
-      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} 🪙 Magnum Coins`;
       
       let message = `🎁 *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8737,7 +8733,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
         [Markup.button.callback('🔙 Назад', 'tasks_sponsor')]
       ]);
       
-      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
+      const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} 🪙 Magnum Coins`;
       
       let message = `📸 *${escapeMarkdown(task.title)}*\n\n`;
       message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8783,7 +8779,7 @@ async function showSponsorTaskDetails(ctx, user, taskId) {
     
     const keyboard = Markup.inlineKeyboard(keyboardButtons);
     
-    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} 🪙 Magnum Coins`;
     
     let message = `🔄 *${escapeMarkdown(task.title)}*\n\n`;
     message += `📝 *Описание:*\n${escapeMarkdown(task.description)}\n\n`;
@@ -8904,7 +8900,7 @@ async function verifySponsorTask(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
-    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
+    const rewardText = task.rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} 🪙 Magnum Coins`;
     log(`✅ RichAds оффер ${taskId} выполнен пользователем ${user.id}`);
     await ctx.answerCbQuery(`✅ Оффер выполнен! Награда: ${rewardText}`);
     
@@ -8991,7 +8987,7 @@ async function claimSponsorTask(ctx, user, taskId) {
     // Очищаем кеш
     userCache.delete(user.id);
     
-    const rewardText = rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} Stars`;
+    const rewardText = rewardType === 'stars' ? `${task.reward} ⭐ Stars` : `${task.reward} 🪙 Magnum Coins`;
     log(`🎁 Награда RichAds оффера ${taskId} получена пользователем ${user.id}: ${rewardText}`);
     await ctx.answerCbQuery(`🎁 Награда получена! +${rewardText}`);
     
@@ -15509,7 +15505,7 @@ bot.action('admin_reserve_rate_details', async (ctx) => {
     const message = 
       `📊 *Детали расчета курса*\n\n` +
       `💰 *Резервы:*\n` +
-      `├ 🪙 Stars: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
+      `├ 🪙 Magnum Coins: \`${formatNumber(magnuStarsoinsReserve)}\`\n` +
       `└ ⭐ Stars: \`${formatNumber(starsReserve)}\`\n\n` +
       `📈 *Расчет курса:*\n` +
       `├ Соотношение: \`${ratio.toFixed(4)}\`\n` +
