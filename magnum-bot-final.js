@@ -68,14 +68,14 @@ app.get('/test', (req, res) => {
     const webappPath = path.join(__dirname, 'webapp');
     const indexPath = path.join(webappPath, 'index.html');
     const stylesPath = path.join(webappPath, 'styles.css');
-    const scriptPath = path.join(webappPath, 'script.js');
+    const scriptPath = path.join(webappPath, 'app.js');
     
     if (webappEnabled) {
         console.log('📁 Проверка файлов WebApp...');
         console.log(`📁 Путь к WebApp: ${webappPath}`);
         console.log(`📄 index.html: ${fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден'}`);
         console.log(`🎨 styles.css: ${fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден'}`);
-        console.log(`⚡ script.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`⚡ app.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
     }
     
     res.json({
@@ -84,7 +84,7 @@ app.get('/test', (req, res) => {
         files: {
             index: fs.existsSync(indexPath) ? 'found' : 'not found',
             styles: fs.existsSync(stylesPath) ? 'found' : 'not found',
-            script: fs.existsSync(scriptPath) ? 'found' : 'not found'
+            app: fs.existsSync(scriptPath) ? 'found' : 'not found'
         },
         timestamp: new Date().toISOString()
     });
@@ -354,6 +354,9 @@ const config = {
   // RichAds конфигурация (заменяет спонсорские задания)
   RICHADS_API_KEY: process.env.RICHADS_API_KEY,
   RICHADS_ENABLED: process.env.RICHADS_ENABLED === 'true',
+  
+  // WebApp конфигурация
+  WEBAPP_URL: process.env.WEBAPP_URL,
   
   // Обратная совместимость со старыми спонсорскими заданиями
   SPONSOR_TASK_CHANNEL: process.env.SPONSOR_TASK_CHANNEL || '@musice46',
@@ -2319,6 +2322,9 @@ async function showMainMenuStart(ctx, user) {
     [
       Markup.button.callback('🗺️ Роадмап', 'roadmap'),
       Markup.button.callback('⚙️ Настройки', 'settings')
+    ],
+    [
+      Markup.button.webApp('Заработать', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
     ]
   ];
   
