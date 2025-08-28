@@ -4317,12 +4317,27 @@ async function showPromocodeMenu(ctx, user) {
   try {
     log(`🎫 Показ меню промокодов для пользователя ${user.id}`);
     
+    // Получаем статистику промокодов пользователя
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dailyPromocodes = user.dailyPromocodes || [];
+    const todayPromocodes = dailyPromocodes.filter(p => {
+      const promoDate = new Date(p.date);
+      return promoDate >= today && promoDate < tomorrow;
+    });
+    
+    const usedToday = todayPromocodes.length;
+    const remainingToday = Math.max(0, 10 - usedToday);
+    
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback('🎫 Ввести промокод', 'enter_promocode')
+        Markup.button.callback('🔑 Ввести промокод', 'enter_promocode')
       ],
       [
-        Markup.button.callback('📊 История промокодов', 'promocode_history')
+        Markup.button.callback('📊 История активаций', 'promocode_history')
       ],
       [
         Markup.button.callback('🔙 Назад', 'main_menu')
@@ -4331,10 +4346,19 @@ async function showPromocodeMenu(ctx, user) {
     
     const message = 
       `🎫 *Промокоды*\n\n` +
-      `Здесь вы можете вводить промокоды и получать награды!\n\n` +
+      `Введите промокод и получите ценные награды!\n` +
+      `Каждый промокод открывает сундук случайного уровня:\n` +
+      `• 🟢 Обычные — Magnum Coins, Stars\n` +
+      `• 🔵 Редкие — Майнеры, бустеры к майнингу\n` +
+      `• 🟣 Эпические — Уникальные титулы, повышенные множители\n` +
+      `• 🟡 Легендарные — Эксклюзивные наборы (Coins + Stars + Майнеры + Титул)\n\n` +
+      `⚡️ *Ограничение:*\n` +
+      `Вы можете ввести до 10 промокодов в день.\n` +
+      `📊 Использовано сегодня: ${usedToday}/10\n` +
+      `🎯 Осталось: ${remainingToday}\n\n` +
       `🎯 *Доступные действия:*\n` +
-      `├ 🎫 Ввести промокод\n` +
-      `└ 📊 История промокодов\n\n` +
+      `├ 🔑 Ввести промокод\n` +
+      `└ 📊 История активаций\n\n` +
       `Выберите действие:`;
     
     await ctx.editMessageText(message, {
@@ -11003,6 +11027,114 @@ async function handleAdminCreatePromoTitle(ctx, user, text) {
   }
 }
 
+// ==================== СИСТЕМА СУНДУКОВ ====================
+// Генерация награды из сундука
+function generateChestReward() {
+  const random = Math.random();
+  
+  // Распределение вероятностей для разных уровней сундуков
+  if (random < 0.6) {
+    // 🟢 Обычный сундук (60%)
+    return {
+      level: 'Обычный',
+      emoji: '🟢',
+      magnumCoins: Math.floor(Math.random() * 50) + 10, // 10-60 MC
+      stars: Math.floor(Math.random() * 20) + 5, // 5-25 Stars
+      description: 'Обычные награды'
+    };
+  } else if (random < 0.85) {
+    // 🔵 Редкий сундук (25%)
+    return {
+      level: 'Редкий',
+      emoji: '🔵',
+      magnumCoins: Math.floor(Math.random() * 100) + 50, // 50-150 MC
+      stars: Math.floor(Math.random() * 50) + 25, // 25-75 Stars
+      minerBonus: Math.floor(Math.random() * 2) + 1, // 1-3 майнера
+      description: 'Редкие награды с майнерами'
+    };
+  } else if (random < 0.95) {
+    // 🟣 Эпический сундук (10%)
+    return {
+      level: 'Эпический',
+      emoji: '🟣',
+      magnumCoins: Math.floor(Math.random() * 200) + 100, // 100-300 MC
+      stars: Math.floor(Math.random() * 100) + 50, // 50-150 Stars
+      title: getRandomEpicTitle(),
+      multiplier: 1.5,
+      description: 'Эпические награды с титулом'
+    };
+  } else {
+    // 🟡 Легендарный сундук (5%)
+    return {
+      level: 'Легендарный',
+      emoji: '🟡',
+      magnumCoins: Math.floor(Math.random() * 500) + 300, // 300-800 MC
+      stars: Math.floor(Math.random() * 200) + 100, // 100-300 Stars
+      minerBonus: Math.floor(Math.random() * 3) + 2, // 2-5 майнеров
+      title: getRandomLegendaryTitle(),
+      multiplier: 2.0,
+      description: 'Легендарные награды'
+    };
+  }
+}
+
+// Получение случайного эпического титула
+function getRandomEpicTitle() {
+  const epicTitles = [
+    '⚡ Молниеносный',
+    '🔥 Огненный',
+    '❄️ Ледяной',
+    '🌪️ Вихревой',
+    '⚔️ Воинственный',
+    '🛡️ Защитник',
+    '🎯 Снайпер',
+    '🚀 Ракетчик'
+  ];
+  return epicTitles[Math.floor(Math.random() * epicTitles.length)];
+}
+
+// Получение случайного легендарного титула
+function getRandomLegendaryTitle() {
+  const legendaryTitles = [
+    '👑 Король',
+    '👸 Королева',
+    '🐉 Дракон',
+    '⚡ Громовержец',
+    '🌟 Звездочет',
+    '🌙 Лунный',
+    '☀️ Солнечный',
+    '💎 Алмазный'
+  ];
+  return legendaryTitles[Math.floor(Math.random() * legendaryTitles.length)];
+}
+
+// Форматирование награды из сундука
+function formatChestReward(reward) {
+  let text = '';
+  
+  if (reward.magnumCoins > 0) {
+    text += `💰 Magnum Coins: +${formatNumber(reward.magnumCoins)}\n`;
+  }
+  
+  if (reward.stars > 0) {
+    text += `⭐ Stars: +${formatNumber(reward.stars)}\n`;
+  }
+  
+  if (reward.minerBonus > 0) {
+    text += `⛏️ Майнеры: +${reward.minerBonus} шт.\n`;
+  }
+  
+  if (reward.title) {
+    text += `👑 Титул: ${reward.title}\n`;
+  }
+  
+  if (reward.multiplier) {
+    text += `📈 Множитель: x${reward.multiplier}\n`;
+  }
+  
+  return text.trim();
+}
+
 // ==================== АКТИВАЦИЯ ПРОМОКОДОВ ====================
 async function handleUserEnterPromocode(ctx, user, text) {
   try {
@@ -11013,6 +11145,23 @@ async function handleUserEnterPromocode(ctx, user, text) {
     // Валидация кода
     if (!code || code.length < 3) {
       await ctx.reply('❌ Неверный код промокода! Код должен содержать минимум 3 символа.');
+      return;
+    }
+    
+    // Проверяем дневной лимит промокодов
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dailyPromocodes = user.dailyPromocodes || [];
+    const todayPromocodes = dailyPromocodes.filter(p => {
+      const promoDate = new Date(p.date);
+      return promoDate >= today && promoDate < tomorrow;
+    });
+    
+    if (todayPromocodes.length >= 10) {
+      await ctx.reply('❌ Вы достигли дневного лимита промокодов (10/10). Попробуйте завтра!');
       return;
     }
     
@@ -11046,32 +11195,53 @@ async function handleUserEnterPromocode(ctx, user, text) {
       return;
     }
     
-    // Выдаем награду в зависимости от типа
-    const reward = promocode.reward || 0;
-    const rewardType = promocode.rewardType || 'mc';
+    // Генерируем награду из сундука
+    const chestReward = generateChestReward();
     
     let updateData = {
-      $push: { usedPromocodes: code },
+      $push: { 
+        usedPromocodes: code,
+        dailyPromocodes: {
+          code: code,
+          date: new Date(),
+          reward: chestReward,
+          chestLevel: chestReward.level
+        }
+      },
       $unset: { adminState: "" },
       $set: { updatedAt: new Date() }
     };
     
-    if (rewardType === 'mc') {
+    // Начисляем базовые награды
+    if (chestReward.magnumCoins > 0) {
       updateData.$inc = {
-        magnumCoins: reward,
-        totalEarnedMagnumCoins: reward,
-        experience: Math.floor(reward * 5)
+        ...updateData.$inc,
+        magnumCoins: chestReward.magnumCoins,
+        totalEarnedMagnumCoins: chestReward.magnumCoins,
+        experience: Math.floor(chestReward.magnumCoins * 5)
       };
-    } else if (rewardType === 'stars') {
+    }
+    
+    if (chestReward.stars > 0) {
       updateData.$inc = {
-        stars: reward,
-        totalEarnedStars: reward,
-        experience: Math.floor(reward * 10)
+        ...updateData.$inc,
+        stars: chestReward.stars,
+        totalEarnedStars: chestReward.stars,
+        experience: Math.floor(chestReward.stars * 10)
       };
-    } else if (rewardType === 'title') {
-      updateData.$set.title = reward;
+    }
+    
+    // Добавляем титул если есть
+    if (chestReward.title) {
+      updateData.$set.title = chestReward.title;
+    }
+    
+    // Добавляем майнеры если есть
+    if (chestReward.minerBonus > 0) {
+      // Здесь можно добавить логику для выдачи майнеров
       updateData.$inc = {
-        experience: 50
+        ...updateData.$inc,
+        experience: chestReward.minerBonus * 25
       };
     }
     
@@ -11145,19 +11315,13 @@ async function handleUserEnterPromocode(ctx, user, text) {
       [Markup.button.callback('🔙 Назад к промокодам', 'promocode')]
     ]);
     
-    let rewardText = '';
-    if (rewardType === 'mc') {
-      rewardText = `💰 Награда: \`${formatNumber(reward)}\` Magnum Coins`;
-    } else if (rewardType === 'stars') {
-      rewardText = `⭐ Награда: \`${formatNumber(reward)}\` Stars`;
-    } else if (rewardType === 'title') {
-      rewardText = `👑 Награда: \`${reward}\``;
-    }
+    const rewardText = formatChestReward(chestReward);
     
     await ctx.reply(
-      `✅ *Промокод активирован успешно!*\n\n` +
-      `🎫 Код: \`${code}\`\n` +
-      `${rewardText}\n` +
+      `🎉 *Промокод активирован!*\n\n` +
+      `🎫 Код: \`${code}\`\n\n` +
+      `${chestReward.emoji} *${chestReward.level} сундук*\n` +
+      `${rewardText}\n\n` +
       `📅 Активирован: ${new Date().toLocaleString('ru-RU')}\n\n` +
       `🎉 Поздравляем с получением награды!`,
       {
