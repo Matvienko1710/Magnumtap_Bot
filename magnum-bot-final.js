@@ -2256,10 +2256,11 @@ async function showMainMenu(ctx, user) {
       ]
     ];
   
-  // Добавляем админ кнопку если нужно
+  // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
     buttons.push([
-      Markup.button.callback('👨‍💼 Админ панель', 'admin')
+      Markup.button.callback('👨‍💼 Админ панель', 'admin'),
+      Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
     ]);
   }
   
@@ -2328,10 +2329,11 @@ async function showMainMenuStart(ctx, user) {
     ]
   ];
   
-  // Добавляем админ кнопку если нужно
+  // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
     buttons.push([
-      Markup.button.callback('👨‍💼 Админ панель', 'admin')
+      Markup.button.callback('👨‍💼 Админ панель', 'admin'),
+      Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
     ]);
   }
   
