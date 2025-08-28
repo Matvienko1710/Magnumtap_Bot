@@ -11456,7 +11456,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
       }
     }
     
-    // Отправляем всплывающее уведомление
+    // Отправляем уведомление
     let notificationText = '';
     
     if (rewardType === 'chest') {
@@ -11472,7 +11472,14 @@ async function handleUserEnterPromocode(ctx, user, text) {
       }
     }
     
-    await ctx.answerCbQuery(notificationText, { show_alert: true });
+    // Проверяем тип контекста и отправляем соответствующее уведомление
+    if (ctx.callbackQuery) {
+      // Если это callback (кнопка), используем answerCbQuery
+      await ctx.answerCbQuery(notificationText, { show_alert: true });
+    } else {
+      // Если это текстовое сообщение, отправляем обычное сообщение
+      await ctx.reply(notificationText);
+    }
     
     let logReward = '';
     if (rewardType === 'chest') {
