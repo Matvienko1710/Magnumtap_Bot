@@ -2245,7 +2245,6 @@ async function showMainMenu(ctx, user) {
         Markup.button.callback('🎁 Бонус', 'bonus')
       ],
       [
-        Markup.button.callback('📋 Задания', 'tasks'),
         Markup.button.callback('🏆 Достижения', 'achievements')
       ],
       [
@@ -2263,6 +2262,19 @@ async function showMainMenu(ctx, user) {
     buttons.push([
       Markup.button.callback('👨‍💼 Админ панель', 'admin'),
       Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
+    ]);
+  }
+  
+  // Добавляем админ кнопки если нужно
+  if (isAdmin(user.id)) {
+    buttons.push([
+      Markup.button.callback('👨‍💼 Админ панель', 'admin'),
+      Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
+    ]);
+    // Добавляем кнопки только для админов
+    buttons.push([
+      Markup.button.callback('📋 Задания', 'tasks'),
+      Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ]);
   }
   
@@ -2315,7 +2327,6 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('🎁 Бонус', 'bonus')
     ],
     [
-      Markup.button.callback('📋 Задания', 'tasks'),
       Markup.button.callback('🏆 Достижения', 'achievements')
     ],
     [
@@ -2333,6 +2344,11 @@ async function showMainMenuStart(ctx, user) {
     buttons.push([
       Markup.button.callback('👨‍💼 Админ панель', 'admin'),
       Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
+    ]);
+    // Добавляем кнопки только для админов
+    buttons.push([
+      Markup.button.callback('📋 Задания', 'tasks'),
+      Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ]);
   }
   
@@ -12363,6 +12379,12 @@ bot.action('miner_upgrades', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
+    
     await showMinerUpgrades(ctx, user);
   } catch (error) {
     logError(error, 'Апгрейды майнеров');
@@ -13161,6 +13183,12 @@ bot.action('tasks', async (ctx) => {
       return;
     }
     
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
+    
     log(`📋 Показ меню заданий для пользователя ${ctx.from.id}`);
     await showTasksMenu(ctx, user);
     log(`✅ Меню заданий показано пользователю ${ctx.from.id}`);
@@ -13182,6 +13210,12 @@ bot.action('tasks_sponsor', async (ctx) => {
       return;
     }
     
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
+    
     logAction(ctx.from.id, 'userFound', { userId: user.id, username: user.username });
     log(`🎯 Показ спонсорских заданий для пользователя ${ctx.from.id}`);
     await showSponsorTasks(ctx, user);
@@ -13198,6 +13232,12 @@ bot.action('tasks_daily', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
+    
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
     
     await showDailyTasks(ctx, user);
   } catch (error) {
@@ -13222,6 +13262,12 @@ bot.action('tasks_progress', async (ctx) => {
   try {
     const user = await getUser(ctx.from.id);
     if (!user) return;
+    
+    // Проверяем права админа
+    if (!isAdmin(user.id)) {
+      await ctx.answerCbQuery('🚧 Функция в разработке');
+      return;
+    }
     
     await showTasksProgress(ctx, user);
   } catch (error) {
