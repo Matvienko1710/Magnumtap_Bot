@@ -24,6 +24,7 @@ const config = {
   MONGODB_URI: process.env.MONGODB_URI,
   ADMIN_IDS: process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id.trim())) : [],
   WEBAPP_ENABLED: process.env.WEBAPP_ENABLED === 'true',
+  WEBAPP_URL: process.env.WEBAPP_URL || 'https://your-domain.com',
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
   PORT: process.env.PORT || 3000,
   DB_POOL_SIZE: parseInt(process.env.DB_POOL_SIZE) || 10,
