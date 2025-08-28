@@ -12269,7 +12269,7 @@ bot.action('roadmap', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showRoadmap(ctx, user);
+    await ctx.answerCbQuery('Скоро...');
   } catch (error) {
     logError(error, 'Роадмап (обработчик)');
   }
@@ -12337,7 +12337,7 @@ bot.action('miner', async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return;
     
-    await showMinerMenu(ctx, user);
+    await ctx.answerCbQuery('Фаза майнинга еще не началась следите за новостями в канале');
   } catch (error) {
     logError(error, 'Меню майнера');
   }
