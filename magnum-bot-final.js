@@ -2262,12 +2262,16 @@ async function showMainMenu(ctx, user) {
         Markup.button.callback('👤 Профиль', 'profile')
       ],
       [
-        Markup.button.callback('🎁 Бонус', 'bonus'),
-        Markup.button.callback('🔑 Ключи', 'promocode')
+        Markup.button.callback('🔑 Ключи', 'promocode'),
+        Markup.button.callback('👥 Рефералы', 'referrals')
       ],
       [
-        Markup.button.callback('👥 Рефералы', 'referrals'),
-        Markup.button.callback('🗺️ Роадмап', 'roadmap')
+        Markup.button.callback('🗺️ Роадмап', 'roadmap'),
+        Markup.button.callback('📈 Биржа', 'exchange')
+      ],
+      [
+        Markup.button.callback('🎁 Бонус', 'bonus_webapp'),
+        Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
       ],
       [
         Markup.button.callback('💰 Вывод', 'withdrawal')
@@ -2277,13 +2281,7 @@ async function showMainMenu(ctx, user) {
   // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
     buttons.push([
-      Markup.button.callback('👨‍💼 Админ панель', 'admin'),
-      Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
-    ]);
-    // Добавляем кнопки только для админов (функции в разработке)
-    buttons.push([
-      Markup.button.callback('📈 Биржа', 'exchange'),
-      Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
+      Markup.button.callback('👨‍💼 Админ панель', 'admin')
     ]);
   }
   
@@ -2332,12 +2330,16 @@ async function showMainMenuStart(ctx, user) {
       Markup.button.callback('👤 Профиль', 'profile')
     ],
     [
-      Markup.button.callback('🎁 Бонус', 'bonus'),
-      Markup.button.callback('🎫 Промокод', 'promocode')
+      Markup.button.callback('🔑 Ключи', 'promocode'),
+      Markup.button.callback('👥 Рефералы', 'referrals')
     ],
     [
-      Markup.button.callback('👥 Рефералы', 'referrals'),
-      Markup.button.callback('🗺️ Роадмап', 'roadmap')
+      Markup.button.callback('🗺️ Роадмап', 'roadmap'),
+      Markup.button.callback('📈 Биржа', 'exchange')
+    ],
+    [
+      Markup.button.callback('🎁 Бонус', 'bonus_webapp'),
+      Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
     ],
     [
       Markup.button.callback('💰 Вывод', 'withdrawal')
@@ -2347,13 +2349,7 @@ async function showMainMenuStart(ctx, user) {
   // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
     buttons.push([
-      Markup.button.callback('👨‍💼 Админ панель', 'admin'),
-      Markup.button.webApp('🧪 Тест', `${config.WEBAPP_URL || 'https://your-domain.com'}/webapp`)
-    ]);
-    // Добавляем кнопки только для админов (функции в разработке)
-    buttons.push([
-      Markup.button.callback('📈 Биржа', 'exchange'),
-      Markup.button.callback('⬆️ Апгрейды', 'miner_upgrades')
+      Markup.button.callback('👨‍💼 Админ панель', 'admin')
     ]);
   }
   
@@ -13142,18 +13138,9 @@ bot.action('miner_leaderboard_season', async (ctx) => {
 
 bot.action('miner_upgrades', async (ctx) => {
   try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    await showMinerUpgrades(ctx, user);
+    await ctx.answerCbQuery('🚧 Функция в разработке!');
   } catch (error) {
-    logError(error, 'Апгрейды майнеров');
+    logError(error, 'Апгрейды');
   }
 });
 
@@ -13217,22 +13204,9 @@ bot.action('insufficient_funds', async (ctx) => {
 // Обмен
 bot.action('exchange', async (ctx) => {
   try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    // Проверяем права админа
-    if (!isAdmin(user.id)) {
-      await ctx.answerCbQuery('🚧 Функция в разработке');
-      return;
-    }
-    
-    // Очищаем кеш для получения свежих данных
-    userCache.delete(ctx.from.id);
-    statsCache.delete('reserve');
-    
-    await showExchangeMenu(ctx, user);
+    await ctx.answerCbQuery('🚧 Функция в разработке!');
   } catch (error) {
-    logError(error, 'Меню обмена');
+    logError(error, 'Биржа');
   }
 });
 
@@ -13898,15 +13872,12 @@ bot.action('confirm_reset', async (ctx) => {
 
 
 
-// Бонус
-bot.action('bonus', async (ctx) => {
+// Бонус (WebApp)
+bot.action('bonus_webapp', async (ctx) => {
   try {
-    const user = await getUser(ctx.from.id);
-    if (!user) return;
-    
-    await showBonusMenu(ctx, user);
+    await ctx.answerCbQuery('🚧 Функция в разработке!');
   } catch (error) {
-    logError(error, 'Меню бонуса');
+    logError(error, 'Бонус WebApp');
   }
 });
 
