@@ -3319,6 +3319,12 @@ async function processActiveMiningClick(user) {
       }
     );
     
+    // Принудительно сохраняем пользователя
+    const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
+    if (updatedUser) {
+      await forceSaveUser(updatedUser);
+    }
+    
     // Очищаем кеш пользователя
     userCache.delete(userWithMining.id);
     
@@ -3385,6 +3391,12 @@ async function buyMiner(user, minerType) {
       }
     );
     
+    // Принудительно сохраняем пользователя
+    const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
+    if (updatedUser) {
+      await forceSaveUser(updatedUser);
+    }
+    
     // Очищаем кеш пользователя
     userCache.delete(userWithMining.id);
     
@@ -3425,6 +3437,12 @@ async function upgradeMiner(user, minerType) {
       },
       { arrayFilters: [{ 'miners.type': minerType }] }
     );
+    
+    // Принудительно сохраняем пользователя
+    const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
+    if (updatedUser) {
+      await forceSaveUser(updatedUser);
+    }
     
     // Очищаем кеш пользователя
     userCache.delete(userWithMining.id);
@@ -6319,6 +6337,12 @@ async function processMinerRewards() {
               }
             );
             
+            // Принудительно сохраняем пользователя
+            const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
+            if (updatedUser) {
+              await forceSaveUser(updatedUser);
+            }
+            
             // Очищаем кеш пользователя
             userCache.delete(userWithMining.id);
             
@@ -6353,6 +6377,12 @@ async function processMinerRewards() {
               }
             );
             
+            // Принудительно сохраняем пользователя
+            const updatedUser = await db.collection('users').findOne({ id: userWithMining.id });
+            if (updatedUser) {
+              await forceSaveUser(updatedUser);
+            }
+            
             // Очищаем кеш пользователя
             userCache.delete(userWithMining.id);
             
@@ -6372,6 +6402,84 @@ async function processMinerRewards() {
     console.log(`✅ Обработано ${processedCount} пользователей`);
   } catch (error) {
     console.error('❌ Ошибка обработки пассивных наград майнинга:', error);
+  }
+}
+
+// ==================== СОХРАНЕНИЕ ДАННЫХ ====================
+// Универсальная функция для сохранения пользователя в базу данных
+async function saveUserToDatabase(userId, updateData, options = {}) {
+  try {
+    const { upsert = false, increment = false } = options;
+    
+    let updateOperation;
+    if (increment) {
+      updateOperation = { $inc: updateData };
+    } else {
+      updateOperation = { $set: { ...updateData, updatedAt: new Date() } };
+    }
+    
+    if (upsert) {
+      updateOperation.$setOnInsert = { 
+        id: userId,
+        createdAt: new Date()
+      };
+    }
+    
+    const result = await db.collection('users').updateOne(
+      { id: userId },
+      updateOperation,
+      { upsert }
+    );
+    
+    // Очищаем кеш пользователя
+    userCache.delete(userId);
+    
+    console.log(`💾 Пользователь ${userId} сохранен в БД:`, {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      upsertedCount: result.upsertedCount
+    });
+    
+    return result;
+  } catch (error) {
+    console.error(`❌ Ошибка сохранения пользователя ${userId}:`, error);
+    throw error;
+  }
+}
+
+// Функция для принудительного сохранения всех изменений пользователя
+async function forceSaveUser(user) {
+  try {
+    const updateData = {
+      magnumCoins: user.magnumCoins,
+      stars: user.stars,
+      level: user.level,
+      experience: user.experience,
+      miners: user.miners,
+      miningStats: user.miningStats,
+      achievements: user.achievements,
+      statistics: user.statistics,
+      settings: user.settings,
+      referralCode: user.referralCode,
+      referredBy: user.referredBy,
+      referralRewards: user.referralRewards,
+      tasks: user.tasks,
+      dailyTasks: user.dailyTasks,
+      lastDailyReset: user.lastDailyReset,
+      lastWeeklyReset: user.lastWeeklyReset,
+      lastMonthlyReset: user.lastMonthlyReset,
+      banned: user.banned,
+      admin: user.admin,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      updatedAt: new Date()
+    };
+    
+    await saveUserToDatabase(user.id, updateData);
+    console.log(`✅ Пользователь ${user.id} принудительно сохранен`);
+  } catch (error) {
+    console.error(`❌ Ошибка принудительного сохранения пользователя ${user.id}:`, error);
   }
 }
 
@@ -9502,6 +9610,68 @@ app.get('/force-mining', async (req, res) => {
         res.json({
             status: 'success',
             message: 'Mining processing completed',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
+});
+
+// Маршрут для принудительного сохранения всех пользователей
+app.get('/force-save-all', async (req, res) => {
+    try {
+        console.log('💾 Принудительное сохранение всех пользователей...');
+        
+        const users = await db.collection('users').find({}).toArray();
+        let savedCount = 0;
+        
+        for (const user of users) {
+            try {
+                await forceSaveUser(user);
+                savedCount++;
+            } catch (error) {
+                console.error(`❌ Ошибка сохранения пользователя ${user.id}:`, error);
+            }
+        }
+        
+        res.json({
+            status: 'success',
+            message: `Saved ${savedCount} users`,
+            totalUsers: users.length,
+            savedCount,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
+});
+
+// Маршрут для проверки состояния базы данных
+app.get('/db-status', async (req, res) => {
+    try {
+        const users = await db.collection('users').find({}).toArray();
+        const usersWithMiners = users.filter(u => u.miners && u.miners.length > 0);
+        const usersWithMiningStats = users.filter(u => u.miningStats);
+        
+        res.json({
+            status: 'success',
+            totalUsers: users.length,
+            usersWithMiners: usersWithMiners.length,
+            usersWithMiningStats: usersWithMiningStats.length,
+            sampleUser: users[0] ? {
+                id: users[0].id,
+                magnumCoins: users[0].magnumCoins,
+                stars: users[0].stars,
+                miners: users[0].miners?.length || 0,
+                hasMiningStats: !!users[0].miningStats,
+                lastReward: users[0].miningStats?.lastReward
+            } : null,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
