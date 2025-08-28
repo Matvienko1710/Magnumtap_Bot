@@ -3333,34 +3333,35 @@ function initializeNewMiningSystem(user) {
 
 // Функция для расчета общей скорости майнинга пользователя
 function calculateTotalMiningSpeed(user) {
+  let totalSpeedMagnumCoins = 0;
   let totalSpeedStars = 0;
-  
+
   if (user.miners && user.miners.length > 0) {
     for (const miner of user.miners) {
       const minerConfig = config.MINERS[miner.type];
       if (minerConfig) {
         const levelMultiplier = 1 + (miner.level - 1) * 0.2; // +20% за каждый уровень
         const minerSpeed = minerConfig.baseSpeed * levelMultiplier * miner.count;
-        
+
         // Определяем валюту майнинга
-        const miningCurrency = minerConfig.miningCurrency || 'stars';
+        const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
         if (miningCurrency === 'stars') {
           totalSpeedStars += minerSpeed;
         } else {
-          totalSpeedStars += minerSpeed;
+          totalSpeedMagnumCoins += minerSpeed;
         }
       }
     }
   }
-  
+
   // Бонус от титула
   const titlesList = getTitlesList(user);
   const mainTitle = user.mainTitle || '🌱 Новичок';
   const currentTitle = titlesList.find(t => t.name === mainTitle);
   const titleBonus = currentTitle ? currentTitle.minerBonus : 1.0;
-  
+
   return {
-    magnuStarsoins: totalSpeedStars * titleBonus,
+    magnuStarsoins: totalSpeedMagnumCoins * titleBonus,
     stars: totalSpeedStars * titleBonus
   };
 }
@@ -3389,8 +3390,8 @@ async function processMiningRewards() {
       try {
         const userWithMining = initializeNewMiningSystem(user);
         const totalSpeed = calculateTotalMiningSpeed(userWithMining);
-        
-        const totalSpeedSum = totalSpeed.stars;
+
+        const totalSpeedSum = totalSpeed.magnuStarsoins + totalSpeed.stars;
         if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
