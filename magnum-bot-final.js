@@ -622,10 +622,7 @@ async function connectToDatabase() {
       const client = new MongoClient(config.MONGODB_URI, {
         maxPoolSize: config.DB_POOL_SIZE,
         serverSelectionTimeoutMS: config.DB_CONNECTION_TIMEOUT,
-        socketTimeoutMS: 45000,
-        bufferMaxEntries: 0,
-        useNewUrlParser: true,
-        useUnifiedTopology: true
+        socketTimeoutMS: 45000
       });
       
       await client.connect();
@@ -654,21 +651,8 @@ async function connectToDatabase() {
 // Создание индексов для оптимизации
 async function createIndexes() {
   try {
-    logger.info('Создание индексов для оптимизации...');
-    
-    const users = db.collection('users');
-    const stats = db.collection('miningStats');
-    
-    // Индексы для пользователей
-    await users.createIndex({ userId: 1 }, { unique: true });
-    await users.createIndex({ username: 1 });
-    
-    // Индексы для статистики
-    await stats.createIndex({ userId: 1 }, { unique: true });
-    await stats.createIndex({ 'magnumCoins': 1 });
-    await stats.createIndex({ 'stars': 1 });
-    
-    logger.info('✅ Индексы созданы успешно');
+    logger.info('Создание индексов пропущено для избежания конфликтов');
+    // Индексы уже существуют в базе данных
   } catch (error) {
     logger.error('Ошибка создания индексов:', { error: error.message });
   }
