@@ -2032,9 +2032,9 @@ function formatProfileMessage(user, rankProgress) {
     `├ Опыт: \`${user.experience}/${user.experienceToNextLevel}\`\n` +
     `└ Рефералы: \`${user.referralsCount}\`\n\n` +
     `📱 *Полезные ссылки:*\n` +
-    `├ [📰 Новости](https://t.me/magnumstars_news)\n` +
-    `├ [💰 Выводы](https://t.me/magnumstars_withdrawals)\n` +
-    `└ [💬 Чат](https://t.me/magnumstars_chat)\n\n` +
+    `├ [📰 Новости](https://t.me/magnutap)\n` +
+    `├ [💰 Выводы](https://t.me/magnumwithdrawal)\n` +
+    `└ [💬 Чат](https://t.me/magnumtapchat)\n\n` +
     `⚠️ *Нашли ошибку?*\n` +
     `├ Сообщите в поддержку за вознаграждение!\n` +
     `├ FAQ и ответы на вопросы\n` +
