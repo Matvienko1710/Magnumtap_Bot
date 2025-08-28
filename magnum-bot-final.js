@@ -2680,8 +2680,6 @@ async function showMinerMenu(ctx, user) {
   const totalSpeed = calculateTotalMiningSpeed(userWithMining);
   const rewardPerMinuteStars = totalSpeed.stars * currentSeason.multiplier;
   const rewardPerHourStars = rewardPerMinuteStars * 60;
-  const rewardPerMinuteStars = totalSpeed.stars * currentSeason.multiplier;
-  const rewardPerHourStars = rewardPerMinuteStars * 60;
   
   // Подсчитываем общее количество майнеров
   const totalMiners = userWithMining.miners.reduce((sum, miner) => sum + miner.count, 0);
@@ -3002,7 +3000,6 @@ function getCurrentMiningSeason() {
 
 // Получение лимитов сезона
 function getSeasonLimits(season) {
-  const baseStarsLimit = config.MINING_TOTAL_MAGNUM_COINS;
   const baseStarsLimit = config.MINING_TOTAL_STARS;
   const multiplier = Math.pow(config.MINING_SEASON_MULTIPLIER, season - 1);
   
@@ -3023,7 +3020,6 @@ async function getSeasonStats(season) {
     return {
       season: season,
       totalMinedStars: 0,
-      totalMinedStars: 0,
       activeMiners: 0,
       startDate: startDate,
       endDate: endDate
@@ -3038,12 +3034,11 @@ async function getSeasonStats(season) {
 }
 
 // Обновление статистики сезона
-async function updateSeasonStats(season, minedStars, minedStars) {
+async function updateSeasonStats(season, minedStars) {
   await db.collection('miningSeasonStats').updateOne(
     { season: season },
     { 
       $inc: { 
-        totalMinedStars: minedStars,
         totalMinedStars: minedStars
       },
       $set: { 
@@ -3055,17 +3050,14 @@ async function updateSeasonStats(season, minedStars, minedStars) {
 }
 
 // Проверка лимитов сезона
-async function checkSeasonLimits(season, minedStars, minedStars) {
+async function checkSeasonLimits(season, minedStars) {
   const limits = getSeasonLimits(season);
   const stats = await getSeasonStats(season);
   
-  const canMineStars = stats.totalMinedStars + minedStars <= limits.magnuStarsoins;
   const canMineStars = stats.totalMinedStars + minedStars <= limits.stars;
   
   return {
     canMineStars,
-    canMineStars,
-    remainingStars: Math.max(0, limits.magnuStarsoins - stats.totalMinedStars),
     remainingStars: Math.max(0, limits.stars - stats.totalMinedStars)
   };
 }
@@ -3210,7 +3202,6 @@ function initializeNewMiningSystem(user) {
 // Функция для расчета общей скорости майнинга пользователя
 function calculateTotalMiningSpeed(user) {
   let totalSpeedStars = 0;
-  let totalSpeedStars = 0;
   
   if (user.miners && user.miners.length > 0) {
     for (const miner of user.miners) {
@@ -3220,7 +3211,7 @@ function calculateTotalMiningSpeed(user) {
         const minerSpeed = minerConfig.baseSpeed * levelMultiplier * miner.count;
         
         // Определяем валюту майнинга
-        const miningCurrency = minerConfig.miningCurrency || 'magnuStarsoins';
+        const miningCurrency = minerConfig.miningCurrency || 'stars';
         if (miningCurrency === 'stars') {
           totalSpeedStars += minerSpeed;
         } else {
@@ -3267,7 +3258,7 @@ async function processMiningRewards() {
         const userWithMining = initializeNewMiningSystem(user);
         const totalSpeed = calculateTotalMiningSpeed(userWithMining);
         
-        const totalSpeedSum = totalSpeed.stars + totalSpeed.stars;
+        const totalSpeedSum = totalSpeed.stars;
         if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
@@ -3275,20 +3266,16 @@ async function processMiningRewards() {
           
           if (timeDiff >= config.MINING_REWARD_INTERVAL) {
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
-            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             // Обновляем статистику
             await db.collection('users').updateOne(
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnuStarsoins: rewardStars,
                   stars: rewardStars,
                   'miningStats.totalMinedStars': rewardStars,
-                  'miningStats.totalMinedStars': rewardStars,
                   'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.passiveRewards': rewardStars + rewardStars
+                  'miningStats.passiveRewards': rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -3675,7 +3662,6 @@ async function showMinerLeaderboardTotal(ctx, user) {
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
       const totalStars = player.miningStats?.totalMinedStars || 0;
-      const totalStars = player.miningStats?.totalMinedStars || 0;
       message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
       message += `   💎 ${formatNumber(totalStars)} Stars | ⭐ ${formatNumber(totalStars)} Stars\n`;
     }
@@ -3712,7 +3698,6 @@ async function showMinerLeaderboardSeason(ctx, user) {
       const player = topSeason[i];
       const position = i + 1;
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
-      const seasonStars = player.miningStats?.seasonMinedStars || 0;
       const seasonStars = player.miningStats?.seasonMinedStars || 0;
       message += `${emoji} ${position}. ${player.firstName || 'Неизвестно'}\n`;
       message += `   💎 ${formatNumber(seasonStars)} Stars | ⭐ ${formatNumber(seasonStars)} Stars\n`;
@@ -6459,10 +6444,8 @@ async function processMinerRewards() {
           if (!userWithMining.miningStats.lastReward) {
             console.log(`🆕 Первая награда для пользователя ${userWithMining.id}`);
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
-            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             console.log(`💰 Первые награды для пользователя ${userWithMining.id}:`, {
-              rewardStars,
               rewardStars,
               multiplier: currentSeason.multiplier
             });
@@ -6472,13 +6455,10 @@ async function processMinerRewards() {
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnuStarsoins: rewardStars,
                   stars: rewardStars,
                   'miningStats.totalMinedStars': rewardStars,
-                  'miningStats.totalMinedStars': rewardStars,
                   'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.passiveRewards': rewardStars + rewardStars
+                  'miningStats.passiveRewards': rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -6499,10 +6479,8 @@ async function processMinerRewards() {
             console.log(`✅ Первые награды начислены пользователю ${userWithMining.id}`);
           } else if (timeDiff >= config.MINING_REWARD_INTERVAL) {
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
-            const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             
             console.log(`💰 Награды для пользователя ${userWithMining.id}:`, {
-              rewardStars,
               rewardStars,
               multiplier: currentSeason.multiplier
             });
@@ -9548,7 +9526,6 @@ function getTitlesList(user) {
   const streak = user.dailyBonus?.streak || 0;
   const level = user.level || 1;
   const stars = user.stars || 0;
-  const totalStars = user.totalEarnedMagnuStarsoins || 0;
   const totalStars = user.totalEarnedStars || 0;
   const referrals = user.referralsCount || 0;
   const achievements = user.achievementsCount || 0;
@@ -15902,7 +15879,6 @@ bot.action('admin_season_rewards', async (ctx) => {
     message += `📊 *Топ-10 игроков:*\n`;
     
     let totalRewardsStars = 0;
-    let totalRewardsStars = 0;
     
     for (let i = 0; i < Math.min(10, topPlayers.length); i++) {
       const player = topPlayers[i];
@@ -15910,16 +15886,12 @@ bot.action('admin_season_rewards', async (ctx) => {
       const emoji = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅';
       
       let rewardStars = 0;
-      let rewardStars = 0;
       
       if (position === 1) {
-        rewardStars = config.SEASON_REWARDS.top1.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top1.stars;
       } else if (position <= 3) {
-        rewardStars = config.SEASON_REWARDS.top3.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top3.stars;
       } else if (position <= 10) {
-        rewardStars = config.SEASON_REWARDS.top10.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top10.stars;
       }
       
@@ -15971,23 +15943,18 @@ bot.action('admin_season_rewards_confirm', async (ctx) => {
     
     let issuedCount = 0;
     let totalRewardsStars = 0;
-    let totalRewardsStars = 0;
     
     for (let i = 0; i < topPlayers.length; i++) {
       const player = topPlayers[i];
       const position = i + 1;
       
       let rewardStars = 0;
-      let rewardStars = 0;
       
       if (position === 1) {
-        rewardStars = config.SEASON_REWARDS.top1.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top1.stars;
       } else if (position <= 3) {
-        rewardStars = config.SEASON_REWARDS.top3.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top3.stars;
       } else if (position <= 10) {
-        rewardStars = config.SEASON_REWARDS.top10.magnuStarsoins;
         rewardStars = config.SEASON_REWARDS.top10.stars;
       } else if (position <= 50) {
         rewardStars = config.SEASON_REWARDS.top50.magnuStarsoins;
