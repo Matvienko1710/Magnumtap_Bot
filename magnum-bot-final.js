@@ -2677,19 +2677,20 @@ async function showMinerMenu(ctx, user) {
 
   const message = 
     `⛏️ *Новая система майнинга*${seasonInfo}\n\n` +
-    `📊 *Ваши майнеры:* ${totalMiners} шт.\n` +
-    `⚡ *Скорость MC:* ${formatNumber(totalSpeed.magnumCoins)} MC/мин\n` +
-    `⭐ *Скорость Stars:* ${formatNumber(totalSpeed.stars)} ⭐/мин\n` +
-    `💰 *Награда MC/мин:* ${formatNumber(rewardPerMinuteMC)} MC\n` +
-    `💰 *Награда MC/час:* ${formatNumber(rewardPerHourMC)} MC\n` +
-    `⭐ *Награда Stars/мин:* ${formatNumber(rewardPerMinuteStars)} ⭐\n` +
-    `⭐ *Награда Stars/час:* ${formatNumber(rewardPerHourStars)} ⭐\n` +
-    `👑 *Титул:* ${mainTitle}${titleBonusText}\n` +
-    `💎 *Всего добыто:* ${formatNumber(userWithMining.miningStats?.totalMinedMC || 0)} MC\n` +
-    `⭐ *Всего добыто Stars:* ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} ⭐\n` +
-    `💎 *Сезон добыто MC:* ${formatNumber(userWithMining.miningStats?.seasonMinedMC || 0)} MC\n` +
-    `⭐ *Сезон добыто Stars:* ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} ⭐\n\n` +
-    `🎯 Выберите действие:`;
+    `💎 *Ваши майнеры:* ${totalMiners} шт.\n` +
+    `⚡ *Скорость добычи MC:* ${formatNumber(totalSpeed.magnumCoins)} MC/мин\n` +
+    `⭐ *Скорость добычи Stars:* ${formatNumber(totalSpeed.stars)} ⭐/мин\n\n` +
+    `💰 *Награды:*\n` +
+    `└ MC: ${formatNumber(rewardPerMinuteMC)} MC/мин • ${formatNumber(rewardPerHourMC)} MC/час\n` +
+    `└ Stars: ${formatNumber(rewardPerMinuteStars)} ⭐/мин • ${formatNumber(rewardPerHourStars)} ⭐/час\n\n` +
+    `👑 *Титул:* ${mainTitle}${titleBonusText}\n\n` +
+    `📊 *Всего добыто:*\n` +
+    `└ MC: ${formatNumber(userWithMining.miningStats?.totalMinedMC || 0)} MC\n` +
+    `└ Stars: ${formatNumber(userWithMining.miningStats?.totalMinedStars || 0)} ⭐\n\n` +
+    `📊 *Сезонная добыча:*\n` +
+    `└ MC: ${formatNumber(userWithMining.miningStats?.seasonMinedMC || 0)} MC\n` +
+    `└ Stars: ${formatNumber(userWithMining.miningStats?.seasonMinedStars || 0)} ⭐\n\n` +
+    `🎯 Выберите действие ниже.`;
   
   await ctx.editMessageText(message, {
     parse_mode: 'Markdown',
