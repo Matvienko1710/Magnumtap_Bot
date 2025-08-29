@@ -298,7 +298,7 @@ class MagnumWebApp {
         const commission = 2.5;
         this.tg.showPopup({
             title: '💱 Обмен валют',
-            message: `Текущий курс: 1 Magnum Coins = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс:\n💰 ${this.userData.magnuCoins.toFixed(2)} Magnum Coins\n⭐ ${this.userData.stars.toFixed(2)} Stars\n\nПримеры:\n• 100 MC → ${(100 * currentRate * (1 - commission/100)).toFixed(4)} Stars\n• 100 Stars → ${((100 / currentRate) * (1 - commission/100)).toFixed(2)} MC`,
+            message: `Текущий курс: 1 Magnum Coins = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс:\n💰 ${this.userData.magnumCoins.toFixed(2)} Magnum Coins\n⭐ ${this.userData.stars.toFixed(2)} Stars\n\nПримеры:\n• 100 MC → ${(100 * currentRate * (1 - commission/100)).toFixed(4)} Stars\n• 100 Stars → ${((100 / currentRate) * (1 - commission/100)).toFixed(2)} MC`,
             buttons: [
                 { text: '💰 Magnum Coins → Stars', callback_data: 'exchange_mc_to_stars' },
                 { text: '⭐ Stars → Magnum Coins', callback_data: 'exchange_stars_to_mc' },
@@ -365,8 +365,8 @@ class MagnumWebApp {
             fromCurrency = 'Magnum Coins';
             toCurrency = 'Stars';
             fromParam = 'Stars'; // Для API
-            maxAmount = this.userData.magnuCoins;
-            message = `Обмен Magnum Coins на Stars\nКурс: 1 MC = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.magnuCoins} MC\n\nВведите сумму Magnum Coins для обмена:`;
+            maxAmount = this.userData.magnumCoins;
+            message = `Обмен Magnum Coins на Stars\nКурс: 1 MC = ${currentRate.toFixed(4)} Stars\nКомиссия: ${commission}%\n\nВаш баланс: ${this.userData.magnumCoins} MC\n\nВведите сумму Magnum Coins для обмена:`;
         } else {
             title = '⭐ Stars → Magnum Coins';
             fromCurrency = 'Stars';
@@ -411,7 +411,7 @@ class MagnumWebApp {
 
             if (result.success) {
                 // Обновляем баланс
-                this.userData.magnuCoins = result.magnuStarsoins;
+                this.userData.magnumCoins = result.magnumCoins;
                 this.userData.stars = result.stars;
                 this.updateUI();
 
@@ -421,7 +421,7 @@ class MagnumWebApp {
                     receivedAmount = result.stars;
                     receivedCurrency = 'Stars';
                 } else {
-                    receivedAmount = result.magnuStarsoins;
+                    receivedAmount = result.magnumCoins;
                     receivedCurrency = 'MC';
                 }
 
