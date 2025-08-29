@@ -608,9 +608,9 @@ app.get('/api/webapp/user-data', async (req, res) => {
                 const passiveEarn = perMinute * minutesPassed;
                 await db.collection('webappUsers').updateOne(
                     { userId: parseInt(userId) },
-                    { $inc: { magnuStarsoins: passiveEarn }, $set: { updatedAt: new Date() } }
+                    { $inc: { magnumCoins: passiveEarn }, $set: { updatedAt: new Date() } }
                 );
-                webappUser.magnuStarsoins += passiveEarn;
+                webappUser.magnumCoins += passiveEarn;
             }
         }
 
@@ -735,17 +735,17 @@ app.post('/api/webapp/farm', async (req, res) => {
 
         const reward = Math.max(1, webappUser.cps || 1);
         const updates = {
-            $inc: { magnuStarsoins: reward, clickCount: 1, experience: 1 },
+            $inc: { magnumCoins: reward, clickCount: 1, experience: 1 },
             $set: { lastFarmAt: new Date(now), updatedAt: new Date(now) }
         };
         await db.collection('webappUsers').updateOne({ userId: parseInt(userId) }, updates);
 
-        const newBalance = (webappUser.magnuStarsoins || 0) + reward;
+        const newBalance = (webappUser.magnumCoins || 0) + reward;
 
         return res.json({
             success: true,
             reward,
-            magnuStarsoins: newBalance,
+            magnumCoins: newBalance,
             nextAvailableAt: now + farStarsooldownMs,
             farStarsooldownMs
         });
@@ -849,10 +849,10 @@ app.post('/api/webapp/bonus', async (req, res) => {
         const reward = base * (1 + Math.min(streak, 40) * 0.1);
         await db.collection('webappUsers').updateOne(
             { userId: parseInt(userId) },
-            { $inc: { magnuStarsoins: Math.floor(reward) }, $set: { lastBonusAt: new Date(now), bonusStreak: streak, updatedAt: new Date(now) } }
+            { $inc: { magnumCoins: Math.floor(reward) }, $set: { lastBonusAt: new Date(now), bonusStreak: streak, updatedAt: new Date(now) } }
         );
         const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
-        res.json({ success: true, reward: Math.floor(reward), magnuStarsoins: updated.magnuStarsoins, bonusStreak: streak });
+        res.json({ success: true, reward: Math.floor(reward), magnumCoins: updated.magnumCoins, bonusStreak: streak });
     } catch (error) {
         console.error('WebApp bonus error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -871,14 +871,14 @@ app.post('/api/webapp/promocode', async (req, res) => {
 
         await db.collection('webappUsers').updateOne(
             { userId: parseInt(userId) },
-            { $inc: { magnuStarsoins: promo.reward || 0 }, $set: { updatedAt: new Date() } }
+            { $inc: { magnumCoins: promo.reward || 0 }, $set: { updatedAt: new Date() } }
         );
         await db.collection('promocodes').updateOne(
             { _id: promo._id },
             { $inc: { activations: 1 } }
         );
         const updated = await db.collection('webappUsers').findOne({ userId: parseInt(userId) });
-        res.json({ success: true, reward: promo.reward || 0, magnuStarsoins: updated.magnuStarsoins });
+        res.json({ success: true, reward: promo.reward || 0, magnumCoins: updated.magnumCoins });
     } catch (error) {
         console.error('WebApp promocode error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -1809,7 +1809,7 @@ function ensureUserFields(user) {
   }
   
   if (!user.totalEarnedMagnuStarsoins) {
-    user.totalEarnedMagnuStarsoins = user.magnuStarsoins || 0;
+    user.totalEarnedMagnumCoins = user.magnumCoins || 0;
   }
   
   if (!user.level) {
@@ -1869,9 +1869,9 @@ async function getUser(id, ctx = null) {
         firstName: ctx?.from?.first_name || null,
         lastName: ctx?.from?.last_name || null,
         stars: config.INITIAL_STARS,
-        magnuStarsoins: config.INITIAL_MAGNUM_COINS,
+        magnumCoins: config.INITIAL_MAGNUM_COINS,
         totalEarnedStars: config.INITIAL_STARS,
-        totalEarnedMagnuStarsoins: config.INITIAL_MAGNUM_COINS,
+        totalEarnedMagnumCoins: config.INITIAL_MAGNUM_COINS,
         level: 1,
         experience: 0,
         experienceToNextLevel: 100,
@@ -2065,7 +2065,7 @@ async function formatProfileMessage(user, rankProgress) {
     `└ Титул: ${user.mainTitle}\n\n` +
     `💎 *Баланс:*\n` +
     `├ ⭐ Stars: \`${formatNumber(user.stars)}\`\n` +
-    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnuStarsoins)}\`\n\n` +
+    `└ 🪙 Magnum Coins: \`${formatNumber(user.magnumCoins)}\`\n\n` +
     `📊 *Статистика сообщества:*\n` +
     `├ 👥 Пользователей: \`${Math.floor(globalStats.totalUsers)}\`\n` +
     `├ 💰 Выведено Stars: \`${formatNumber(globalStats.totalWithdrawnStars)}\`\n` +
@@ -2176,11 +2176,11 @@ async function getGlobalStats() {
     // Получаем статистику по валютам (исключая доходы от биржи)
     const usersWithStats = await db.collection('users').find({}, {
       projection: {
-        magnuStarsoins: 1,
+        magnumCoins: 1,
         stars: 1,
-        totalEarnedMagnuStarsoins: 1,
+        totalEarnedMagnumCoins: 1,
         totalEarnedStars: 1,
-        totalWithdrawnMagnuStarsoins: 1,
+        totalWithdrawnMagnumCoins: 1,
         totalWithdrawnStars: 1
       }
     }).toArray();
@@ -2194,11 +2194,11 @@ async function getGlobalStats() {
     let totalWithdrawnStars = 0;
 
     for (const user of usersWithStats) {
-      totalMagnumCoins += user.magnuStarsoins || 0;
+      totalMagnumCoins += user.magnumCoins || 0;
       totalStars += user.stars || 0;
-      totalEarnedMagnumCoins += user.totalEarnedMagnuStarsoins || 0;
+      totalEarnedMagnumCoins += user.totalEarnedMagnumCoins || 0;
       totalEarnedStars += user.totalEarnedStars || 0;
-      totalWithdrawnMagnumCoins += user.totalWithdrawnMagnuStarsoins || 0;
+      totalWithdrawnMagnumCoins += user.totalWithdrawnMagnumCoins || 0;
       totalWithdrawnStars += user.totalWithdrawnStars || 0;
     }
 
@@ -3405,7 +3405,7 @@ async function processMiningRewards() {
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnuStarsoins: rewardMagnumCoins,
+                  magnumCoins: rewardMagnumCoins,
                   stars: rewardStars,
                   'miningStats.totalMinedMagnumCoins': rewardMagnumCoins,
                   'miningStats.totalMinedStars': rewardStars,
@@ -8991,8 +8991,8 @@ async function claimSponsorTask(ctx, user, taskId) {
       updateData.$inc.stars = task.reward;
       updateData.$inc.totalEarnedStars = task.reward;
     } else {
-      updateData.$inc.magnuStarsoins = task.reward;
-      updateData.$inc.totalEarnedMagnuStarsoins = task.reward;
+      updateData.$inc.magnumCoins = task.reward;
+      updateData.$inc.totalEarnedMagnumCoins = task.reward;
     }
     
     await db.collection('users').updateOne(
@@ -9562,8 +9562,8 @@ async function claimDailyTaskReward(ctx, user, taskId) {
       { id: user.id },
       { 
         $inc: { 
-          magnuStarsoins: task.reward,
-          totalEarnedMagnuStarsoins: task.reward,
+          magnumCoins: task.reward,
+          totalEarnedMagnumCoins: task.reward,
           experience: Math.floor(task.reward * 5),
           'tasks.completedTasks': 1,
           'tasks.totalTaskEarnings': task.reward
