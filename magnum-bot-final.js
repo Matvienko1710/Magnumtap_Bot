@@ -208,10 +208,12 @@ if (process.env.WEBAPP_ENABLED === 'true') {
       // Обновляем баланс пользователя
       await db.collection('users').updateOne(
         { id: parseInt(userId) },
-        { 
-          $inc: { 
+        {
+          $inc: {
             magnuStarsoins: reward,
-            'miningStats.totalMinedStars': reward
+            totalEarnedMagnumCoins: reward,
+            'miningStats.totalMinedMagnumCoins': reward,
+            experience: Math.floor(reward * 5)
           },
           $set: { lastActivity: new Date() }
         }
@@ -1808,8 +1810,8 @@ function ensureUserFields(user) {
     user.totalEarnedStars = user.stars || 0;
   }
   
-  if (!user.totalEarnedMagnuStarsoins) {
-    user.totalEarnedMagnuStarsoins = user.magnuStarsoins || 0;
+  if (!user.totalEarnedMagnumCoins) {
+    user.totalEarnedMagnumCoins = user.magnuStarsoins || 0;
   }
   
   if (!user.level) {
@@ -1871,7 +1873,7 @@ async function getUser(id, ctx = null) {
         stars: config.INITIAL_STARS,
         magnuStarsoins: config.INITIAL_MAGNUM_COINS,
         totalEarnedStars: config.INITIAL_STARS,
-        totalEarnedMagnuStarsoins: config.INITIAL_MAGNUM_COINS,
+        totalEarnedMagnumCoins: config.INITIAL_MAGNUM_COINS,
         level: 1,
         experience: 0,
         experienceToNextLevel: 100,
@@ -2178,7 +2180,7 @@ async function getGlobalStats() {
       projection: {
         magnuStarsoins: 1,
         stars: 1,
-        totalEarnedMagnuStarsoins: 1,
+        totalEarnedMagnumCoins: 1,
         totalEarnedStars: 1,
         totalWithdrawnMagnuStarsoins: 1,
         totalWithdrawnStars: 1
@@ -2196,7 +2198,7 @@ async function getGlobalStats() {
     for (const user of usersWithStats) {
       totalMagnumCoins += user.magnuStarsoins || 0;
       totalStars += user.stars || 0;
-      totalEarnedMagnumCoins += user.totalEarnedMagnuStarsoins || 0;
+      totalEarnedMagnumCoins += user.totalEarnedMagnumCoins || 0;
       totalEarnedStars += user.totalEarnedStars || 0;
       totalWithdrawnMagnumCoins += user.totalWithdrawnMagnuStarsoins || 0;
       totalWithdrawnStars += user.totalWithdrawnStars || 0;
@@ -3075,7 +3077,7 @@ async function upgradeMiner(ctx, user) {
       { 
         $inc: { 
           magnuStarsoins: -upgradeCost,
-          totalEarnedMagnuStarsoins: -upgradeCost
+          totalEarnedMagnumCoins: -upgradeCost
         },
         $set: { 
           'miner.level': newLevel,
@@ -4629,10 +4631,10 @@ async function claimBonus(ctx, user) {
     log(`💾 Обновление базы данных для пользователя ${user.id}`);
     await db.collection('users').updateOne(
       { id: user.id },
-      { 
-        $inc: { 
-          stars: totalReward,
-          totalEarnedStars: totalReward,
+      {
+        $inc: {
+          magnuStarsoins: totalReward,
+          totalEarnedMagnumCoins: totalReward,
           experience: Math.floor(totalReward * 5),
           'statistics.totalActions': 1
         },
@@ -7697,7 +7699,7 @@ async function checkAndUpdateAchievements(user) {
         { 
           $inc: { 
             magnuStarsoins: totalReward,
-            totalEarnedMagnuStarsoins: totalReward,
+            totalEarnedMagnumCoins: totalReward,
             experience: Math.floor(totalReward * 5),
             achievementsCount: newAchievements.length
           },
@@ -8214,7 +8216,7 @@ async function showProfileMenu(ctx, user) {
       `💰 *Балансы:*\n` +
       `├ 🪙 Magnum Coins: ${formatNumber(user.magnuStarsoins || 0)}\n` +
       `├ ⭐ Stars: ${formatNumber(user.stars || 0)}\n` +
-      `└ Всего заработано: ${formatNumber((user.totalEarnedMagnuStarsoins || 0) + (user.totalEarnedStars || 0))}\n\n` +
+      `└ Всего заработано: ${formatNumber((user.totalEarnedMagnumCoins || 0) + (user.totalEarnedStars || 0))}\n\n` +
       `🎯 *Статистика:*\n` +
       `├ Рефералов: ${user.referralsCount || 0}\n` +
       `└ Ранг: ${rankProgress.current.name}\n\n` +
@@ -8992,7 +8994,7 @@ async function claimSponsorTask(ctx, user, taskId) {
       updateData.$inc.totalEarnedStars = task.reward;
     } else {
       updateData.$inc.magnuStarsoins = task.reward;
-      updateData.$inc.totalEarnedMagnuStarsoins = task.reward;
+      updateData.$inc.totalEarnedMagnumCoins = task.reward;
     }
     
     await db.collection('users').updateOne(
@@ -9563,7 +9565,7 @@ async function claimDailyTaskReward(ctx, user, taskId) {
       { 
         $inc: { 
           magnuStarsoins: task.reward,
-          totalEarnedMagnuStarsoins: task.reward,
+          totalEarnedMagnumCoins: task.reward,
           experience: Math.floor(task.reward * 5),
           'tasks.completedTasks': 1,
           'tasks.totalTaskEarnings': task.reward
@@ -11910,7 +11912,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
         updateData.$inc = {
           ...updateData.$inc,
           magnuStarsoins: chestReward.magnuStarsoins,
-          totalEarnedMagnuStarsoins: chestReward.magnuStarsoins,
+          totalEarnedMagnumCoins: chestReward.magnuStarsoins,
           experience: Math.floor(chestReward.magnuStarsoins * 5)
         };
       }
@@ -11942,7 +11944,7 @@ async function handleUserEnterPromocode(ctx, user, text) {
       if (rewardType === 'Stars') {
         updateData.$inc = {
           magnuStarsoins: reward,
-          totalEarnedMagnuStarsoins: reward,
+          totalEarnedMagnumCoins: reward,
           experience: Math.floor(reward * 5)
         };
       } else if (rewardType === 'stars') {
@@ -12158,7 +12160,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
         updateData.$inc = {
           ...updateData.$inc,
           magnuStarsoins: chestReward.magnuStarsoins,
-          totalEarnedMagnuStarsoins: chestReward.magnuStarsoins,
+          totalEarnedMagnumCoins: chestReward.magnuStarsoins,
           experience: Math.floor(chestReward.magnuStarsoins * 5)
         };
       }
@@ -12189,7 +12191,7 @@ async function handleUserEnterPromocodeText(ctx, user, text) {
       if (rewardType === 'Stars') {
         updateData.$inc = {
           magnuStarsoins: reward,
-          totalEarnedMagnuStarsoins: reward,
+          totalEarnedMagnumCoins: reward,
           experience: Math.floor(reward * 5)
         };
       } else if (rewardType === 'stars') {
@@ -17360,7 +17362,7 @@ bot.on('text', async (ctx) => {
           const type = parts[0].toLowerCase();
           const amount = parseFloat(parts[1]);
           if (!['stars','Stars'].includes(type) || !isFinite(amount)) { await ctx.reply('❌ Неверные параметры'); return; }
-          const inc = type === 'stars' ? { stars: amount, totalEarnedStars: Math.max(amount, 0) } : { magnuStarsoins: amount, totalEarnedMagnuStarsoins: Math.max(amount, 0) };
+          const inc = type === 'stars' ? { stars: amount, totalEarnedStars: Math.max(amount, 0) } : { magnuStarsoins: amount, totalEarnedMagnumCoins: Math.max(amount, 0) };
           await db.collection('users').updateMany({}, { $inc: inc, $set: { updatedAt: new Date() } });
           await db.collection('users').updateOne({ id: user.id }, { $unset: { adminState: '' } });
           await ctx.reply(`✅ Массовая выдача выполнена: ${type} ${amount}`);
