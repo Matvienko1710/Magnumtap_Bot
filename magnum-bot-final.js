@@ -3313,14 +3313,14 @@ function initializeNewMiningSystem(user) {
   if (!user.miners) {
     user.miners = [];
   }
-  
+
   if (!user.miningStats) {
     user.miningStats = {
       totalMinedMagnumCoins: 0,
       totalMinedStars: 0,
       seasonMinedMagnumCoins: 0,
       seasonMinedStars: 0,
-      lastReward: null,
+      lastReward: user.miner?.lastReward || null, // Переносим из старой системы
       activeClickCount: 0,
       passiveRewards: 0
     };
@@ -6578,12 +6578,12 @@ async function processMinerRewards() {
         
         console.log(`👤 Пользователь ${userWithMining.id}:`, {
           miners: userWithMining.miners?.length || 0,
-          totalSpeedStars: totalSpeed.stars,
+          totalSpeedMagnumCoins: totalSpeed.magnuStarsoins,
           totalSpeedStars: totalSpeed.stars,
           lastReward: userWithMining.miningStats?.lastReward
         });
-        
-        const totalSpeedSum = totalSpeed.stars + totalSpeed.stars;
+
+        const totalSpeedSum = totalSpeed.magnuStarsoins + totalSpeed.stars;
         if (totalSpeedSum > 0) {
           const now = new Date();
           const lastReward = userWithMining.miningStats.lastReward || now;
@@ -6599,22 +6599,27 @@ async function processMinerRewards() {
           // Если у пользователя нет lastReward, устанавливаем его и начисляем награду
           if (!userWithMining.miningStats.lastReward) {
             console.log(`🆕 Первая награда для пользователя ${userWithMining.id}`);
+            const rewardMagnumCoins = totalSpeed.magnuStarsoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
-            
+
             console.log(`💰 Первые награды для пользователя ${userWithMining.id}:`, {
+              rewardMagnumCoins,
               rewardStars,
               multiplier: currentSeason.multiplier
             });
-            
+
             // Обновляем статистику
             await db.collection('users').updateOne(
               { id: userWithMining.id },
               {
                 $inc: {
+                  magnuStarsoins: rewardMagnumCoins,
                   stars: rewardStars,
+                  'miningStats.totalMinedMagnumCoins': rewardMagnumCoins,
                   'miningStats.totalMinedStars': rewardStars,
+                  'miningStats.seasonMinedMagnumCoins': rewardMagnumCoins,
                   'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.passiveRewards': rewardStars
+                  'miningStats.passiveRewards': rewardMagnumCoins + rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
@@ -6634,25 +6639,27 @@ async function processMinerRewards() {
             processedCount++;
             console.log(`✅ Первые награды начислены пользователю ${userWithMining.id}`);
           } else if (timeDiff >= config.MINING_REWARD_INTERVAL) {
+            const rewardMagnumCoins = totalSpeed.magnuStarsoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
-            
+
             console.log(`💰 Награды для пользователя ${userWithMining.id}:`, {
+              rewardMagnumCoins,
               rewardStars,
               multiplier: currentSeason.multiplier
             });
-            
+
             // Обновляем статистику
             await db.collection('users').updateOne(
               { id: userWithMining.id },
               {
                 $inc: {
-                  magnuStarsoins: rewardStars,
+                  magnuStarsoins: rewardMagnumCoins,
                   stars: rewardStars,
+                  'miningStats.totalMinedMagnumCoins': rewardMagnumCoins,
                   'miningStats.totalMinedStars': rewardStars,
-                  'miningStats.totalMinedStars': rewardStars,
+                  'miningStats.seasonMinedMagnumCoins': rewardMagnumCoins,
                   'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.seasonMinedStars': rewardStars,
-                  'miningStats.passiveRewards': rewardStars + rewardStars
+                  'miningStats.passiveRewards': rewardMagnumCoins + rewardStars
                 },
                 $set: {
                   'miningStats.lastReward': now
