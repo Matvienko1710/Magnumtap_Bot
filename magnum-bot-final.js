@@ -1806,10 +1806,19 @@ function ensureUserFields(user) {
     user.totalReferralEarnings = 0;
   }
   
+  // Проверяем и инициализируем основные валюты
+  if (typeof user.magnumCoins !== 'number' || isNaN(user.magnumCoins)) {
+    user.magnumCoins = config.INITIAL_MAGNUM_COINS || 100;
+  }
+
+  if (typeof user.stars !== 'number' || isNaN(user.stars)) {
+    user.stars = config.INITIAL_STARS || 0;
+  }
+
   if (!user.totalEarnedStars) {
     user.totalEarnedStars = user.stars || 0;
   }
-  
+
   if (!user.totalEarnedMagnumCoins) {
     user.totalEarnedMagnumCoins = user.magnumCoins || 0;
   }
@@ -2416,6 +2425,7 @@ async function showMainMenu(ctx, user) {
   // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
     buttons.push([
+      Markup.button.callback('🧹 Очистить кеш', 'clear_cache'),
       Markup.button.callback('👨‍💼 Админ панель', 'admin')
     ]);
   }
@@ -2491,6 +2501,7 @@ async function showMainMenuStart(ctx, user) {
   // Добавляем админ кнопки если нужно
   if (isAdmin(user.id)) {
     buttons.push([
+      Markup.button.callback('🧹 Очистить кеш', 'clear_cache'),
       Markup.button.callback('👨‍💼 Админ панель', 'admin')
     ]);
   }
@@ -13399,24 +13410,65 @@ bot.action(/^reject_reason_(\d+)_(\d+)_(.+)$/, async (ctx) => {
 });
 
 // Обработка кнопок главного меню
+// Команда очистки кеша для администраторов
+bot.action('clear_cache', async (ctx) => {
+  try {
+    const userId = ctx.from.id;
+    const user = await getUser(userId);
+
+    if (!isAdmin(userId)) {
+      await ctx.answerCbQuery('❌ У вас нет прав администратора');
+      return;
+    }
+
+    logFunction('bot.action.clear_cache', userId);
+    log(`🧹 Администратор ${userId} очищает кеш пользователей`);
+
+    // Очищаем кеш
+    userCache.clear();
+
+    await ctx.answerCbQuery('✅ Кеш пользователей очищен!');
+    await ctx.editMessageText(
+      '🧹 *Кеш очищен*\n\n' +
+      '✅ Кеш пользователей успешно очищен\n' +
+      '📝 Теперь данные будут загружены из базы данных\n\n' +
+      `👤 Администратор: ${user?.username || userId}`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🏠 Главное меню', callback_data: 'main_menu' }
+          ]]
+        }
+      }
+    );
+
+    log(`✅ Кеш очищен администратором ${userId}`);
+
+  } catch (error) {
+    logError(error, 'Очистка кеша');
+    await ctx.answerCbQuery('❌ Ошибка при очистке кеша');
+  }
+});
+
 bot.action('main_menu', async (ctx) => {
   try {
     logFunction('bot.action.main_menu', ctx.from.id);
     log(`🏠 Запрос главного меню от пользователя ${ctx.from.id}`);
-    
+
     const user = await getUser(ctx.from.id);
     if (!user) {
       log(`❌ Не удалось получить пользователя ${ctx.from.id} для главного меню`);
       return;
     }
-    
+
     logDebug(`Показ главного меню для пользователя ${ctx.from.id}`, {
       level: user.level,
       magnumCoins: user.magnumCoins,
       stars: user.stars,
       isAdmin: isAdmin(user.id)
     });
-    
+
     await showMainMenu(ctx, user);
     log(`✅ Главное меню показано пользователю ${ctx.from.id}`);
     
