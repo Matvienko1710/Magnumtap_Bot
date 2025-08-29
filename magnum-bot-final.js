@@ -3403,6 +3403,36 @@ async function processMiningRewards() {
             const rewardStars = totalSpeed.stars * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
             const rewardMagnumCoins = totalSpeed.magnumCoins * config.MINING_REWARD_INTERVAL * currentSeason.multiplier;
 
+            // Проверяем, нужно ли инициализировать miningStats
+            if (!userWithMining.miningStats) {
+              // Инициализируем miningStats в базе данных
+              await db.collection('users').updateOne(
+                { id: userWithMining.id },
+                {
+                  $set: {
+                    miningStats: {
+                      totalMinedMagnumCoins: 0,
+                      totalMinedStars: 0,
+                      seasonMinedMagnumCoins: 0,
+                      seasonMinedStars: 0,
+                      lastReward: now,
+                      activeClickCount: 0,
+                      passiveRewards: 0
+                    }
+                  }
+                }
+              );
+              userWithMining.miningStats = {
+                totalMinedMagnumCoins: 0,
+                totalMinedStars: 0,
+                seasonMinedMagnumCoins: 0,
+                seasonMinedStars: 0,
+                lastReward: now,
+                activeClickCount: 0,
+                passiveRewards: 0
+              };
+            }
+
             // Обновляем статистику
             await db.collection('users').updateOne(
               { id: userWithMining.id },
@@ -17117,14 +17147,14 @@ async function startBot() {
     const webappPath = path.join(__dirname, 'webapp');
     const indexPath = path.join(webappPath, 'index.html');
     const stylesPath = path.join(webappPath, 'styles.css');
-    const scriptPath = path.join(webappPath, 'script.js');
+    const scriptPath = path.join(webappPath, 'app.js');
     
     if (webappEnabled) {
         console.log('📁 Проверка файлов WebApp...');
         console.log(`📁 Путь к WebApp: ${webappPath}`);
         console.log(`📄 index.html: ${fs.existsSync(indexPath) ? '✅ найден' : '❌ не найден'}`);
         console.log(`🎨 styles.css: ${fs.existsSync(stylesPath) ? '✅ найден' : '❌ не найден'}`);
-        console.log(`⚡ script.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
+        console.log(`⚡ app.js: ${fs.existsSync(scriptPath) ? '✅ найден' : '❌ не найден'}`);
     }
     
     console.log('🌐 Запуск Express сервера...');
